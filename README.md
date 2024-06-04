@@ -1,0 +1,1 @@
+This repository contain some useful general-purpose tools that are shared between the DOOR, DAM and DRYES repositories.
