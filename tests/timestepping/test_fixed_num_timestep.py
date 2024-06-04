@@ -56,7 +56,7 @@ class TestFixedNTimeStep:
         assert isinstance(ts, Dekad)
 
     def test_fixed_num_timestep_add(self):
-        with mock.patch(f'{__name__}.ConcreteFixedNTimeStep.__init__') as mock_init:
+        with mock.patch(f'timestepping.fixed_num_timestep.Month.__init__') as mock_init:
             mock_init.return_value = None
             self.ts + 13
             mock_init.assert_called_once_with(2023, 2)
