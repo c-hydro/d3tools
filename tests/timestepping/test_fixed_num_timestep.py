@@ -32,14 +32,28 @@ class TestFixedNTimeStep:
         assert self.ts.n_steps == 12
         assert self.ts.year == 2022
 
+    def test_fixed_num_timestep_get_subclass(self):
+        assert FixedNTimeStep.get_subclass(1) == Year
+        assert FixedNTimeStep.get_subclass(12) == Month
+        assert FixedNTimeStep.get_subclass(36) == Dekad
+        with pytest.raises(ValueError):
+            FixedNTimeStep.get_subclass(0)
+
+    def test_fixed_num_timestep_from_steps(self):
+        ts = FixedNTimeStep.from_step(2022, 1, 1)
+        assert isinstance(ts, Year)
+        ts = FixedNTimeStep.from_step(2022, 1, 12)
+        assert isinstance(ts, Month)
+        ts = FixedNTimeStep.from_step(2022, 1, 36)
+        assert isinstance(ts, Dekad)
+
     def test_fixed_num_timestep_from_date(self):
-        with mock.patch(f'{__name__}.ConcreteFixedNTimeStep.get_step_from_date') as mock_get_step_from_date, \
-             mock.patch(f'{__name__}.ConcreteFixedNTimeStep.__init__') as mock_init:
-            mock_get_step_from_date.return_value = 1
-            mock_init.return_value = None
-            ConcreteFixedNTimeStep.from_date(datetime.datetime(2022, 1, 1))
-            mock_get_step_from_date.assert_called_once_with(datetime.datetime(2022, 1, 1))
-            mock_init.assert_called_once_with(2022, 1)
+        ts = FixedNTimeStep.from_date("2022-01-01", 1)
+        assert isinstance(ts, Year)
+        ts = FixedNTimeStep.from_date("2022-01-01", 12)
+        assert isinstance(ts, Month)
+        ts = FixedNTimeStep.from_date("2022-01-01", 36)
+        assert isinstance(ts, Dekad)
 
     def test_fixed_num_timestep_add(self):
         with mock.patch(f'{__name__}.ConcreteFixedNTimeStep.__init__') as mock_init:
@@ -168,9 +182,3 @@ class TestYear:
     def test_year_is_leap(self):
         assert self.ts.is_leap() == False
         assert self.tsleap.is_leap() == True
-
-    
-    
-
-
-    
