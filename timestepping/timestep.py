@@ -12,7 +12,7 @@ class TimeStep(ABC):
         self.end = end if isinstance(end, datetime.datetime) else get_date_from_str(end)
 
     def length(self, unit = 'days'):
-        days = (self.end - self.start).days
+        days = (self.end - self.start).days + 1
         if unit == 'days':
             return days
         elif unit == 'hours':

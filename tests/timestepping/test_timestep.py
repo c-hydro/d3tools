@@ -18,8 +18,8 @@ class TestTimeStep:
         assert self.ts.end == datetime.datetime(2022, 1, 2)
 
     def test_timestep_length(self):
-        assert self.ts.length('days') == 1
-        assert self.ts.length('hours') == 24
+        assert self.ts.length('days') == 2
+        assert self.ts.length('hours') == 48
         with pytest.raises(ValueError):
             self.ts.length('invalid')
 
