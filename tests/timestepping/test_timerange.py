@@ -1,7 +1,7 @@
 import pytest
 import datetime
 
-from timestepping import TimeRange, Month, Dekad, ViirsModisTimeStep, FixedDOYTimeStep
+from timestepping import TimeRange, Month, Dekad, Day, ViirsModisTimeStep, FixedDOYTimeStep
 
 class TestTimeRange:
 
@@ -29,6 +29,16 @@ class TestTimeRange:
                 assert m == Month(2018, 12)
         else:
             assert i == 11
+
+        days = self.tr1.gen_timesteps_from_tsnumber(365)
+        for i, d in enumerate(days):
+            assert isinstance(d, Day)
+            if i == 0:
+                assert d == Day(2018, 1)
+            if i == 365:
+                assert d == Day(2018, 365)
+        else:
+            assert i == 364
 
     def test_gen_ts_from_DOY(self):
         doys = range(1, 366, 8)
