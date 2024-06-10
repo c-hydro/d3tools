@@ -19,14 +19,14 @@ def get_date_from_str(str: str, format: None|str = None) -> datetime.datetime:
     else:
         raise ValueError(f'Cannot parse date string "{str}"')
 
-def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 'TimePeriod':
+def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 'TimeRange':
         """
-        Returns a TimePeriod object that represents a window of time ending (start == False) or starting (start == True) at the given time.
+        Returns a TimeRange object that represents a window of time ending (start == False) or starting (start == True) at the given time.
         The size is given in the unit specified.
         Units can be 'months', 'years', 'days', 'weeks', 'dekads'.
         """
         from .fixed_num_timestep import Dekad
-        from .timeperiod import TimePeriod
+        from .timerange import TimeRange
 
         if unit[-1] != 's': unit += 's'
         if unit in ['months', 'years', 'days', 'weeks']:
@@ -52,7 +52,7 @@ def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 
             time_end:datetime.datetime = end_dekad.end
         else:
             raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
-        return TimePeriod(time_start, time_end)
+        return TimeRange(time_start, time_end)
 
 def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime.datetime]:
     from .fixed_num_timestep import Year
