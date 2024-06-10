@@ -57,8 +57,8 @@ def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 
 def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime.datetime]:
     from .fixed_num_timestep import Year
     if month == 2 and day in [28, 29]:
-        leaps = [year for year in years if Year(year).is_leap]
-        nonleaps = [year for year in years if not Year(year).is_leap]
-        return [datetime(year, 2, 29) for year in leaps] + [datetime(year, 2, 28) for year in nonleaps]
+        leaps = [year for year in years if Year(year).is_leap()]
+        nonleaps = [year for year in years if not Year(year).is_leap()]
+        return [datetime.datetime(year, 2, 29) for year in leaps] + [datetime.datetime(year, 2, 28) for year in nonleaps]
     else:
-        return [datetime(year, month, day) for year in years]
+        return [datetime.datetime(year, month, day) for year in years]
