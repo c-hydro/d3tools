@@ -1,5 +1,6 @@
 from abc import ABC, ABCMeta, abstractmethod
 import datetime
+from typing import Optional
 
 from .timestep import TimeStep
 from .time_utils import get_date_from_str
@@ -35,15 +36,27 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
         return Subclass
 
     @classmethod
-    def from_step(cls, year:int, step:int, length:int):
+    def get_length(cls, length:Optional[int] = None):
+        if length is not None:
+            return length
+        elif hasattr(cls, 'length'):
+            return cls.length
+        else:
+            raise TypeError('Could not find "length"')
+
+    @classmethod
+    def from_step(cls, year:int, step:int, length:Optional[int] = None):
+        length = cls.get_length(length)
         Subclass: 'FixedLenTimeStep' = cls.get_subclass(length)
         return Subclass(year, step)
 
     @classmethod
-    def from_date(cls, date: datetime.datetime|str, length: int):
+    def from_date(cls, date: datetime.datetime|str, length:Optional[int] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
+        length = cls.get_length(length)
         Subclass: 'FixedLenTimeStep' = cls.get_subclass(length)
         return Subclass(date.year, Subclass.get_step_from_date(date))
+
 
     def __add__(self, n: int):
         delta_days = n*self.length
@@ -73,6 +86,14 @@ class Day(FixedLenTimeStep):
     def __init__(self, year: int, step: int):
         super().__init__(year, step, Day.length)
     
+    # @classmethod
+    # def from_step(cls, year:int, step:int):
+    #     return super().from_step(year, step, Day.length)
+
+    # @classmethod
+    # def from_date(cls, date: datetime.datetime|str, length: int):
+    #     return super().from_date(date, Day.length)
+
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
         return date.timetuple().tm_yday
@@ -86,6 +107,9 @@ class Day(FixedLenTimeStep):
     @property
     def day_of_year(self):
         return self.step
+
+    def __repr__(self):
+        return f'{self.__class__.__name__} ({self.start:%Y%m%d})'
     
 class Hour(FixedLenTimeStep):
 
@@ -111,3 +135,6 @@ class Hour(FixedLenTimeStep):
     @property
     def day_of_year(self):
         return round(self.step/24) + 1
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__} ({self.start:%Y%m%d %H%M}-{self.end:%H%M})'

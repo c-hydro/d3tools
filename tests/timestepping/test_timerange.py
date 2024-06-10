@@ -1,7 +1,7 @@
 import pytest
 import datetime
 
-from timestepping import TimeRange, Month, Dekad, Day, ViirsModisTimeStep, FixedDOYTimeStep
+from timestepping import TimeRange, Month, Dekad, Day, Hour, ViirsModisTimeStep, FixedDOYTimeStep
 
 class TestTimeRange:
 
@@ -62,3 +62,16 @@ class TestTimeRange:
                 assert ts == FixedDOYTimeStep.from_step(2018, 8, doys)
         else:
             assert i == 7
+
+    def test_gen_timesteps_from_issue_hour(self):
+        issue_hours = [0,6,12,18]
+        expected_n = 365 * 4
+        timesteps = self.tr1.gen_timesteps_from_issue_hour(issue_hours)
+        for i, ts in enumerate(timesteps):
+            assert isinstance(ts, Hour)
+            if i == 0:
+                assert ts == Hour.from_date("2018-01-01 00:00")
+            if i == expected_n-1:
+                assert ts == Hour.from_date("2018-12-31 18:00")
+        else:
+            assert i == expected_n-1

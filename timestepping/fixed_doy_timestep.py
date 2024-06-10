@@ -1,6 +1,6 @@
 import datetime
 from abc import ABC
-from typing import Iterable
+from typing import Iterable, Optional
 
 from .fixed_num_timestep import FixedNTimeStep, FixedNTimeStepMeta
 
@@ -20,9 +20,19 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
     def __init__(self, year: int, step: int, start_doys: Iterable[int]):
         self.start_doys = tuple(start_doys)
         super().__init__(year, step, len(start_doys))
-    
+
     @classmethod
-    def from_date(cls, date: datetime.datetime, start_doys: Iterable[int]):
+    def get_start_doys(cls, start_doys: Optional[Iterable[int]] = None):
+        if start_doys is not None:
+            return start_doys
+        elif hasattr(cls, 'start_doys'):
+            return cls.start_doys
+        else:
+            raise TypeError('Could not find "start_doys"')
+
+    @classmethod
+    def from_date(cls, date: datetime.datetime, start_doys: Optional[Iterable[int]] = None):
+        start_doys = cls.get_start_doys(start_doys)
         Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
         if Subclass:
             return Subclass(date.year, cls.get_step_from_date(date, start_doys))
@@ -30,7 +40,8 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
             return cls(date.year, cls.get_step_from_date(date, start_doys), start_doys)
     
     @classmethod
-    def from_step(cls, year: int, step: int, start_doys: Iterable[int]):
+    def from_step(cls, year: int, step: int, start_doys: Optional[Iterable[int]] = None):
+        start_doys = cls.get_start_doys(start_doys)
         Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
         if Subclass:
             return Subclass(year, step)

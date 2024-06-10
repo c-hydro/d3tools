@@ -27,10 +27,10 @@ class TimePeriod(ABC):
     def __repr__(self):
         return f'{self.__class__.__name__} ({self.start:%Y%m%d} - {self.end:%Y%m%d})'
     
-    def __eq__(self, other: 'TimeStep'):
+    def __eq__(self, other: 'TimePeriod'):
         return self.start == other.start and self.end == other.end
 
-    def __lt__(self, other: 'TimeStep'):
+    def __lt__(self, other: 'TimePeriod'):
         if self.end < other.start:
             return True
         elif self.start > other.end:
