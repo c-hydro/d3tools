@@ -1,6 +1,7 @@
 import datetime
 from dateutil.relativedelta import relativedelta
 import warnings
+from typing import Iterable
 
 def get_date_from_str(str: str, format: None|str = None) -> datetime.datetime:
     """
@@ -52,3 +53,12 @@ def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 
         else:
             raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
         return TimePeriod(time_start, time_end)
+
+def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime.datetime]:
+    from .fixed_num_timestep import Year
+    if month == 2 and day in [28, 29]:
+        leaps = [year for year in years if Year(year).is_leap]
+        nonleaps = [year for year in years if not Year(year).is_leap]
+        return [datetime(year, 2, 29) for year in leaps] + [datetime(year, 2, 28) for year in nonleaps]
+    else:
+        return [datetime(year, month, day) for year in years]
