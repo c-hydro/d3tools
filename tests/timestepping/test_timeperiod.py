@@ -32,10 +32,11 @@ class TestTimePeriod:
     def test_timeperiod_lt(self):
         ts2 = ConcreteTimePeriod('2022-01-03', '2022-01-04')
         assert self.ts < ts2
-        ts2 = ConcreteTimePeriod('2022-01-02', '2022-01-03')
-        with pytest.raises(ValueError):
-            self.ts < ts2
-        
+        ts2 = ConcreteTimePeriod('2022-01-01', '2022-01-02')
+        assert not self.ts < ts2
+
     def test_timeperiod_gt(self):
         ts2 = ConcreteTimePeriod('2022-01-03', '2022-01-04')
-        assert ts2 > self.ts
+        assert not self.ts > ts2
+        ts2 = ConcreteTimePeriod('2021-12-30', '2021-12-31')
+        assert self.ts > ts2

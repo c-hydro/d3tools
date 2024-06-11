@@ -1,10 +1,8 @@
-from functools import total_ordering
 from abc import ABC
 import datetime
 
 from .time_utils import get_date_from_str
 
-@total_ordering
 class TimePeriod(ABC):
     
     """
@@ -31,9 +29,13 @@ class TimePeriod(ABC):
         return self.start == other.start and self.end == other.end
 
     def __lt__(self, other: 'TimePeriod'):
-        if self.end < other.start:
-            return True
-        elif self.start > other.end:
-            return False
-        else:
-            raise ValueError(f'Cannot compare overlapping timesteps {self} and {other}')
+        return self.end < other.start
+        
+    def __gt__(self, other: 'TimePeriod'):
+        return self.start > other.end
+
+    def __le__(self, other: 'TimePeriod'):
+        return self < other or self == other
+    
+    def __ge__(self, other: 'TimePeriod'):
+        return self > other or self == other
