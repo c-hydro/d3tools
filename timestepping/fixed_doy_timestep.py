@@ -35,7 +35,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
         start_doys = cls.get_start_doys(start_doys)
         Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
         if Subclass:
-            return Subclass(date.year, cls.get_step_from_date(date, start_doys))
+            return Subclass(date.year, Subclass.get_step_from_date(date))
         else:
             return cls(date.year, cls.get_step_from_date(date, start_doys), start_doys)
     
