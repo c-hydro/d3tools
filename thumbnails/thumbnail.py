@@ -128,10 +128,10 @@ class Thumbnail:
         if self.flip:
             self.ax.invert_yaxis()
 
-        plt.axis('off')
-        plt.tight_layout(pad=0)
-        plt.savefig(file, dpi=self.dpi)
+        self.ax.axis('off')
+        self.fig.tight_layout(pad=0)
+        self.fig.savefig(file, dpi=self.dpi)
 
-        plt.close()
+        plt.close(self.fig)
 
         self.thumbnail_file = file
