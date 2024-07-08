@@ -65,7 +65,7 @@ class Thumbnail:
         self.fig = fig
         self.im = im
 
-    def add_layout(self, shp_file = None, **kwargs):
+    def add_overlay(self, shp_file = None, **kwargs):
         import geopandas as gpd
         if shp_file is None:
             shp_file = 'thumbnails/countries/countries.shp'
@@ -109,13 +109,13 @@ class Thumbnail:
             dpi  = kwargs.pop('dpi') if 'dpi' in kwargs else None
             self.make_image(size, dpi)
 
-        if 'layout' in kwargs:
-            if isinstance(kwargs['layout'], dict):
-                self.add_layout(**kwargs.pop('layout'))
-            elif kwargs['layout'] == False or kwargs['layout'] is None or kwargs['layout'].lower == 'none' :
+        if 'overlay' in kwargs:
+            if isinstance(kwargs['overlay'], dict):
+                self.add_overlay(**kwargs.pop('overlay'))
+            elif kwargs['overlay'] == False or kwargs['overlay'] is None or kwargs['overlay'].lower == 'none' :
                 pass
         else:
-            self.add_layout()
+            self.add_overlay()
 
         if 'annotation' in kwargs:
             if isinstance(kwargs['annotation'], dict):
