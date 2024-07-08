@@ -1,5 +1,6 @@
 import numpy as np
 import rioxarray
+import os
 
 import matplotlib.pyplot as plt
 
@@ -101,8 +102,29 @@ class Thumbnail:
 
         self.ax.annotate(text, **kwargs)
 
-    def save(self, file:str):
-        
+    def save(self, file:str, **kwargs):
+
+        if not hasattr(self, 'fig'):
+            size = kwargs.pop('size') if 'size' in kwargs else None
+            dpi  = kwargs.pop('dpi') if 'dpi' in kwargs else None
+            self.make_image(size, dpi)
+
+        if 'layout' in kwargs:
+            if isinstance(kwargs['layout'], dict):
+                self.add_layout(**kwargs.pop('layout'))
+            elif kwargs['layout'] == False or kwargs['layout'] is None or kwargs['layout'].lower == 'none' :
+                pass
+        else:
+            self.add_layout()
+
+        if 'annotation' in kwargs:
+            if isinstance(kwargs['annotation'], dict):
+                self.add_annotation(**kwargs.pop('annotation'))
+            elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
+                pass
+        else:
+            self.add_annotation(f'{os.path.basename(self.raster_file)}')
+
         if self.flip:
             self.ax.invert_yaxis()
 
