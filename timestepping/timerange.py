@@ -2,15 +2,35 @@ import datetime
 from typing import Generator, Iterable
 
 from .timeperiod import TimePeriod
-from .fixed_num_timestep import FixedNTimeStep
+from .fixed_num_timestep import FixedNTimeStep, Year, Month, Dekad
 from .fixed_doy_timestep import FixedDOYTimeStep
-from .fixed_len_timestep import FixedLenTimeStep
+from .fixed_len_timestep import FixedLenTimeStep, Day
 
 class TimeRange(TimePeriod):
     """
     A TimeRange is a TimePeriod that can be divided into timesteps.
     """
 
+    @property
+    def months(self) -> list[Month]:
+        return self.get_timesteps_from_tsnumber(12)
+
+    @property
+    def years(self) -> list[Year]:
+        return self.get_timesteps_from_tsnumber(1)
+
+    @property
+    def dekads(self) -> list[Dekad]:
+        return self.get_timesteps_from_tsnumber(36)
+
+    @property
+    def days(self) -> list[Day]:
+        return self.get_timesteps_from_tsnumber(365)
+
+    @property
+    def viirstimes(self) -> list:
+        return self.get_timesteps_from_DOY(range(1, 366, 8))
+        
     #TODO: add support for hourly timesteps
     def gen_timesteps_from_tsnumber(self, timesteps_per_year: int) -> Generator[FixedNTimeStep|FixedLenTimeStep, None, None]:
         """
@@ -48,7 +68,7 @@ class TimeRange(TimePeriod):
 
     def gen_timesteps_from_issue_hour(self, issue_hours: list[int]) -> Generator[FixedLenTimeStep, None, None]:
         """
-        This will yield the timesteps to download oa product issued daily at given hours
+        This will yield the timesteps to of product issued daily at given hours
         """
         now = self.start
         while now <= self.end:
@@ -59,7 +79,6 @@ class TimeRange(TimePeriod):
                     yield FixedLenTimeStep.from_date(now, 1/24)
             day_after = now + datetime.timedelta(days=1)
             now = datetime.datetime(day_after.year, day_after.month, day_after.day)
-
 
     def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list[FixedLenTimeStep]:
         return list(self.gen_timesteps_from_issue_hour(issue_hours))
