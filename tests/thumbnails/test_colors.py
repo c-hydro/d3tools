@@ -99,32 +99,28 @@ def test_create_colormap_with_empty_input():
 
 def test_keep_used_colors_with_valid_input():
     unique_values = [1.0, 2.0]
-    positions = [1.0, 3.0, 2.0]
     colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
-    expected_colors = [(255, 0, 0, 255), (0, 0, 255, 255)]
-    result = col.keep_used_colors(unique_values, positions, colors)
-    assert result == expected_colors, "Function should remove colors not in unique_values"
+    expected_colors = [(0, 255, 0, 255), (0, 0, 255, 255)]
+    result = col.keep_used_colors(unique_values, colors)
+    assert result == expected_colors, f"Expected: {expected_colors}, Got: {result}"
 
 def test_keep_used_colors_all_colors_used():
-    unique_values = [1.0, 2.0, 3.0]
-    positions = [1.0, 2.0, 3.0]
+    unique_values = [0, 1, 2]
     colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
     expected_colors = colors
-    result = col.keep_used_colors(unique_values, positions, colors)
-    assert result == expected_colors, "Function should keep all colors when all are used"
+    result = col.keep_used_colors(unique_values, colors)
+    assert result == expected_colors, f"Expected: {expected_colors}, Got: {result}"
 
 def test_keep_used_colors_no_colors_used():
     unique_values = [4.0, 5.0]
-    positions = [1.0, 2.0, 3.0]
     colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
     expected_colors = []
-    result = col.keep_used_colors(unique_values, positions, colors)
+    result = col.keep_used_colors(unique_values, colors)
     assert result == expected_colors, "Function should remove all colors when none are used"
 
 def test_keep_used_colors_empty_inputs():
     unique_values = []
-    positions = []
     colors = []
     expected_colors = []
-    result = col.keep_used_colors(unique_values, positions, colors)
+    result = col.keep_used_colors(unique_values, colors)
     assert result == expected_colors, "Function should handle empty inputs gracefully"
