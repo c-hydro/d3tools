@@ -62,19 +62,29 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
     for k, v in nested_dict.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
         if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
+            items.extend(flatten_dict(v, sep, new_key).items())
             # Include the current key without parent prefix for combinations
-            items.extend(flatten_dict(v, '', sep=sep).items())
+            items.extend(flatten_dict(v, sep=sep).items())
         else:
             items.append((new_key, v))
 
-    return dict(items)
+    flat_dict = {}
+    for key, value in items:
+        if key in flat_dict:
+            if flat_dict[key] != value:
+                if not isinstance(flat_dict[key], list):
+                    flat_dict[key] = [flat_dict[key]].append(value)
+                else:
+                    flat_dict[key].append(value)
+        else:
+            flat_dict[key] = value
+        
+    return flat_dict
 
 def parse_options(options: dict, **kwargs):
     """
     Parse the options, using themselves as tags.
     """
-
     tags = flatten_dict(options, **kwargs)
     tags = substitute_values(tags, tags, rec=True)
 
