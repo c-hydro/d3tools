@@ -23,14 +23,62 @@ class Dataset(ABC, metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
-    def __init__(self, path: str, file: str, **kwargs):
-        self.dir = path
-        self.file = file
+    def __init__(self, path: Optional[str] = None, filename: Optional[str] = None, **kwargs):
+        if path is not None:
+            self.dir = path
+        elif 'dir' in kwargs:
+            self.dir = kwargs.pop('dir')
+
+        if filename is not None:
+            self.file = filename
+        elif 'file' in kwargs:
+            self.file = kwargs.pop('file')
+        
         self.path_pattern = os.path.join(self.dir, self.file)
-        self.name   = kwargs.pop('name') if 'name' in kwargs else os.path.basename(self.file).split('.')[0]
-        self.format = kwargs.pop('format') if 'format' in kwargs else 'geotiff'
+
+        if 'name' in kwargs:
+            self.name   = kwargs.pop('name')
+        else:
+            self.name = '.'.join(os.path.basename(self.file).split('.')[:-1])
+
+        if 'format' in kwargs:
+            self.format = kwargs.pop('format')
+        else:
+            self.format = os.path.basename(self.file).split('.')[-1]
+
+        if 'time_signature' in kwargs:
+            self.time_signature = kwargs.pop('time_signature')
 
         self.options = Options(kwargs)
+        self.template = None
+        self.tags = {}
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.name})"
+
+    def update(self, in_place = False, **kwargs):
+        new_path = substitute_string(self.dir, kwargs)
+        new_file = substitute_string(self.file, kwargs)
+        new_name = substitute_string(self.name, kwargs)
+
+        if in_place:
+            self.dir  = new_path
+            self.file = new_file
+            self.name = new_name
+            self.path_pattern = self.path(**kwargs)
+            self.tags.update(kwargs)
+            return self
+        else:
+            new_options = self.options.copy()
+            new_options.update({'dir': new_path, 'file': new_file, 'name': new_name})
+            new_dataset = self.__class__(**new_options)
+
+            new_dataset.template = self.template
+            
+            new_tags = self.tags.copy()
+            new_tags.update(kwargs)
+            new_dataset.tags = new_tags
+            return new_dataset
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
@@ -57,6 +105,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             return cls._defaults['type']
     
+    ## PROPERTIES
+    @property
+    def format(self):
+        return self._format
+    
+    @format.setter
+    def format(self, value):
+        if value in ['tif', 'tiff']:
+            self._format = 'geotiff'
+        else:
+            raise ValueError(f"Invalid format: {value}, only geotiff is currently supported")
+
     ## TIME-SIGNATURE MANAGEMENT
     @property
     def time_signature(self):
@@ -74,18 +134,23 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_time_signature(self, time: TimeStep) -> dt.datetime:
         time_signature = self.time_signature
         if time_signature == 'start':
-            return time.start
+            this_time = time.start
         elif time_signature == 'end':
-            return time.end
+            this_time = time.end
         elif time_signature == 'end+1':
-            return (time+1).start
+            this_time = (time+1).start
+
+        if '%Y' not in self.path_pattern and this_time.month == 2 and this_time.day == 29:
+            this_time = this_time.replace(day = 28)
+        
+        return this_time
 
     ## INPUT/OUTPUT METHODS
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         full_path = self.path(time, **kwargs)
 
         if self.check_data(time, **kwargs):
-            data = self._read_data(full_path, time, **kwargs)
+            data = self._read_data(full_path, **kwargs)
 
             # ensure that the data has descending latitudes
             data = straighten_data(data)
@@ -101,7 +166,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise ValueError(f'Could not resolve data from {full_path}.')
         
         # if there is no template for the dataset, create it from the data
-        if not hasattr(self, 'template') or self.template is None:
+        if self.template is None:
             self.template = self.make_template_from_data(data)
         else:
             # otherwise, update the data in the template
@@ -148,7 +213,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
         for timestep in time_range.days:
-            time = timestep.end
+            time = timestep.start
             if self.check_data(time, **kwargs):
                 yield time
             elif hasattr(self, 'parents') and self.parents is not None:
