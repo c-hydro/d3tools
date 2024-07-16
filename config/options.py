@@ -1,4 +1,4 @@
-from .parse import parse_options
+from .parse import parse_options, get_unique_values
 
 import json
 
@@ -13,13 +13,14 @@ class Options(dict):
 
     def __getattr__(self, item):
         key_paths = self.find_keys(item, get_all = True)
-        values = set()
+        values = []
         for key_path in key_paths:
             current = self
             for key in key_path:
                 current = current[key]
-            values.add(current)
+            values.append(current)
 
+        values = get_unique_values(values)
         if len(values) == 1:
             return values.pop()
         elif len(values) > 1:

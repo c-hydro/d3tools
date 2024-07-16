@@ -89,3 +89,32 @@ def parse_options(options: dict, **kwargs):
     tags = substitute_values(tags, tags, rec=True)
 
     return substitute_values(options, tags, rec=True)
+
+def make_hashable(obj):
+    """
+    Convert a nested dictionary to a hashable object.
+    """
+    if isinstance(obj, dict):
+        return ('dict',) + tuple((k, make_hashable(v)) for k, v in obj.items())
+    elif isinstance(obj, list):
+        return ('list',) +  tuple(make_hashable(v) for v in obj)
+    else:
+        return obj
+
+def transform_back(obj):
+    """
+    Transform the hashable object back to its original form (list or dict).
+    """
+    if obj[0] == 'dict':
+        return {k: transform_back(v) if isinstance(v, tuple) else v for k, v in obj[1:]}
+    elif obj[0] == 'list':
+        return [transform_back(v) if isinstance(v, tuple) else v for v in obj[1:]]
+    else:
+        return obj
+
+def get_unique_values(values):
+    unique_values = set()
+    for value in values:
+        unique_values.add(make_hashable(value))
+    return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
+
