@@ -49,8 +49,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
 
+        if 'ntiles' in kwargs:
+            self._template = [None]*kwargs.pop('ntiles')
+        else:
+            self._template = [None]
+
         self.options = Options(kwargs)
-        self.template = None
         self.tags = {}
 
     def __repr__(self):
@@ -73,7 +77,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_options.update({'dir': new_path, 'file': new_file, 'name': new_name})
             new_dataset = self.__class__(**new_options)
 
-            new_dataset.template = self.template
+            new_dataset._template = self._template
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
@@ -166,13 +170,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise ValueError(f'Could not resolve data from {full_path}.')
         
         # if there is no template for the dataset, create it from the data
-        if self.template is None:
-            self.template = self.make_template_from_data(data)
+        if self.get_template(**kwargs) is None:
+            template = self.make_template_from_data(data)
+            self.set_template(template, **kwargs)
         else:
             # otherwise, update the data in the template
             # (this will make sure there is no errors in the coordinates due to minor rounding)
             attrs = data.attrs
-            data = self.template.copy(data = data)
+            data = self.get_template(**kwargs).copy(data = data)
             data.attrs.update(attrs)
 
         return data
@@ -188,9 +193,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                    **kwargs):
         
         if data is None or data.size == 0:
-            output = self.template
+            output = self.get_template(**tags)
         else:
-            output = self.template.copy(data = data)
+            output = self.get_template(**tags).copy(data = data)
 
         # add metadata
         output = self.set_metadata(output, time, time_format, **kwargs)
@@ -263,20 +268,25 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO MANIPULATE THE TEMPLATE
     def get_template(self, **kwargs):
-        if hasattr(self, 'template') and self.template is not None:
-            return self.template
-        else:
-            try:
-                start_data = self.get_data(time = self.start, **kwargs)
-                template = self.make_template_from_data(start_data)
-                self.template = template
-            except ValueError:
-                template = None
-        
-        return template
 
-    def set_template(self, template: xr.DataArray):
-        self.template = template
+        tile = kwargs.get('tile', 0)
+        return self._template[tile]
+        # if self._template[tile] is not None:
+        #     return self._template[tile]
+        # else:
+        #     return None
+        #     try:
+        #         start_data = self.get_data(time = self.start, **kwargs)
+        #         template = self.make_template_from_data(start_data)
+        #         self._template[tile] = template
+        #     except ValueError:
+        #         template = None
+        
+        # return template
+
+    def set_template(self, template: xr.DataArray, **kwargs):
+        tile = kwargs.get('tile', 0)
+        self._template[tile] = template
 
     def set_metadata(self, data: xr.DataArray,
                      time: Optional[dt.datetime|TimeStep],
