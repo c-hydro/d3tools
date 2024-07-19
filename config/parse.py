@@ -1,7 +1,10 @@
 import datetime as dt
 import re
 
-from timestepping.time_utils import get_date_from_str
+try:
+    from ..timestepping.time_utils import get_date_from_str
+except ImportError:
+    from timestepping.time_utils import get_date_from_str
 
 def substitute_values(structure, tag_dict, **kwargs):
     """

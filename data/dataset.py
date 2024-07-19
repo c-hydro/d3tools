@@ -6,10 +6,16 @@ from abc import ABC, ABCMeta, abstractmethod
 from functools import cached_property
 import os
 
-from timestepping import TimeRange
-from timestepping.timestep import TimeStep
-from config.parse import substitute_string
-from config.options import Options
+try:
+    from ..timestepping import TimeRange
+    from ..timestepping.timestep import TimeStep
+    from ..config.parse import substitute_string
+    from ..config.options import Options
+except ImportError:
+    from timestepping import TimeRange
+    from timestepping.timestep import TimeStep
+    from config.parse import substitute_string
+    from config.options import Options
 
 class DatasetMeta(ABCMeta):
     def __init__(cls, name, bases, attrs):
