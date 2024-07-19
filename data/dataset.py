@@ -328,6 +328,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         data.attrs.update(metadata)
         data.name = self.name
 
+        return data
+
     @staticmethod
     def make_template_from_data(data: xr.DataArray) -> xr.DataArray:
         """
