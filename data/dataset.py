@@ -204,7 +204,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             output = self.get_template(**tags).copy(data = data)
 
         # add metadata
-        output = self.set_metadata(output, time, time_format, **kwargs)
+        # make sure the data is the smallest possible
+        output = set_type(output)
 
         output_file = self.path(time, **tags)
         self._write_data(output, output_file)
@@ -360,5 +361,31 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
     if '_FillValue' in data.attrs and not np.isnan(data.attrs['_FillValue']):
         data = data.where(data != data.attrs['_FillValue'])
         data.attrs['_FillValue'] = np.nan
+
+    return data
+
+def set_type(data: xr.DataArray) -> xr.DataArray:
+    """
+    Make sure that the data is the smallest possible.
+    """
+
+    max_value = data.max()
+    min_value = data.min()
+
+    # check if output contains floats or integers
+    if np.issubdtype(data.dtype, np.floating):
+        if max_value < 2**31 and min_value > -2**31:
+            data = data.astype(np.float32)
+        else:
+            data = data.astype(np.float64)
+    elif np.issubdtype(data.dtype, np.integer):
+        if max_value < 255 and min_value > -255:
+            data = data.astype(np.int8)
+        elif max_value < 65535 and min_value > -65535:
+            data = data.astype(np.int16)
+        elif max_value < 2**31 and min_value > -2**31:
+            data = data.astype(np.int32)
+        else:
+            data = data.astype(np.int64)
 
     return data
