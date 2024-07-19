@@ -192,22 +192,37 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _read_data(self, input_path:str):
         raise NotImplementedError
     
-    def write_data(self, data: xr.DataArray,
+    def write_data(self, data: xr.DataArray|np.ndarray,
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
-                   tags = {},
+                   metadata = {},
                    **kwargs):
         
+        # if data is a numpy array, enure there is a template available
+        template = self.get_template(**kwargs)
+        if template is None:
+            if isinstance(data, xr.DataArray):
+                template = self.make_template_from_data(data)
+                self.set_template(template, **kwargs)
+            else:
+                raise ValueError('Cannot write numpy array without a template.')
+
+        # if data is None, just use the template
         if data is None or data.size == 0:
-            output = self.get_template(**tags)
+            output = self.get_template(**kwargs)
         else:
-            output = self.get_template(**tags).copy(data = data)
+            output = self.get_template(**kwargs).copy(data = data)
 
         # add metadata
+        attrs = data.attrs if hasattr(data, 'attrs') else {}
+        output.attrs.update(attrs)
+        output = self.set_metadata(output, time, time_format, **metadata)
+
         # make sure the data is the smallest possible
         output = set_type(output)
 
-        output_file = self.path(time, **tags)
+        # write the data
+        output_file = self.path(time, **kwargs)
         self._write_data(output, output_file)
 
     @abstractmethod
