@@ -176,14 +176,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise ValueError(f'Could not resolve data from {full_path}.')
         
         # if there is no template for the dataset, create it from the data
-        if self.get_template(**kwargs) is None:
+        if self.get_template(make_it=False, **kwargs) is None:
             template = self.make_template_from_data(data)
             self.set_template(template, **kwargs)
         else:
             # otherwise, update the data in the template
             # (this will make sure there is no errors in the coordinates due to minor rounding)
             attrs = data.attrs
-            data = self.get_template(**kwargs).copy(data = data)
+            data = self.get_template(make_it=False, **kwargs).copy(data = data)
             data.attrs.update(attrs)
 
         return data
@@ -274,23 +274,17 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self.fn = fn
 
     ## METHODS TO MANIPULATE THE TEMPLATE
-    def get_template(self, **kwargs):
+    def get_template(self, make_it:bool = True, **kwargs):
 
-        tile = kwargs.get('tile', 0)
-        return self._template[tile]
-        # if self._template[tile] is not None:
-        #     return self._template[tile]
-        # else:
-        #     return None
-        #     try:
-        #         start_data = self.get_data(time = self.start, **kwargs)
-        #         template = self.make_template_from_data(start_data)
-        #         self._template[tile] = template
-        #     except ValueError:
-        #         template = None
+        tile = kwargs.pop('tile', 0)
+        template = self._template[tile]
+        if template is None and self.start is not None and make_it:
+            start_data = self.get_data(time = self.start, tile = tile, **kwargs)
+            template = self.make_template_from_data(start_data)
+            self.set_template(template, tile = tile)
         
-        # return template
-
+        return template
+    
     def set_template(self, template: xr.DataArray, **kwargs):
         tile = kwargs.get('tile', 0)
         self._template[tile] = template
