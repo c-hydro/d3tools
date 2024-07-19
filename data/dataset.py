@@ -160,7 +160,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         full_path = self.path(time, **kwargs)
 
         if self.check_data(time, **kwargs):
-            data = self._read_data(full_path, **kwargs)
+            data = self._read_data(full_path)
 
             # ensure that the data has descending latitudes
             data = straighten_data(data)
