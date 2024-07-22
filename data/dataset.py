@@ -270,6 +270,20 @@ class Dataset(ABC, metaclass=DatasetMeta):
         full_path = self.path(time, **kwargs)
         return self._check_data(full_path)
     
+    def find_times(self, times: list[TimeStep], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
+        """
+        Find the times for which data is available.
+        """
+        all_ids = list(range(len(times)))
+        ids = [i for i in all_ids if self.check_data(times[i], **kwargs)] or []
+        if rev:
+            ids = [i for i in all_ids if i not in ids] or []
+
+        if id:
+            return ids
+        else:
+            return [times[i] for i in ids]
+    
     @abstractmethod
     def _check_data(self, data_path) -> bool:
         raise NotImplementedError
