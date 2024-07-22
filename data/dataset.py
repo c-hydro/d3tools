@@ -5,6 +5,7 @@ import xarray as xr
 from abc import ABC, ABCMeta, abstractmethod
 from functools import cached_property
 import os
+import re
 
 try:
     from ..timestepping import TimeRange
@@ -131,7 +132,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @property
     def time_signature(self):
         if not hasattr(self, '_time_signature'):
-            self.time_signature = self._defaults['time_signature']
+            self._time_signature = self._defaults['time_signature']
         
         return self._time_signature
         
@@ -141,19 +142,28 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise ValueError(f"Invalid time signature: {value}")
         self._time_signature = value
 
-    def get_time_signature(self, time: TimeStep) -> dt.datetime:
-        time_signature = self.time_signature
-        if time_signature == 'start':
-            this_time = time.start
-        elif time_signature == 'end':
-            this_time = time.end
-        elif time_signature == 'end+1':
-            this_time = (time+1).start
-
-        if '%Y' not in self.path_pattern and this_time.month == 2 and this_time.day == 29:
-            this_time = this_time.replace(day = 28)
+    def get_time_signature(self, timestep: Optional[TimeStep | dt.datetime]) -> dt.datetime:
         
-        return this_time
+        if timestep is None:
+            return None
+        if isinstance(timestep, dt.datetime):
+            time = timestep
+        else:
+            time_signature = self.time_signature
+            if time_signature == 'start':
+                time = timestep.start
+            elif time_signature == 'end':
+                time = timestep.end
+            elif time_signature == 'end+1':
+                time = (timestep+1).start
+
+        path_without_tags = re.sub(r'\{.*\}', '', self.path_pattern)
+        hasyear = '%Y' in path_without_tags
+
+        if not hasyear and time.month == 2 and time.day == 29:
+            time = time.replace(day = 28)
+        
+        return time
 
     ## INPUT/OUTPUT METHODS
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
@@ -275,10 +285,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return time
 
     ## METHODS TO MANIPULATE THE DATASET
-    def path(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+    def path(self, time: Optional[TimeStep] = None, **kwargs):
         
-        if isinstance(time, TimeStep):
-            time: dt.datetime = self.get_time_signature(time)
+        time = self.get_time_signature(time)
 
         raw_path = substitute_string(self.path_pattern, kwargs)
         path = time.strftime(raw_path) if time is not None else raw_path
@@ -305,7 +314,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._template[tile] = template
 
     def set_metadata(self, data: xr.DataArray,
-                     time: Optional[dt.datetime|TimeStep],
+                     time: Optional[TimeStep|dt.datetime],
                      time_format: str, **kwargs) -> xr.DataArray:
         """
         Set metadata for the data.
@@ -318,7 +327,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if time is not None:
-            datatime = self.get_time_signature(time) 
+            datatime = self.get_time_signature(time)
             metadata['time'] = datatime.strftime(time_format)
 
         metadata['name'] = self.name
