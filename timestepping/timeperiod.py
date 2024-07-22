@@ -39,3 +39,6 @@ class TimePeriod(ABC):
     
     def __ge__(self, other: 'TimePeriod'):
         return self > other or self == other
+    
+    def __hash__(self):
+        return hash((self.start, self.end))
