@@ -1,5 +1,6 @@
 import numpy as np
 import rioxarray
+import xarray as xr
 import os
 
 import matplotlib.pyplot as plt
@@ -8,16 +9,23 @@ from . import colors as col
 
 #TODO TEST
 class Thumbnail:
-    def __init__(self, raster_file:str, color_definition_file:str):
-        self.raster_file = raster_file
-        with rioxarray.open_rasterio(raster_file) as src:
-            self.src = src
-            self.transform = src.rio.transform()
-            self.img = src.data.squeeze()
-            self.nan_value = src.rio.nodata
-            self.flip = src.y.data[-1] > src.y.data[0]
-            self.shape = self.img.shape
-            self.crs = src.rio.crs
+    def __init__(self, raster:str|xr.DataArray, color_definition_file:str):
+        if isinstance(raster, xr.DataArray):
+            self.src = raster
+        elif isinstance(raster, str):
+            self.src = rioxarray.open_rasterio(raster)
+        
+        # let's force the image to be flipped in the y coordinate
+        self.flip = self.src.y.data[-1] > self.src.y.data[0]
+        if not self.flip:
+            ydim = self.src.rio.y_dim
+            self.src = self.src.sortby('y', ascending=True)
+
+        self.transform = self.src.rio.transform()
+        self.img = self.src.data.squeeze()
+        self.nan_value = self.src.rio.nodata
+        self.shape = self.img.shape
+        self.crs = self.src.rio.crs
 
         self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
                        self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
@@ -49,8 +57,9 @@ class Thumbnail:
         return raster_discrete
 
     def make_image(self, size = 1, dpi = 150):
-     
+        
         height, width = (sz * size for sz in self.shape)
+
         fig_width_in_inches = width / dpi
         fig_height_in_inches = height / dpi
         self.dpi = dpi
@@ -65,13 +74,11 @@ class Thumbnail:
         self.fig = fig
         self.im = im
 
-    def add_overlay(self, shp_file = None, **kwargs):
+    def add_overlay(self, shp_file: str, **kwargs):
         import geopandas as gpd
-        if shp_file is None:
-            shp_file = 'thumbnails/countries/countries.shp'
 
-        countries = gpd.read_file(shp_file)
-        countries = countries.to_crs(self.crs.to_string())
+        shapes = gpd.read_file(shp_file)
+        shapes = shapes.to_crs(self.crs.to_string())
 
         if 'facecolor' not in kwargs:
             kwargs['facecolor'] = 'none'
@@ -80,9 +87,9 @@ class Thumbnail:
         if 'linewidth' not in kwargs:
             kwargs['linewidth'] = 0.5
 
-        countries.boundary.plot(ax=self.ax, **kwargs)
+        shapes.boundary.plot(ax=self.ax, **kwargs)
 
-        # Preserve the aspect ratio and the extent
+        #Preserve the aspect ratio and the extent
         self.ax.set_aspect('equal')
         self.ax.set_xlim(self.extent[0], self.extent[1])
         self.ax.set_ylim(self.extent[2], self.extent[3])
@@ -105,31 +112,34 @@ class Thumbnail:
     def save(self, file:str, **kwargs):
 
         if not hasattr(self, 'fig'):
-            size = kwargs.pop('size') if 'size' in kwargs else None
-            dpi  = kwargs.pop('dpi') if 'dpi' in kwargs else None
+            size = kwargs.get('size', 1)
+            dpi  = kwargs.pop('dpi', 150)
             self.make_image(size, dpi)
 
         if 'overlay' in kwargs:
             if isinstance(kwargs['overlay'], dict):
                 self.add_overlay(**kwargs.pop('overlay'))
+            elif isinstance(kwargs['overlay'], str):
+                self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None or kwargs['overlay'].lower == 'none' :
                 pass
-        else:
-            self.add_overlay()
 
         if 'annotation' in kwargs:
             if isinstance(kwargs['annotation'], dict):
                 self.add_annotation(**kwargs.pop('annotation'))
+            elif isinstance(kwargs['annotation'], str):
+                self.add_annotation(kwargs['annotation'])
             elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
                 pass
-        else:
+        elif hasattr(self, 'raster_file'):
             self.add_annotation(f'{os.path.basename(self.raster_file)}')
 
-        if self.flip:
-            self.ax.invert_yaxis()
+        self.ax.invert_yaxis()
 
         self.ax.axis('off')
         self.fig.tight_layout(pad=0)
+
+        os.makedirs(os.path.dirname(file), exist_ok=True)
         self.fig.savefig(file, dpi=self.dpi)
 
         plt.close(self.fig)

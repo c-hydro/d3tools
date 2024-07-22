@@ -12,11 +12,13 @@ try:
     from ..timestepping.timestep import TimeStep
     from ..config.parse import substitute_string
     from ..config.options import Options
+    from ..thumbnails import Thumbnail
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
     from config.parse import substitute_string
     from config.options import Options
+    from thumbnails import Thumbnail
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -70,6 +72,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._template = [None]*kwargs.pop('ntiles')
         else:
             self._template = [None]
+
+        if 'thumbnail' in kwargs:
+            self.thumb_opts = kwargs.pop('thumbnail')
 
         self.options = Options(kwargs)
         self.tags = {}
@@ -241,8 +246,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # make sure the data is the smallest possible
         output = set_type(output)
 
-        # write the data
+        # check if there is a thumbnail to be saved and save it
         output_file = self.path(time, **kwargs)
+        if hasattr(self, 'thumb_opts'):
+            thumb_opts = self.thumb_opts
+            if 'colors' in thumb_opts:
+                col_file = thumb_opts['colors']
+                this_thumbnail = Thumbnail(output, col_file)
+                this_thumbnail.save(output_file.replace('.tif', '.png'), annotation = os.path.basename(output_file), **thumb_opts)
+
+        # write the data
         self._write_data(output, output_file)
 
     @abstractmethod
