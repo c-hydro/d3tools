@@ -18,6 +18,16 @@ except ImportError:
     from config.parse import substitute_string
     from config.options import Options
 
+def withcases(func):
+    def wrapper(*args, **kwargs):
+        if 'cases' in kwargs:
+            cases = kwargs.pop('cases')
+            if cases is not None:
+                return [func(*args, **case['tags'], **kwargs) for case in cases]
+        else:
+            return func(*args, **kwargs)
+    return wrapper
+
 class DatasetMeta(ABCMeta):
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
@@ -257,19 +267,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 if all(parent.check_data(time, **kwargs) for parent in self.parents.values()):
                     yield time
 
+    @withcases
     def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
         """
         Get a list of times between two dates.
         """
         return list(self._get_times(time_range, **kwargs))
 
-    def check_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs) -> bool:
+    @withcases
+    def check_data(self, time: Optional[TimeStep] = None, **kwargs) -> bool:
         """
         Check if data is available for a given time.
         """
         full_path = self.path(time, **kwargs)
         return self._check_data(full_path)
     
+    @withcases
     def find_times(self, times: list[TimeStep], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
         """
         Find the times for which data is available.
