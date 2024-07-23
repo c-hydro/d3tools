@@ -20,14 +20,14 @@ class ConcreteDataset(Dataset):
 class TestDataset:
 
     def setup_method(self):
-        self.ds1 = ConcreteDataset(path = 'test_path', file = 'test_file')
+        self.ds1 = ConcreteDataset(path = 'test_path', file = 'test_file.tif')
 
     def test_dataset_initialization(self):
         assert self.ds1.dir == 'test_path'
-        assert self.ds1.file == 'test_file'
+        assert self.ds1.file == 'test_file.tif'
 
     def test_from_options(self):
-        self.ds2 = Dataset.from_options({'type': 'test', 'path': 'test_path', 'file': 'test_file'})
+        self.ds2 = Dataset.from_options({'type': 'test', 'path': 'test_path', 'file': 'test_file.tif'})
         assert isinstance(self.ds2, ConcreteDataset)
         assert self.ds2.__dict__ == self.ds1.__dict__
     
@@ -48,7 +48,7 @@ class TestDataset:
         self.ds1.time_signature = 'start'
         assert self.ds1.time_signature == 'start'
         with mock.patch('data.dataset.Dataset._defaults', {'time_signature': 'end+1'}):
-            self.ds2 = ConcreteDataset(path = 'test_path', file = 'test_file')
+            self.ds2 = ConcreteDataset(path = 'test_path', file = 'test_file.tif')
             assert self.ds2.time_signature == 'end+1'
 
     def test_get_time_signature(self):
@@ -68,7 +68,7 @@ class TestDataset:
                  mock.patch(f'data.dataset.reset_nan') as mock_reset_nan:
                 
                 self.ds1.get_data(time = Dekad(2024,1))
-                mock_read_data.assert_called_once_with('test_path/test_file')
+                mock_read_data.assert_called_once_with('test_path/test_file.tif')
 
                 data = mock_read_data.return_value
                 mock_straighten_data.assert_called_once_with(data)
@@ -139,10 +139,10 @@ class TestDataset:
             mock_check_data.assert_called_once_with('test_path/test_file')
 
     def test_path(self):
-        self.ds2 = ConcreteDataset(path = 'test_path_%Y%m%d', file = 'test_file_{test}')
+        self.ds2 = ConcreteDataset(path = 'test_path_%Y%m%d', file = 'test_file_{test}.tif')
         self.ds2.time_signature = 'start'
 
-        assert self.ds2.path(Dekad(2024,1), test = 'test2') == 'test_path_20240101/test_file_test2'
+        assert self.ds2.path(Dekad(2024,1), test = 'test2') == 'test_path_20240101/test_file_test2.tif'
 
     def test_get_template(self):
         self.ds1.template = None
