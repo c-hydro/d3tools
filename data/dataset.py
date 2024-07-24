@@ -244,6 +244,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # make sure the data is the smallest possible
         output = set_type(output)
 
+        # ensure that the data has descending latitudes
+        output = straighten_data(output)
+
         # check if there is a thumbnail to be saved and save it
         output_file = self.path(time, **kwargs)
         if hasattr(self, 'thumb_opts'):
@@ -403,14 +406,13 @@ def straighten_data(data: xr.DataArray) -> xr.DataArray:
     """
     Ensure that the data has descending latitudes.
     """
-
     y_dim = data.rio.y_dim
     if y_dim is None:
         for dim in data.dims:
             if 'lat' in dim.lower() | 'y' in dim.lower():
                 y_dim = dim
                 break
-    if data[y_dim][0] < data[y_dim][-1]:
+    if data[y_dim].data[0] < data[y_dim].data[-1]:
         data = data.sortby(y_dim, ascending = False)
 
     return data
