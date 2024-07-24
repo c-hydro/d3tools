@@ -87,7 +87,7 @@ class Thumbnail:
     def add_overlay(self, shp_file: str, **kwargs):
         import geopandas as gpd
 
-        shapes = gpd.read_file(shp_file)
+        shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
         shapes = shapes.to_crs(self.crs.to_string())
 
         if 'facecolor' not in kwargs:
@@ -106,15 +106,13 @@ class Thumbnail:
 
     def add_annotation(self, text:str, **kwargs):
         
-        if 'xy' not in kwargs:
-            kwargs['xy'] = (0.001, 0.001)
         if 'xycoords' not in kwargs:
-            kwargs['xycoords'] = 'axes fraction'
+            kwargs['xycoords'] = 'axes points'
         if 'fontsize' not in kwargs:
             width_in_inches = self.size_in_inches[0]
             # 1 point = 1/72 inch, we assume letters are 0.55 times as wide as they are tall
             # and look for the optimal font size that allows to write the text in 3/4 of the width of the image
-            optimal_fontsize = (width_in_inches * 3/4) / (len(text) * 0.55 * 1/72)
+            optimal_fontsize = min((width_in_inches * 3/4) / (len(text) * 0.55 * 1/72), 20)
 
             # if the text is too tall, we reduce the font size to fit it in 1/5 of the height
             height_in_inches = self.size_in_inches[1]
@@ -122,6 +120,8 @@ class Thumbnail:
                 optimal_fontsize = (height_in_inches * 1/5) / (1/72)
             
             kwargs['fontsize'] = optimal_fontsize
+        if 'xy' not in kwargs:
+            kwargs['xy'] = (6, kwargs['fontsize']/3)
         if 'color' not in kwargs:
             kwargs['color'] = 'black'
         if 'backgroundcolor' not in kwargs:
