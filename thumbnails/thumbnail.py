@@ -2,6 +2,7 @@ import numpy as np
 import rioxarray
 import xarray as xr
 import os
+from typing import Optional
 
 import matplotlib.pyplot as plt
 
@@ -56,13 +57,25 @@ class Thumbnail:
 
         return raster_discrete
 
-    def make_image(self, size = 1, dpi = 150):
+    def make_image(self,
+                   size: Optional[float] = None,
+                   dpi: Optional[float] = None):
+        
+        min_dim = min(self.shape)
+        if size is None and dpi is None:
+            dpi = max(min_dim / 6, 100) 
+            size = 6 / (min_dim / dpi)
+        elif size is None:
+            size = 6 / (min_dim / dpi)
+        elif dpi is None:
+            dpi = min_dim * size / 6
         
         height, width = (sz * size for sz in self.shape)
 
         fig_width_in_inches = width / dpi
         fig_height_in_inches = height / dpi
         self.dpi = dpi
+        self.size_in_inches = (fig_width_in_inches, fig_height_in_inches)
 
         # Create a figure with a single subplot
         fig, ax = plt.subplots(figsize=(fig_width_in_inches, fig_height_in_inches), dpi=dpi)
@@ -97,17 +110,27 @@ class Thumbnail:
     def add_annotation(self, text:str, **kwargs):
         
         if 'xy' not in kwargs:
-            kwargs['xy'] = (0, 0)
+            kwargs['xy'] = (0.001, 0.001)
         if 'xycoords' not in kwargs:
             kwargs['xycoords'] = 'axes fraction'
         if 'fontsize' not in kwargs:
-            kwargs['fontsize'] = 12
+            width_in_inches = self.size_in_inches[0]
+            # 1 point = 1/72 inch, we assume letters are 0.55 times as wide as they are tall
+            # and look for the optimal font size that allows to write the text in 3/4 of the width of the image
+            optimal_fontsize = (width_in_inches * 3/4) / (len(text) * 0.55 * 1/72)
+
+            # if the text is too tall, we reduce the font size to fit it in 1/5 of the height
+            height_in_inches = self.size_in_inches[1]
+            if optimal_fontsize * 1/72 > height_in_inches * 1/5:
+                optimal_fontsize = (height_in_inches * 1/5) / (1/72)
+            
+            kwargs['fontsize'] = optimal_fontsize
         if 'color' not in kwargs:
             kwargs['color'] = 'black'
         if 'backgroundcolor' not in kwargs:
             kwargs['backgroundcolor'] = 'white'
 
-        self.ax.annotate(text, **kwargs)
+        self.ax.annotate(text, annotation_clip=False, **kwargs)
 
     def save(self, file:str, **kwargs):
 
@@ -140,7 +163,7 @@ class Thumbnail:
         self.fig.tight_layout(pad=0)
 
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        self.fig.savefig(file, dpi=self.dpi)
+        self.fig.savefig(file, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
 
         plt.close(self.fig)
 
