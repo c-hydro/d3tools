@@ -16,10 +16,10 @@ class Thumbnail:
             self.src = rioxarray.open_rasterio(raster)
         
         # let's force the image to be flipped in the y coordinate
-        self.flip = self.src.y.data[-1] > self.src.y.data[0]
+        ydim = self.src.rio.y_dim
+        self.flip = self.src[ydim].data[-1] > self.src[ydim].data[0]
         if not self.flip:
-            ydim = self.src.rio.y_dim
-            self.src = self.src.sortby('y', ascending=True)
+            self.src = self.src.sortby(ydim, ascending=True)
 
         self.transform = self.src.rio.transform()
         self.img = self.src.data.squeeze()
