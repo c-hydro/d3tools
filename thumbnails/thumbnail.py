@@ -32,11 +32,14 @@ class Thumbnail:
                        self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
         self.txt_file = color_definition_file
-        all_breaks, all_colors = col.parse_txt(color_definition_file)
+        all_breaks, all_colors, all_labels = col.parse_txt(color_definition_file)
 
         self.digital_img = self.discretize_raster(all_breaks)
         self.breaks = np.unique(self.digital_img)
         self.colors = col.keep_used_colors(self.breaks, all_colors)
+        
+        all_labels.append('nan')
+        self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
 
         self.colormap = col.create_colormap(self.colors)
 
@@ -132,11 +135,26 @@ class Thumbnail:
 
         self.ax.annotate(text, annotation_clip=False, **kwargs)
 
+    def add_legend(self, **kwargs):
+
+        if 'loc' not in kwargs:
+            kwargs['loc'] = 'upper right'
+        if 'bbox_to_anchor' not in kwargs:
+            kwargs['bbox_to_anchor'] = (0.99, 0.99)
+        if 'borderaxespad' not in kwargs:
+            kwargs['borderaxespad'] = 0
+
+        import matplotlib.patches as mpatches
+        colors_normalized = [np.array(color, dtype=int) / 255. for color in self.colors]
+        patches = [mpatches.Patch(color=color, label=label) for color, label in zip(colors_normalized, self.labels)]
+
+        self.fig.legend(handles=patches, **kwargs)
+
     def save(self, file:str, **kwargs):
 
         if not hasattr(self, 'fig'):
-            size = kwargs.get('size', 1)
-            dpi  = kwargs.pop('dpi', 150)
+            size = kwargs.get('size', None)
+            dpi  = kwargs.pop('dpi', None)
             self.make_image(size, dpi)
 
         if 'overlay' in kwargs:
@@ -156,6 +174,14 @@ class Thumbnail:
                 pass
         elif hasattr(self, 'raster_file'):
             self.add_annotation(f'{os.path.basename(self.raster_file)}')
+
+        if 'legend' in kwargs:
+            if isinstance(kwargs['legend'], dict):
+                self.add_legend(**kwargs.pop('legend'))
+            elif kwargs['legend'] == False or kwargs['legend'] is None or kwargs['legend'].lower == 'none':
+                pass
+        else:
+            self.add_legend()
 
         self.ax.invert_yaxis()
 
