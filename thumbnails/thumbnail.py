@@ -15,12 +15,6 @@ class Thumbnail:
             self.src = raster
         elif isinstance(raster, str):
             self.src = rioxarray.open_rasterio(raster)
-        
-        # let's force the image to be flipped in the y coordinate
-        ydim = self.src.rio.y_dim
-        self.flip = self.src[ydim].data[-1] > self.src[ydim].data[0]
-        if not self.flip:
-            self.src = self.src.sortby(ydim, ascending=True)
 
         self.transform = self.src.rio.transform()
         self.img = self.src.data.squeeze()
@@ -182,8 +176,6 @@ class Thumbnail:
                 pass
         else:
             self.add_legend()
-
-        self.ax.invert_yaxis()
 
         self.ax.axis('off')
         self.fig.tight_layout(pad=0)
