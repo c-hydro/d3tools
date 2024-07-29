@@ -75,14 +75,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
 
-        if 'ntiles' in kwargs:
-            self._template = [None]*kwargs.pop('ntiles')
-        else:
-            self._template = [None]
-
         if 'thumbnail' in kwargs:
             self.thumb_opts = kwargs.pop('thumbnail')
 
+        self._template = {}
         self.options = Options(kwargs)
         self.tags = {}
 
@@ -231,7 +227,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                    **kwargs):
         
         # if data is a numpy array, enure there is a template available
-        template = self.get_template(**kwargs)
+        template = self.get_template(**kwargs, make_it=False)
         if template is None:
             if isinstance(data, xr.DataArray):
                 template = self.make_template_from_data(data)
@@ -241,9 +237,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # if data is None, just use the template
         if data is None or data.size == 0:
-            output = self.get_template(**kwargs)
+            output = template
         else:
-            output = self.get_template(**kwargs).copy(data = data)
+            output = template.copy(data = data)
 
         # add metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
@@ -356,8 +352,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## METHODS TO MANIPULATE THE TEMPLATE
     def get_template(self, make_it:bool = True, **kwargs):
 
-        tile = kwargs.pop('tile', 0)
-        template = self._template[tile]
+        tile = kwargs.pop('tile', '__tile__')
+        template = self._template.get(tile, None)
         if template is None and self.start is not None and make_it:
             start_data = self.get_data(time = self.start, tile = tile, **kwargs)
             template = self.make_template_from_data(start_data)
@@ -366,7 +362,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return template
     
     def set_template(self, template: xr.DataArray, **kwargs):
-        tile = kwargs.get('tile', 0)
+        tile = kwargs.get('tile', '__tile__')
         self._template[tile] = template
 
     def set_metadata(self, data: xr.DataArray,
