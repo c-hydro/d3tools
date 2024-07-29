@@ -56,7 +56,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'name' in kwargs:
             self.name   = kwargs.pop('name')
         else:
-            self.name = '.'.join(os.path.basename(self.file).split('.')[:-1])
+            basename_noext  = '.'.join(os.path.basename(self.file).split('.')[:-1])
+            basename_nodate = basename_noext.replace('%Y', '').replace('%m', '').replace('%d', '')
+            if basename_nodate.endswith('_'):
+                basename_nodate = basename_nodate[:-1]
+            elif basename_nodate.startswith('_'):
+                basename_nodate = basename_nodate[1:]
+            elif '__' in basename_nodate:
+                basename_nodate = basename_nodate.replace('__', '_')
+
+            self.name = basename_nodate
 
         if 'format' in kwargs:
             self.format = kwargs.pop('format')
@@ -239,6 +248,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # add metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
         output.attrs.update(attrs)
+        name = substitute_string(self.name, kwargs)
+        metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
 
         # make sure the data is the smallest possible
@@ -375,12 +386,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
             datatime = self.get_time_signature(time)
             metadata['time'] = datatime.strftime(time_format)
 
-        metadata['name'] = self.name
+        name = metadata.get('name', self.name)
         if 'long_name' in metadata:
             metadata.pop('long_name')
 
         data.attrs.update(metadata)
-        data.name = self.name
+        data.name = name
 
         return data
 
