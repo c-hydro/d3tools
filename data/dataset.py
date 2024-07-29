@@ -197,7 +197,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             # ensure that the data has descending latitudes
             data = straighten_data(data)
 
-            # make sure the nodata value is set to np.nan
+            # make sure the nodata value is set to np.nan for floats and to the max int for integers
             data = reset_nan(data)
         
         # if the data is not available, try to calculate it from the parents
@@ -400,8 +400,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Make a template xarray.DataArray from a given xarray.DataArray.
         """
+
+        nodata_value = data.attrs.get('_FillValue', np.nan)
+
         # make a copy of the data, but fill it with NaNs
-        template = data.copy(data = np.full(data.shape, np.nan))
+        template = data.copy(data = np.full(data.shape, nodata_value))
 
         # clear all attributes
         template.attrs = {}
@@ -409,7 +412,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # make crs and nodata explicit as attributes
         template.attrs = {'crs': data.rio.crs.to_wkt(),
-                          '_FillValue': np.nan}
+                          '_FillValue': nodata_value}
 
         return template
     
@@ -430,12 +433,15 @@ def straighten_data(data: xr.DataArray) -> xr.DataArray:
 
 def reset_nan(data: xr.DataArray) -> xr.DataArray:
     """
-    Make sure that the nodata value is set to np.nan.
+    Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
     """
 
-    if '_FillValue' in data.attrs and not np.isnan(data.attrs['_FillValue']):
-        data = data.where(data != data.attrs['_FillValue'])
-        data.attrs['_FillValue'] = np.nan
+    data_type = data.dtype
+    new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
+    fill_value = data.attrs.get('_FillValue', new_fill_value)
+
+    data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
+    data.attrs['_FillValue'] = new_fill_value
 
     return data
 
@@ -454,13 +460,23 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
         else:
             data = data.astype(np.float64)
     elif np.issubdtype(data.dtype, np.integer):
-        if max_value < 255 and min_value > -255:
-            data = data.astype(np.int8)
-        elif max_value < 65535 and min_value > -65535:
-            data = data.astype(np.int16)
-        elif max_value < 2**31 and min_value > -2**31:
-            data = data.astype(np.int32)
+        if min_value >= 0:
+            if max_value <= 255:
+                data = data.astype(np.uint8)
+            elif max_value <= 65535:
+                data = data.astype(np.uint16)
+            elif max_value < 2**31:
+                data = data.astype(np.uint32)
+            else:
+                data = data.astype(np.uint64)
         else:
-            data = data.astype(np.int64)
+            if max_value <= 127 and min_value >= -128:
+                data = data.astype(np.int8)
+            elif max_value <= 32767 and min_value >= -32768:
+                data = data.astype(np.int16)
+            elif max_value < 2**31 and min_value > -2**31:
+                data = data.astype(np.int32)
+            else:
+                data = data.astype(np.int64)
 
     return data
