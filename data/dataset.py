@@ -230,7 +230,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         template = self.get_template(**kwargs, make_it=False)
         if template is None:
             if isinstance(data, xr.DataArray):
-                template = self.make_template_from_data(data)
+                template = self.make_templatearray_from_data(data)
                 self.set_template(template, **kwargs)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
@@ -353,17 +353,76 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_template(self, make_it:bool = True, **kwargs):
 
         tile = kwargs.pop('tile', '__tile__')
-        template = self._template.get(tile, None)
-        if template is None and self.start is not None and make_it:
+        template_dict = self._template.get(tile, None)
+        if template_dict is None and self.start is not None and make_it:
             start_data = self.get_data(time = self.start, tile = tile, **kwargs)
-            template = self.make_template_from_data(start_data)
-            self.set_template(template, tile = tile)
+            templatearray = self.make_templatearray_from_data(start_data)
+            self.set_template(templatearray, tile = tile)
+        elif template_dict is not None:
+            templatearray = self.build_templatearray(template_dict)
+        else:
+            templatearray = None
         
-        return template
+        return templatearray
     
-    def set_template(self, template: xr.DataArray, **kwargs):
+    def set_template(self, templatearray: xr.DataArray, **kwargs):
         tile = kwargs.get('tile', '__tile__')
-        self._template[tile] = template
+        # save in self._template the minimum that is needed to recreate the template
+        # get the crs and the nodata value, these are the same for all tiles
+        self._template[tile] = {'crs': templatearray.attrs.get('crs'),
+                                '_FillValue' : templatearray.attrs.get('_FillValue'),
+                                'dims_names' : templatearray.dims,
+                                'dims_starts': {},
+                                'dims_ends': {},
+                                'dims_lengths': {}}
+        
+        for dim in templatearray.dims:
+            this_dim_values = templatearray[dim].data
+            start = this_dim_values[0]
+            end = this_dim_values[-1]
+            length = len(this_dim_values)
+            self._template[tile]['dims_starts'][dim] = float(start)
+            self._template[tile]['dims_ends'][dim] = float(end)
+            self._template[tile]['dims_lengths'][dim] = length
+
+    @staticmethod
+    def make_templatearray_from_data(data: xr.DataArray) -> xr.DataArray:
+        """
+        Make a template xarray.DataArray from a given xarray.DataArray.
+        """
+
+        nodata_value = data.attrs.get('_FillValue', np.nan)
+
+        # make a copy of the data, but fill it with NaNs
+        template = data.copy(data = np.full(data.shape, nodata_value))
+
+        # clear all attributes
+        template.attrs = {}
+        template.encoding = {}
+
+        # make crs and nodata explicit as attributes
+        template.attrs = {'crs': data.rio.crs.to_wkt(),
+                          '_FillValue': nodata_value}
+
+        return template
+
+    @staticmethod
+    def build_templatearray(template_dict: dict) -> xr.DataArray:
+        """
+        Build a template xarray.DataArray from a dictionary.
+        """
+        shape = [template_dict['dims_lengths'][dim] for dim in template_dict['dims_names']]
+        template = xr.DataArray(np.full(shape, template_dict['_FillValue']), dims = template_dict['dims_names'])
+        
+        for dim in template_dict['dims_names']:
+            start  = template_dict['dims_starts'][dim]
+            end    = template_dict['dims_ends'][dim]
+            length = template_dict['dims_lengths'][dim]
+            template[dim] = np.linspace(start, end, length)
+
+        template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
+
+        return template
 
     def set_metadata(self, data: xr.DataArray,
                      time: Optional[TimeStep|dt.datetime],
@@ -390,27 +449,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         data.name = name
 
         return data
-
-    @staticmethod
-    def make_template_from_data(data: xr.DataArray) -> xr.DataArray:
-        """
-        Make a template xarray.DataArray from a given xarray.DataArray.
-        """
-
-        nodata_value = data.attrs.get('_FillValue', np.nan)
-
-        # make a copy of the data, but fill it with NaNs
-        template = data.copy(data = np.full(data.shape, nodata_value))
-
-        # clear all attributes
-        template.attrs = {}
-        template.encoding = {}
-
-        # make crs and nodata explicit as attributes
-        template.attrs = {'crs': data.rio.crs.to_wkt(),
-                          '_FillValue': nodata_value}
-
-        return template
     
 def straighten_data(data: xr.DataArray) -> xr.DataArray:
     """
