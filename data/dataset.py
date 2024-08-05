@@ -205,7 +205,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         # if there is no template for the dataset, create it from the data
         if self.get_template(make_it=False, **kwargs) is None:
-            template = self.make_template_from_data(data)
+            template = self.make_templatearray_from_data(data)
             self.set_template(template, **kwargs)
         else:
             # otherwise, update the data in the template
