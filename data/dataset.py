@@ -254,8 +254,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # ensure that the data has descending latitudes
         output = straighten_data(output)
 
-        # check if there is a thumbnail to be saved and save it
+        # write the data
         output_file = self.path(time, **kwargs)
+        self._write_data(output, output_file)
+
+        # check if there is a thumbnail to be saved and save it
         if hasattr(self, 'thumb_opts'):
             try:
                 from ..thumbnails import Thumbnail
@@ -264,11 +267,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             thumb_opts = self.thumb_opts
             if 'colors' in thumb_opts:
                 col_file = substitute_string(thumb_opts['colors'], kwargs)
-                this_thumbnail = Thumbnail(output, col_file)
-                this_thumbnail.save(output_file.replace('.tif', '.png'), annotation = os.path.basename(output_file), **thumb_opts)
-
-        # write the data
-        self._write_data(output, output_file)
+                this_thumbnail = Thumbnail(output_file, col_file)
+                this_thumbnail.save(output_file.replace('.tif', '.png'), **thumb_opts)
 
     @abstractmethod
     def _write_data(self, output: xr.DataArray, output_path: str):

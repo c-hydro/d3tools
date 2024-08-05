@@ -14,28 +14,35 @@ class Thumbnail:
         if isinstance(raster, xr.DataArray):
             self.src = raster
         elif isinstance(raster, str):
+            self.raster_file = raster
             self.src = rioxarray.open_rasterio(raster)
 
-        self.transform = self.src.rio.transform()
-        self.img = self.src.data.squeeze()
-        self.nan_value = self.src.rio.nodata
-        self.shape = self.img.shape
-        self.crs = self.src.rio.crs
+        # check if the raster is all nan
+        if np.all(np.isclose(self.src.data, self.src.rio.nodata, equal_nan=True)):
+            self.allnan = True
+        else:
+            self.allnan = False
 
-        self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
-                       self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
+            self.transform = self.src.rio.transform()
+            self.img = self.src.data.squeeze()
+            self.nan_value = self.src.rio.nodata
+            self.shape = self.img.shape
+            self.crs = self.src.rio.crs
 
-        self.txt_file = color_definition_file
-        all_breaks, all_colors, all_labels = col.parse_txt(color_definition_file)
+            self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
+                        self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
-        self.digital_img = self.discretize_raster(all_breaks)
-        self.breaks = np.unique(self.digital_img)
-        self.colors = col.keep_used_colors(self.breaks, all_colors)
-        
-        all_labels.append('nan')
-        self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
+            self.txt_file = color_definition_file
+            all_breaks, all_colors, all_labels = col.parse_txt(color_definition_file)
 
-        self.colormap = col.create_colormap(self.colors)
+            self.digital_img = self.discretize_raster(all_breaks)
+            self.breaks = np.unique(self.digital_img)
+            self.colors = col.keep_used_colors(self.breaks, all_colors)
+            
+            all_labels.append('nan')
+            self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
+
+            self.colormap = col.create_colormap(self.colors)
 
     def discretize_raster(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
@@ -107,34 +114,37 @@ class Thumbnail:
     def add_annotation(self, text:str, **kwargs):
         
         if 'xycoords' not in kwargs:
-            kwargs['xycoords'] = 'axes points'
+            kwargs['xycoords'] = 'axes fraction'
         if 'fontsize' not in kwargs:
             width_in_inches = self.size_in_inches[0]
             # 1 point = 1/72 inch, we assume letters are 0.55 times as wide as they are tall
             # and look for the optimal font size that allows to write the text in 3/4 of the width of the image
             optimal_fontsize = min((width_in_inches * 3/4) / (len(text) * 0.55 * 1/72), 20)
 
-            # if the text is too tall, we reduce the font size to fit it in 1/5 of the height
+            # if the text is too tall, we reduce the font size to fit it in 1/10 of the height
             height_in_inches = self.size_in_inches[1]
-            if optimal_fontsize * 1/72 > height_in_inches * 1/5:
-                optimal_fontsize = (height_in_inches * 1/5) / (1/72)
+            if optimal_fontsize * 1/72 > height_in_inches * 1/10:
+                optimal_fontsize = (height_in_inches * 1/10) / (1/72)
             
             kwargs['fontsize'] = optimal_fontsize
         if 'xy' not in kwargs:
-            kwargs['xy'] = (6, kwargs['fontsize']/3)
+            kwargs['xy'] = (0.02, 0.02)
+            kwargs['ha'] = 'left'
+            kwargs['va'] = 'bottom'
+
         if 'color' not in kwargs:
             kwargs['color'] = 'black'
         if 'backgroundcolor' not in kwargs:
-            kwargs['backgroundcolor'] = 'white'
+            kwargs['backgroundcolor'] = 'none'
 
-        self.ax.annotate(text, annotation_clip=False, **kwargs)
+        self.ax.annotate(text, annotation_clip=True, **kwargs)
 
     def add_legend(self, **kwargs):
 
         if 'loc' not in kwargs:
             kwargs['loc'] = 'upper right'
         if 'bbox_to_anchor' not in kwargs:
-            kwargs['bbox_to_anchor'] = (0.99, 0.99)
+            kwargs['bbox_to_anchor'] = (1, 1)
         if 'borderaxespad' not in kwargs:
             kwargs['borderaxespad'] = 0
 
@@ -145,6 +155,9 @@ class Thumbnail:
         self.fig.legend(handles=patches, **kwargs)
 
     def save(self, file:str, **kwargs):
+
+        if self.allnan:
+            return
 
         if not hasattr(self, 'fig'):
             size = kwargs.get('size', None)
@@ -158,10 +171,13 @@ class Thumbnail:
                 self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None or kwargs['overlay'].lower == 'none' :
                 pass
-
+        
         if 'annotation' in kwargs:
             if isinstance(kwargs['annotation'], dict):
-                self.add_annotation(**kwargs.pop('annotation'))
+                annotation_opts = kwargs.pop('annotation')
+                if 'text' not in annotation_opts:
+                    annotation_opts['text'] = os.path.basename(self.raster_file)
+                self.add_annotation(**annotation_opts)
             elif isinstance(kwargs['annotation'], str):
                 self.add_annotation(kwargs['annotation'])
             elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
