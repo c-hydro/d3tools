@@ -44,7 +44,7 @@ def substitute_string(string, tag_dict, rec = False):
         else:
             return str(value)
 
-    pattern = re.compile(r'{(\w+)(?::(.*?))?}')
+    pattern = re.compile(r'{([\w.]+)(?::(.*?))?}')
 
     while rec:
         new_string = pattern.sub(replace_match, string)
