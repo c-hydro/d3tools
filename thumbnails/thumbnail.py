@@ -6,7 +6,10 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 
-from . import colors as col
+try:
+    from . import colors as col
+except ImportError:
+    import colors as col
 
 #TODO TEST
 class Thumbnail:
@@ -65,14 +68,17 @@ class Thumbnail:
                    size: Optional[float] = None,
                    dpi: Optional[float] = None):
         
+        target_dpi = 150
+        target_inches = 6
+        
         min_dim = min(self.shape)
         if size is None and dpi is None:
-            dpi = max(min_dim / 6, 100) 
-            size = 6 / (min_dim / dpi)
+            dpi = max(min_dim / target_inches, target_dpi) 
+            size = target_inches / (min_dim / dpi)
         elif size is None:
-            size = 6 / (min_dim / dpi)
+            size = target_inches / (min_dim / dpi)
         elif dpi is None:
-            dpi = min_dim * size / 6
+            dpi = min_dim * size / target_inches
         
         height, width = (sz * size for sz in self.shape)
 
@@ -112,14 +118,13 @@ class Thumbnail:
         self.ax.set_ylim(self.extent[2], self.extent[3])
 
     def add_annotation(self, text:str, **kwargs):
-        
+
         if 'xycoords' not in kwargs:
             kwargs['xycoords'] = 'axes fraction'
         if 'fontsize' not in kwargs:
             width_in_inches = self.size_in_inches[0]
-            # 1 point = 1/72 inch, we assume letters are 0.55 times as wide as they are tall
-            # and look for the optimal font size that allows to write the text in 3/4 of the width of the image
-            optimal_fontsize = min((width_in_inches * 3/4) / (len(text) * 0.55 * 1/72), 20)
+            # 1 point = 1/72 inch, we assume letters are 75% as wide as they are tall
+            optimal_fontsize = min((width_in_inches) / (len(text) * 0.75 * 1/72), 20)
 
             # if the text is too tall, we reduce the font size to fit it in 1/10 of the height
             height_in_inches = self.size_in_inches[1]
@@ -127,6 +132,8 @@ class Thumbnail:
                 optimal_fontsize = (height_in_inches * 1/10) / (1/72)
             
             kwargs['fontsize'] = optimal_fontsize
+        if 'fontfamily' not in kwargs:
+            kwargs['fontfamily'] = 'sans-serif'
         if 'xy' not in kwargs:
             kwargs['xy'] = (0.02, 0.02)
             kwargs['ha'] = 'left'
@@ -137,7 +144,7 @@ class Thumbnail:
         if 'backgroundcolor' not in kwargs:
             kwargs['backgroundcolor'] = 'none'
 
-        self.ax.annotate(text, annotation_clip=True, **kwargs)
+        self.ax.annotate(text, clip_on = True, **kwargs)
 
     def add_legend(self, **kwargs):
 
@@ -155,7 +162,7 @@ class Thumbnail:
         self.fig.legend(handles=patches, **kwargs)
 
     def save(self, file:str, **kwargs):
-
+        #breakpoint()
         if self.allnan:
             return
 
