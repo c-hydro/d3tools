@@ -11,7 +11,7 @@ class TimePeriod(ABC):
 
     def __init__(self, start: datetime.datetime|str, end: datetime.datetime|str):
         self.start = start if isinstance(start, datetime.datetime) else get_date_from_str(start)
-        self.end = end if isinstance(end, datetime.datetime) else get_date_from_str(end)
+        self.end = end if isinstance(end, datetime.datetime) else get_date_from_str(end, end = True)
 
     def length(self, unit = 'days'):
         days = (self.end - self.start).days + 1

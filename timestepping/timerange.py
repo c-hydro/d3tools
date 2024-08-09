@@ -4,7 +4,7 @@ from typing import Generator, Iterable
 from .timeperiod import TimePeriod
 from .fixed_num_timestep import FixedNTimeStep, Year, Month, Dekad
 from .fixed_doy_timestep import FixedDOYTimeStep
-from .fixed_len_timestep import FixedLenTimeStep, Day
+from .fixed_len_timestep import FixedLenTimeStep, Day, Hour
 
 class TimeRange(TimePeriod):
     """
@@ -26,12 +26,15 @@ class TimeRange(TimePeriod):
     @property
     def days(self) -> list[Day]:
         return self.get_timesteps_from_tsnumber(365)
+    
+    @property
+    def hours(self) -> list[Hour]:
+        return self.get_timesteps_from_tsnumber(365*24)
 
     @property
     def viirstimes(self) -> list:
         return self.get_timesteps_from_DOY(range(1, 366, 8))
         
-    #TODO: add support for hourly timesteps
     def gen_timesteps_from_tsnumber(self, timesteps_per_year: int) -> Generator[FixedNTimeStep|FixedLenTimeStep, None, None]:
         """
         This will yield the timesteps on a regular frequency by the number of timesteps per year.
@@ -42,6 +45,8 @@ class TimeRange(TimePeriod):
         # get the first timestep
         if timesteps_per_year == 365:
             ts:FixedLenTimeStep = FixedLenTimeStep.from_date(self.start, length = 1)
+        elif timesteps_per_year == 365*24:
+            ts:FixedLenTimeStep = FixedLenTimeStep.from_date(self.start, length = 1/24)
         else:
             ts:FixedNTimeStep = FixedNTimeStep.from_date(self.start, timesteps_per_year)
 
