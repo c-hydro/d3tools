@@ -326,14 +326,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _check_data(self, data_path) -> bool:
         raise NotImplementedError
 
-    @cached_property
-    def start(self):
+    def get_start(self, **kwargs) -> dt.datetime:
         """
         Get the start of the available data.
         """
         time_start = dt.datetime(1900, 1, 1)
         time_end = dt.datetime.now()
-        for time in self._get_times(TimeRange(time_start, time_end)):
+        for time in self._get_times(TimeRange(time_start, time_end), **kwargs):
             return time
 
     ## METHODS TO MANIPULATE THE DATASET
@@ -351,11 +350,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO MANIPULATE THE TEMPLATE
     def get_template(self, make_it:bool = True, **kwargs):
-
         tile = kwargs.pop('tile', '__tile__')
         template_dict = self._template.get(tile, None)
-        if template_dict is None and self.start is not None and make_it:
-            start_data = self.get_data(time = self.start, tile = tile, **kwargs)
+        start_time = self.get_start(**kwargs)
+        if template_dict is None and start_time is not None and make_it:
+            start_data = self.get_data(time = start_time, tile = tile, **kwargs)
             templatearray = self.make_templatearray_from_data(start_data)
             self.set_template(templatearray, tile = tile)
         elif template_dict is not None:
