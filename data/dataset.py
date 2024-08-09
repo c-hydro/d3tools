@@ -2,8 +2,9 @@ from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
 import xarray as xr
+import pandas as pd
+
 from abc import ABC, ABCMeta, abstractmethod
-from functools import cached_property
 import os
 import re
 
@@ -143,8 +144,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def format(self, value):
         if value in ['tif', 'tiff']:
             self._format = 'geotiff'
+        elif value in ['csv']:
+            self._format = 'csv'
         else:
-            raise ValueError(f"Invalid format: {value}, only geotiff is currently supported")
+            raise ValueError(f"Invalid format: {value}, only geotiff and csv are currently supported")
 
     ## TIME-SIGNATURE MANAGEMENT
     @property
@@ -187,6 +190,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         full_path = self.path(time, **kwargs)
 
+        if self.format == 'csv':
+            return self._read_data(full_path)
+
         if self.check_data(time, **kwargs):
             data = self._read_data(full_path)
 
@@ -202,7 +208,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 
         else:
             raise ValueError(f'Could not resolve data from {full_path}.')
-        
+
         # if there is no template for the dataset, create it from the data
         if self.get_template(make_it=False, **kwargs) is None:
             template = self.make_templatearray_from_data(data)
@@ -220,13 +226,25 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _read_data(self, input_path:str):
         raise NotImplementedError
     
-    def write_data(self, data: xr.DataArray|np.ndarray,
+    def write_data(self, data: xr.DataArray|np.ndarray|pd.DataFrame,
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
                    metadata = {},
                    **kwargs):
         
-        # if data is a numpy array, enure there is a template available
+        output_file = self.path(time, **kwargs)
+
+        if isinstance(data, pd.DataFrame):
+            if self.format == 'csv':
+                self._write_data(data, output_file)
+                return
+            else:
+                raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
+        elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray):
+            if self.format == 'csv':
+                raise ValueError(f'Cannot write matrix data to a csv file.')
+
+        # if data is a numpy array, ensure there is a template available
         template = self.get_template(**kwargs, make_it=False)
         if template is None:
             if isinstance(data, xr.DataArray):
@@ -255,7 +273,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         output = straighten_data(output)
 
         # write the data
-        output_file = self.path(time, **kwargs)
         self._write_data(output, output_file)
 
         # check if there is a thumbnail to be saved and save it
