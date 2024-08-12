@@ -1,6 +1,7 @@
 from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
+import rioxarray as rxr
 import xarray as xr
 import pandas as pd
 
@@ -388,6 +389,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._template[tile] = {'crs': templatearray.attrs.get('crs'),
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
                                 'dims_names' : templatearray.dims,
+                                'spatial_dims' : (templatearray.rio.x_dim, templatearray.rio.y_dim),
                                 'dims_starts': {},
                                 'dims_ends': {},
                                 'dims_lengths': {}}
@@ -436,6 +438,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = template_dict['dims_lengths'][dim]
             template[dim] = np.linspace(start, end, length)
 
+        template = template.rio.set_spatial_dims(*template_dict['spatial_dims'])
+
         template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
 
         return template
@@ -470,10 +474,15 @@ def straighten_data(data: xr.DataArray) -> xr.DataArray:
     """
     Ensure that the data has descending latitudes.
     """
-    y_dim = data.rio.y_dim
+    
+    try:
+        y_dim = data.rio.y_dim
+    except rxr.exceptions.MissingSpatialDimensionError:
+        y_dim = None
+
     if y_dim is None:
         for dim in data.dims:
-            if 'lat' in dim.lower() | 'y' in dim.lower():
+            if 'lat' in dim.lower() or 'y' in dim.lower():
                 y_dim = dim
                 break
     if data[y_dim].data[0] < data[y_dim].data[-1]:
