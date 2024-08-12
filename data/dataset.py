@@ -145,6 +145,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def format(self, value):
         if value in ['tif', 'tiff']:
             self._format = 'geotiff'
+        elif value in ['nc', 'netcdf']:
+            self._format = 'netcdf'
         elif value in ['csv']:
             self._format = 'csv'
         else:
@@ -202,23 +204,24 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
             # make sure the nodata value is set to np.nan for floats and to the max int for integers
             data = reset_nan(data)
-        
+
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
             data = self.make_data(time, **kwargs)
-                
+
         else:
             raise ValueError(f'Could not resolve data from {full_path}.')
 
         # if there is no template for the dataset, create it from the data
-        if self.get_template(make_it=False, **kwargs) is None:
+        template = self.get_template(make_it=False, **kwargs)
+        if template is None:
             template = self.make_templatearray_from_data(data)
             self.set_template(template, **kwargs)
         else:
             # otherwise, update the data in the template
             # (this will make sure there is no errors in the coordinates due to minor rounding)
             attrs = data.attrs
-            data = self.get_template(make_it=False, **kwargs).copy(data = data)
+            data = self.set_data_to_template(data, template)
             data.attrs.update(attrs)
 
         return data
@@ -227,51 +230,54 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _read_data(self, input_path:str):
         raise NotImplementedError
     
-    def write_data(self, data: xr.DataArray|np.ndarray|pd.DataFrame,
+    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame):
+        """"
+        Ensures that the data is compatible with the format of the dataset.
+        """
+        if isinstance(data, pd.DataFrame):
+            if not self.format == 'csv':
+                raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
+        elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
+            if self.format == 'csv':
+                raise ValueError(f'Cannot write matrix data to a csv file.')
+        
+        if self.format == 'geotiff' and isinstance(data, xr.Dataset):
+            raise ValueError(f'Cannot write a dataset to a geotiff file.')
+
+    def write_data(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame,
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
                    metadata = {},
                    **kwargs):
-        
+
+        self.check_data_for_writing(data)
+
         output_file = self.path(time, **kwargs)
 
-        if isinstance(data, pd.DataFrame):
-            if self.format == 'csv':
-                self._write_data(data, output_file)
-                return
-            else:
-                raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
-        elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray):
-            if self.format == 'csv':
-                raise ValueError(f'Cannot write matrix data to a csv file.')
+        if self.format == 'csv':
+            self._write_data(data, output_file)
+            return
 
         # if data is a numpy array, ensure there is a template available
         template = self.get_template(**kwargs, make_it=False)
         if template is None:
-            if isinstance(data, xr.DataArray):
-                template = self.make_templatearray_from_data(data)
-                self.set_template(template, **kwargs)
+            if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
+                templatearray = self.make_templatearray_from_data(data)
+                self.set_template(templatearray, **kwargs)
+                template = self.get_template(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
 
-        # if data is None, just use the template
-        if data is None or data.size == 0:
-            output = template
-        else:
-            output = template.copy(data = data)
+        output = self.set_data_to_template(data, template)
+        output = set_type(output)
+        output = straighten_data(output)
 
-        # add metadata
+        # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
         output.attrs.update(attrs)
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
-
-        # make sure the data is the smallest possible
-        output = set_type(output)
-
-        # ensure that the data has descending latitudes
-        output = straighten_data(output)
 
         # write the data
         self._write_data(output, output_file)
@@ -382,7 +388,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         return templatearray
     
-    def set_template(self, templatearray: xr.DataArray, **kwargs):
+    def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
@@ -394,6 +400,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                                 'dims_ends': {},
                                 'dims_lengths': {}}
         
+        if isinstance(templatearray, xr.Dataset):
+            self._template[tile]['variables'] = list(templatearray.data_vars)
+        
         for dim in templatearray.dims:
             this_dim_values = templatearray[dim].data
             start = this_dim_values[0]
@@ -404,20 +413,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._template[tile]['dims_lengths'][dim] = length
 
     @staticmethod
-    def make_templatearray_from_data(data: xr.DataArray) -> xr.DataArray:
+    def make_templatearray_from_data(data: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
         """
         Make a template xarray.DataArray from a given xarray.DataArray.
         """
-
         nodata_value = data.attrs.get('_FillValue', np.nan)
 
-        # make a copy of the data, but fill it with NaNs
-        template = data.copy(data = np.full(data.shape, nodata_value))
+        if isinstance(data, xr.Dataset):
+            vararrays = [Dataset.make_templatearray_from_data(data[var]) for var in data]
+            template  = xr.merge(vararrays)
+        else:
+            template = data.copy(data = np.full(data.shape, nodata_value))
 
         # clear all attributes
         template.attrs = {}
         template.encoding = {}
-
+        
         # make crs and nodata explicit as attributes
         template.attrs = {'crs': data.rio.crs.to_wkt(),
                           '_FillValue': nodata_value}
@@ -425,7 +436,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return template
 
     @staticmethod
-    def build_templatearray(template_dict: dict) -> xr.DataArray:
+    def build_templatearray(template_dict: dict) -> xr.DataArray|xr.Dataset:
         """
         Build a template xarray.DataArray from a dictionary.
         """
@@ -438,13 +449,30 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = template_dict['dims_lengths'][dim]
             template[dim] = np.linspace(start, end, length)
 
-        template = template.rio.set_spatial_dims(*template_dict['spatial_dims'])
-
         template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
+        template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_coordinate_system()
 
+        if 'variables' in template_dict:
+            template_ds = xr.Dataset({var: template.copy() for var in template_dict['variables']})
+            return template_ds
+        
         return template
 
-    def set_metadata(self, data: xr.DataArray,
+    @staticmethod
+    def set_data_to_template(data: xr.DataArray|xr.Dataset,
+                             template: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
+        
+        if isinstance(data, xr.DataArray):
+            data = data.rio.set_spatial_dims(template.rio.x_dim, template.rio.y_dim).rio.write_coordinate_system()
+            data = data.transpose(*template.dims)
+            output = template.copy(data = data)
+        else:
+            all_outputs = [Dataset.set_data_to_template(data[var], template[var]) for var in template]
+            output = xr.merge(all_outputs)
+        
+        return output
+
+    def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime],
                      time_format: str, **kwargs) -> xr.DataArray:
         """
@@ -466,10 +494,24 @@ class Dataset(ABC, metaclass=DatasetMeta):
             metadata.pop('long_name')
 
         data.attrs.update(metadata)
-        data.name = name
+
+        if isinstance(data, xr.DataArray):
+            data.name = name
 
         return data
-    
+
+## FUNCTIONS TO MANIPULATE THE DATA
+
+# DECORATOR TO MAKE THE FUNCTION WORK WITH XR.DATASET
+def withxrds(func):
+    def wrapper(*args, **kwargs):
+        if isinstance(args[0], xr.Dataset):
+            return xr.Dataset({var: func(args[0][var], **kwargs) for var in args[0]})
+        else:
+            return func(*args, **kwargs)
+    return wrapper
+
+@withxrds
 def straighten_data(data: xr.DataArray) -> xr.DataArray:
     """
     Ensure that the data has descending latitudes.
@@ -490,6 +532,7 @@ def straighten_data(data: xr.DataArray) -> xr.DataArray:
 
     return data
 
+@withxrds
 def reset_nan(data: xr.DataArray) -> xr.DataArray:
     """
     Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
@@ -504,6 +547,7 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
 
     return data
 
+@withxrds
 def set_type(data: xr.DataArray) -> xr.DataArray:
     """
     Make sure that the data is the smallest possible.

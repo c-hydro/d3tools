@@ -17,7 +17,14 @@ class LocalDataset(Dataset):
         # read the data from a geotiff
         elif self.format == 'geotiff':
             data = rioxarray.open_rasterio(input_path)
-        
+
+        # read the data from a netcdf
+        elif self.format == 'netcdf':
+            data = xr.open_dataset(input_path)
+            # check if there is a single variable in the dataset
+            if len(data.data_vars) == 1:
+                data = data[list(data.data_vars)[0]]
+
         return data
     
     def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str):
@@ -31,6 +38,10 @@ class LocalDataset(Dataset):
         # save the data to a geotiff
         elif self.format == 'geotiff':
             output.rio.to_raster(output_path, compress = 'lzw')
+
+        # save the data to a netcdf
+        elif self.format == 'netcdf':
+            output.to_netcdf(output_path)
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
