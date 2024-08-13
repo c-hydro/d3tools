@@ -459,14 +459,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return template
 
     @staticmethod
-    def set_data_to_template(data: xr.DataArray|xr.Dataset,
+    def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
                              template: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
         
         if isinstance(data, xr.DataArray):
             data = data.rio.set_spatial_dims(template.rio.x_dim, template.rio.y_dim).rio.write_coordinate_system()
             data = data.transpose(*template.dims)
             output = template.copy(data = data)
-        else:
+        elif isinstance(data, np.ndarray):
+            output = template.copy(data = data)
+        elif isinstance(data, xr.Dataset):
             all_outputs = [Dataset.set_data_to_template(data[var], template[var]) for var in template]
             output = xr.merge(all_outputs)
         
@@ -582,4 +584,4 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
             else:
                 data = data.astype(np.int64)
 
-    return data
+    return reset_nan(data)
