@@ -34,11 +34,13 @@ def parse_txt(txt_file: str) -> tuple:
 
     # skip all the lines at that have invalid format
 
-    color_values = {}    
+    color_values = {}
+    color_labels = {}   
     for line in lines:
         try:
             value, color, label = parse_line(line)
             color_values[value] = color
+            color_labels[value] = label
         except ValueError:
             pass
 
@@ -47,8 +49,8 @@ def parse_txt(txt_file: str) -> tuple:
 
     # Separate the keys and values into separate lists
     positions, colors = zip(*sorted_colors)
-
-    return positions, colors
+    labels = [color_labels[p] for p in positions]
+    return positions, colors, labels
 
 def parse_line(line: str) -> tuple:
     '''
