@@ -107,6 +107,14 @@ class Day(FixedLenTimeStep):
     @property
     def day_of_year(self):
         return self.step
+    
+    @property
+    def month(self):
+        return self.start.month
+    
+    @property
+    def day_of_month(self):
+        return self.start.day
 
     def __repr__(self):
         return f'{self.__class__.__name__} ({self.start:%Y%m%d})'

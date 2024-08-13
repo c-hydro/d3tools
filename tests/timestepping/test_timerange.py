@@ -1,7 +1,7 @@
 import pytest
 import datetime
 
-from timestepping import TimeRange, Month, Dekad, Day, Hour, ViirsModisTimeStep, FixedDOYTimeStep
+from timestepping import TimeRange, Year, Month, Dekad, Day, Hour, ViirsModisTimeStep, FixedDOYTimeStep
 
 class TestTimeRange:
 
@@ -75,3 +75,23 @@ class TestTimeRange:
                 assert ts == Hour.from_date("2018-12-31 18:00")
         else:
             assert i == expected_n-1
+
+    def test_months(self):
+        months = self.tr1.months
+        assert months == self.tr1.get_timesteps_from_tsnumber(12)
+
+    def test_years(self):
+        years = self.tr1.years
+        assert years == self.tr1.get_timesteps_from_tsnumber(1)
+
+    def test_dekads(self):
+        dekads = self.tr1.dekads
+        assert dekads == self.tr1.get_timesteps_from_tsnumber(36)
+
+    def test_days(self):
+        days = self.tr1.days
+        assert days == self.tr1.get_timesteps_from_tsnumber(365)
+
+    def test_viirstimes(self):
+        viirstimes = self.tr1.viirstimes
+        assert viirstimes == self.tr1.get_timesteps_from_DOY(range(1, 366, 8))

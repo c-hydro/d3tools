@@ -3,21 +3,30 @@ from dateutil.relativedelta import relativedelta
 import warnings
 from typing import Iterable
 
-def get_date_from_str(str: str, format: None|str = None) -> datetime.datetime:
+def get_date_from_str(str: str, format: None|str = None, end = False) -> datetime.datetime:
     """
     Returns a datetime object from a string.
     """
     _date_formats = ['%Y-%m-%d', '%Y%m%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y', '%d %b %Y', '%d %B %Y', '%Y %b %d', '%Y %B %d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H']
     if format:
-        return datetime.datetime.strptime(str, format)
+        date = datetime.datetime.strptime(str, format)
 
     for date_format in _date_formats:
         try:
-            return datetime.datetime.strptime(str, date_format)
+            date = datetime.datetime.strptime(str, date_format)
+            format = date_format
+            break
         except ValueError:
             pass
     else:
         raise ValueError(f'Cannot parse date string "{str}"')
+    
+    if end:
+        if '%S' not in format: date = date.replace(second = 59)
+        if '%M' not in format: date = date.replace(minute = 59)
+        if '%H' not in format: date = date.replace(hour = 23)
+
+    return date
 
 def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 'TimeRange':
         """
