@@ -223,7 +223,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             attrs = data.attrs
             data = self.set_data_to_template(data, template)
             data.attrs.update(attrs)
-
+        
+        data.attrs.update({'source_path': full_path})
         return data
     
     @abstractmethod
@@ -271,7 +272,27 @@ class Dataset(ABC, metaclass=DatasetMeta):
         output = self.set_data_to_template(data, template)
         output = set_type(output)
         output = straighten_data(output)
+        output.attrs['source_path'] = output_file
 
+        # if necessary generate the thubnail
+        if 'parents' in metadata:
+            parents = metadata.pop('parents')
+        else:
+            parents = {}
+
+        if hasattr(self, 'thumb_opts'):
+            parents[''] = output
+            if 'destination' in self.thumb_opts:
+                destination = self.thumb_opts.pop('destination')
+                timestamp = self.get_time_signature(time)
+                destination = timestamp.strftime(substitute_string(destination, kwargs))
+            else:
+                destination = output_file
+            self.make_thumbnail(data = parents,
+                                options = self.thumb_opts,
+                                destination = destination,
+                                **kwargs)
+        
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
         output.attrs.update(attrs)
@@ -281,18 +302,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # write the data
         self._write_data(output, output_file)
-
-        # check if there is a thumbnail to be saved and save it
-        if hasattr(self, 'thumb_opts'):
-            try:
-                from ..thumbnails import Thumbnail
-            except ImportError:
-                from thumbnails import Thumbnail
-            thumb_opts = self.thumb_opts
-            if 'colors' in thumb_opts:
-                col_file = substitute_string(thumb_opts['colors'], kwargs)
-                this_thumbnail = Thumbnail(output_file, col_file)
-                this_thumbnail.save(output_file.replace('.tif', '.png'), **thumb_opts)
 
     @abstractmethod
     def _write_data(self, output: xr.DataArray, output_path: str):
@@ -475,8 +484,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return output
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
-                     time: Optional[TimeStep|dt.datetime],
-                     time_format: str, **kwargs) -> xr.DataArray:
+                     time: Optional[TimeStep|dt.datetime] = None,
+                     time_format: str = '%Y-%m-%d', **kwargs) -> xr.DataArray:
         """
         Set metadata for the data.
         """
@@ -501,6 +510,35 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data.name = name
 
         return data
+
+    ## THUMBNAIL METHODS
+    @staticmethod
+    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray], options: dict, destination: str, **kwargs):
+        try:
+            from ..thumbnails import Thumbnail, ThumbnailCollection
+        except ImportError:
+            from thumbnails import Thumbnail, ThumbnailCollection
+
+        if 'colors' in options:
+            colors = options.pop('colors')
+        else:
+            return
+
+        if isinstance(colors, str):
+            col_file = substitute_string(colors, kwargs)
+            if isinstance(data, dict):
+                data = data['']
+            this_thumbnail = Thumbnail(data, col_file)
+            destination = destination.replace('.tif', '.png')
+
+        elif isinstance(colors, dict):
+            keys = list(colors.keys())
+            col_files = list(substitute_string(colors[key], kwargs) for key in keys)
+            data      = list(data[key] for key in keys)
+            this_thumbnail = ThumbnailCollection(data, col_files)
+            destination = destination.replace('.tif', '.pdf')
+            
+        this_thumbnail.save(destination, **options)
 
 ## FUNCTIONS TO MANIPULATE THE DATA
 
