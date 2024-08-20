@@ -80,6 +80,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'thumbnail' in kwargs:
             self.thumb_opts = kwargs.pop('thumbnail')
 
+        if 'notification' in kwargs:
+            self.notif_opts = kwargs.pop('notification')
+
         self._template = {}
         self.options = Options(kwargs)
         self.tags = {}
@@ -280,11 +283,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             parents = {}
 
+        timestamp = self.get_time_signature(time)
         if hasattr(self, 'thumb_opts'):
             parents[''] = output
             if 'destination' in self.thumb_opts:
                 destination = self.thumb_opts.pop('destination')
-                timestamp = self.get_time_signature(time)
                 destination = timestamp.strftime(substitute_string(destination, kwargs))
             else:
                 destination = output_file
@@ -292,13 +295,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
                                 options = self.thumb_opts,
                                 destination = destination,
                                 **kwargs)
-        
+            self.thumbnail_file = destination
+
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
         output.attrs.update(attrs)
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
+
+        if hasattr(self, 'notif_opts'):
+            for key, value in self.notif_opts.items():
+                if isinstance(value, str):
+                    self.notif_opts[key] = timestamp.strftime(substitute_string(value, kwargs))
+            
+            self.notif_opts['metadata'] = metadata
+            self.notify(self.notif_opts)
 
         # write the data
         self._write_data(output, output_file)
@@ -539,6 +551,28 @@ class Dataset(ABC, metaclass=DatasetMeta):
             destination = destination.replace('.tif', '.pdf')
             
         this_thumbnail.save(destination, **options)
+
+    ## NOTIFICATION METHODS
+    def notify(self, notification_options: dict):
+        try:
+            from ..notification import EmailNotification
+        except ImportError:
+            from notification import EmailNotification
+
+        from_address = notification_options.pop('from', None)
+        email_client = notification_options.pop('email_client', None)
+        email_login_env = notification_options.pop('email_login_env', None)
+        email_pwd_env = notification_options.pop('email_pwd_env', None)
+
+        notification = EmailNotification(from_address, email_client, email_login_env, email_pwd_env)
+
+        if hasattr(self, 'thumbnail_file'):
+            notification.attach(self.thumbnail_file)
+
+        receipients = notification_options.pop('to')
+        subject = notification_options.pop('subject')
+        body = notification_options.pop('body', None)
+        notification.send(receipients, subject, body)
 
 ## FUNCTIONS TO MANIPULATE THE DATA
 
