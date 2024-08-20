@@ -178,19 +178,27 @@ class Thumbnail:
                 self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None or kwargs['overlay'].lower == 'none' :
                 pass
-        
+
         if 'annotation' in kwargs:
             if isinstance(kwargs['annotation'], dict):
                 annotation_opts = kwargs.pop('annotation')
                 if 'text' not in annotation_opts:
-                    annotation_opts['text'] = os.path.basename(self.raster_file)
+                    if 'source_path' in self.src.attrs:
+                        annotation_opts['text'] = os.path.basename(self.src.attrs['source_path'])
+                    elif hasattr(self, 'raster_file'):
+                        annotation_opts['text'] = os.path.basename(self.raster_file)
                 self.add_annotation(**annotation_opts)
             elif isinstance(kwargs['annotation'], str):
                 self.add_annotation(kwargs['annotation'])
             elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
                 pass
+    
+        elif 'source_path' in self.src.attrs:
+            annotation_txt = os.path.basename(self.src.attrs['source_path'])
+            self.add_annotation(annotation_txt)
         elif hasattr(self, 'raster_file'):
-            self.add_annotation(f'{os.path.basename(self.raster_file)}')
+            annotation_txt = os.path.basename(self.raster_file)
+            self.add_annotation(annotation_txt)
 
         if 'legend' in kwargs:
             if isinstance(kwargs['legend'], dict):
