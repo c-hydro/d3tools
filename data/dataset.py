@@ -291,11 +291,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 destination = timestamp.strftime(substitute_string(destination, kwargs))
             else:
                 destination = output_file
-            self.make_thumbnail(data = parents,
-                                options = self.thumb_opts,
-                                destination = destination,
-                                **kwargs)
-            self.thumbnail_file = destination
+            thumbnail_file = self.make_thumbnail(data = parents,
+                                                 options = self.thumb_opts,
+                                                 destination = destination,
+                                                 **kwargs)
+            self.thumbnail_file = thumbnail_file
 
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
@@ -309,7 +309,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 if isinstance(value, str):
                     self.notif_opts[key] = timestamp.strftime(substitute_string(value, kwargs))
             
-            self.notif_opts['metadata'] = metadata
+            self.notif_opts['metadata'] = output.attrs
             self.notify(self.notif_opts)
 
         # write the data
@@ -551,6 +551,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             destination = destination.replace('.tif', '.pdf')
             
         this_thumbnail.save(destination, **options)
+        return destination
 
     ## NOTIFICATION METHODS
     def notify(self, notification_options: dict):
@@ -569,10 +570,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if hasattr(self, 'thumbnail_file'):
             notification.attach(self.thumbnail_file)
 
-        receipients = notification_options.pop('to')
+        recipients = notification_options.pop('to')
         subject = notification_options.pop('subject')
-        body = notification_options.pop('body', None)
-        notification.send(receipients, subject, body)
+        notification.send(recipients, subject, **notification_options)
 
 ## FUNCTIONS TO MANIPULATE THE DATA
 

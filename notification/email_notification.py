@@ -21,8 +21,8 @@ class EmailNotification:
         email_pwd   = os.getenv(email_pwd_env)
 
         sm = smtplib.SMTP(email_client, 2525)
-        sm.login(email_login, email_pwd)
         sm.starttls()
+        sm.login(email_login, email_pwd)
         self.sm = sm
         
         self.from_address = from_address
@@ -42,16 +42,23 @@ class EmailNotification:
         pr.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file)}")
         self.msg.attach(pr)
 
-    def send(self, recipients: str|list[str], subject: str, body: Optional[str] = None):
+    def send(self, recipients: str|list[str], subject: str, **kwargs):
 
         from email.mime.text import MIMEText
 
         self.msg['To'] = ', '.join(recipients) if isinstance(recipients, list) else recipients
         self.msg['Subject'] = subject
 
+        body = kwargs.get('body')
+        metadata = kwargs.get('metadata')
         if body is None:
-            body = "This is an automatically generated email."
-        
+            body = "This is an automatically generated email to notify that the product below has been produced and is now available."
+
+        if metadata is not None:
+            body += "\n\n"
+            for key, value in metadata.items():
+                if key not in ['crs', '_FillValue', 'AREA_OR_POINT']:
+                    body += f"{key}: {value}\n"
         
         self.msg.attach(MIMEText(body, 'plain'))
         text = self.msg.as_string()
