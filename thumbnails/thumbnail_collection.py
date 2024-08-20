@@ -4,6 +4,7 @@ import io
 from PIL import Image
 from typing import Optional
 import numpy as np
+import os
 
 try:
     from .thumbnail import Thumbnail
@@ -25,6 +26,7 @@ class ThumbnailCollection:
     def combine_thumbnail_files(self, file_out:str, grid: Optional[tuple[int, int]] = None):
 
         list_of_thumbnails = [thumbnail.thumbnail_file for thumbnail in self.thumbnails]
+        os.makedirs(os.path.dirname(file_out), exist_ok=True)
 
         if file_out.endswith(".pdf"):
             with open(file_out, "wb") as f:
