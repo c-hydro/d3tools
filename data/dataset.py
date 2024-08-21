@@ -61,7 +61,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'format' in kwargs:
             self.format = kwargs.pop('format')
         else:
-            self.format = os.path.basename(self.file).split('.')[-1]
+            self.format = os.path.basename(self.key_pattern).split('.')[-1]
 
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')

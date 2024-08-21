@@ -34,7 +34,7 @@ class LocalDataset(Dataset):
 
     @property
     def key_pattern(self):
-        os.path.join(self.dir, self.file)
+        return os.path.join(self.dir, self.file)
 
     @key_pattern.setter
     def key_pattern(self, path):
