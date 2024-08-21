@@ -190,7 +190,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv':
+        if self.format == 'csv' and self.check_data(full_key):
             return self._read_data(full_key)
 
         if self.check_data(time, **kwargs):
