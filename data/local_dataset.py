@@ -64,7 +64,7 @@ class LocalDataset(Dataset):
         return data
     
     def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str):
-    # create the directory if it does not exist
+        # create the directory if it does not exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         # save the data to a csv (we check the type of the data already before calling _write_data)

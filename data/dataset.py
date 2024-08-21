@@ -495,12 +495,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Set metadata for the data.
         """
-        metadata = {}
-        
-        metadata.update(kwargs)
+        metadata = {}        
         if hasattr(data, 'attrs'):
+            if 'long_name' in data.attrs:
+                data.attrs.pop('long_name')
             metadata.update(data.attrs)
         
+        metadata.update(kwargs)
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if time is not None:
             datatime = self.get_time_signature(time)
