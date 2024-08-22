@@ -42,23 +42,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
-    def __init__(self, path: Optional[str] = None, filename: Optional[str] = None, **kwargs):
-        if path is not None:
-            self.dir = path
-        elif 'dir' in kwargs:
-            self.dir = kwargs.pop('dir')
-
-        if filename is not None:
-            self.file = filename
-        elif 'file' in kwargs:
-            self.file = kwargs.pop('file')
-        
-        self.path_pattern = os.path.join(self.dir, self.file)
+    def __init__(self, **kwargs):
 
         if 'name' in kwargs:
             self.name   = kwargs.pop('name')
         else:
-            basename_noext  = '.'.join(os.path.basename(self.file).split('.')[:-1])
+            basename_noext  = '.'.join(os.path.basename(self.key_pattern).split('.')[:-1])
             basename_nodate = basename_noext.replace('%Y', '').replace('%m', '').replace('%d', '')
             if basename_nodate.endswith('_'):
                 basename_nodate = basename_nodate[:-1]
@@ -72,7 +61,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'format' in kwargs:
             self.format = kwargs.pop('format')
         else:
-            self.format = os.path.basename(self.file).split('.')[-1]
+            self.format = os.path.basename(self.key_pattern).split('.')[-1]
 
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
@@ -90,21 +79,26 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
 
+    @property
+    def key_pattern(self):
+        raise NotImplementedError
+    
+    @key_pattern.setter
+    def key_pattern(self, value):
+        raise NotImplementedError
+
     def update(self, in_place = False, **kwargs):
-        new_path = substitute_string(self.dir, kwargs)
-        new_file = substitute_string(self.file, kwargs)
         new_name = substitute_string(self.name, kwargs)
+        new_key_pattern = substitute_string(self.key_pattern, kwargs)
 
         if in_place:
-            self.dir  = new_path
-            self.file = new_file
             self.name = new_name
-            self.path_pattern = self.path(**kwargs)
+            self.key_pattern = self.get_key(**kwargs)
             self.tags.update(kwargs)
             return self
         else:
             new_options = self.options.copy()
-            new_options.update({'dir': new_path, 'file': new_file, 'name': new_name})
+            new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
             new_dataset = self.__class__(**new_options)
 
             new_dataset._template = self._template
@@ -184,8 +178,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             elif time_signature == 'end+1':
                 time = (timestep+1).start
 
-        path_without_tags = re.sub(r'\{.*\}', '', self.path_pattern)
-        hasyear = '%Y' in path_without_tags
+        key_without_tags = re.sub(r'\{.*\}', '', self.key_pattern)
+        hasyear = '%Y' in key_without_tags
 
         if not hasyear and time.month == 2 and time.day == 29:
             time = time.replace(day = 28)
@@ -194,13 +188,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## INPUT/OUTPUT METHODS
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
-        full_path = self.path(time, **kwargs)
+        full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv':
-            return self._read_data(full_path)
+        if self.format == 'csv' and self.check_data(full_key):
+            return self._read_data(full_key)
 
         if self.check_data(time, **kwargs):
-            data = self._read_data(full_path)
+            data = self._read_data(full_key)
 
             # ensure that the data has descending latitudes
             data = straighten_data(data)
@@ -213,7 +207,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = self.make_data(time, **kwargs)
 
         else:
-            raise ValueError(f'Could not resolve data from {full_path}.')
+            raise ValueError(f'Could not resolve data from {full_key}.')
 
         # if there is no template for the dataset, create it from the data
         template = self.get_template(make_it=False, **kwargs)
@@ -227,11 +221,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = self.set_data_to_template(data, template)
             data.attrs.update(attrs)
         
-        data.attrs.update({'source_path': full_path})
+        data.attrs.update({'source_key': full_key})
         return data
     
     @abstractmethod
-    def _read_data(self, input_path:str):
+    def _read_data(self, input_key:str):
         raise NotImplementedError
     
     def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame):
@@ -256,7 +250,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         self.check_data_for_writing(data)
 
-        output_file = self.path(time, **kwargs)
+        output_file = self.get_key(time, **kwargs)
 
         if self.format == 'csv':
             self._write_data(data, output_file)
@@ -275,7 +269,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         output = self.set_data_to_template(data, template)
         output = set_type(output)
         output = straighten_data(output)
-        output.attrs['source_path'] = output_file
+        output.attrs['source_key'] = output_file
 
         # if necessary generate the thubnail
         if 'parents' in metadata:
@@ -316,7 +310,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._write_data(output, output_file)
 
     @abstractmethod
-    def _write_data(self, output: xr.DataArray, output_path: str):
+    def _write_data(self, output: xr.DataArray, output_key: str):
         raise NotImplementedError
 
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
@@ -349,8 +343,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Check if data is available for a given time.
         """
-        full_path = self.path(time, **kwargs)
-        return self._check_data(full_path)
+        full_key = self.get_key(time, **kwargs)
+        return self._check_data(full_key)
     
     @withcases
     def find_times(self, times: list[TimeStep], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
@@ -368,7 +362,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return [times[i] for i in ids]
     
     @abstractmethod
-    def _check_data(self, data_path) -> bool:
+    def _check_data(self, data_key) -> bool:
         raise NotImplementedError
 
     def get_start(self, **kwargs) -> dt.datetime:
@@ -381,13 +375,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return time
 
     ## METHODS TO MANIPULATE THE DATASET
-    def path(self, time: Optional[TimeStep] = None, **kwargs):
+    def get_key(self, time: Optional[TimeStep] = None, **kwargs):
         
         time = self.get_time_signature(time)
 
-        raw_path = substitute_string(self.path_pattern, kwargs)
-        path = time.strftime(raw_path) if time is not None else raw_path
-        return path
+        raw_key = substitute_string(self.key_pattern, kwargs)
+        key = time.strftime(raw_key) if time is not None else raw_key
+        return key
 
     def set_parents(self, parents:dict[str:'Dataset'], fn:Callable):
         self.parents = parents
@@ -501,12 +495,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Set metadata for the data.
         """
-        metadata = {}
-        
-        metadata.update(kwargs)
+        metadata = {}        
         if hasattr(data, 'attrs'):
+            if 'long_name' in data.attrs:
+                data.attrs.pop('long_name')
             metadata.update(data.attrs)
         
+        metadata.update(kwargs)
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if time is not None:
             datatime = self.get_time_signature(time)
