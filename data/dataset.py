@@ -288,15 +288,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise ValueError(f'Could not resolve data from {full_key}.')
 
         # if there is no template for the dataset, create it from the data
-        template = self.get_template(make_it=False, **kwargs)
-        if template is None:
-            template = self.make_templatearray_from_data(data)
-            self.set_template(template, **kwargs)
+        template_dict = self.get_template_dict(make_it=False, **kwargs)
+        if template_dict is None:
+            #template = self.make_templatearray_from_data(data)
+            self.set_template(data, **kwargs)
         else:
             # otherwise, update the data in the template
             # (this will make sure there is no errors in the coordinates due to minor rounding)
             attrs = data.attrs
-            data = self.set_data_to_template(data, template)
+            data = self.set_data_to_template(data, template_dict)
             data.attrs.update(attrs)
         
         data.attrs.update({'source_key': full_key})
@@ -335,16 +335,17 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return
 
         # if data is a numpy array, ensure there is a template available
-        template = self.get_template(**kwargs, make_it=False)
-        if template is None:
+        template_dict = self.get_template_dict(**kwargs, make_it=False)
+
+        if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-                templatearray = self.make_templatearray_from_data(data)
-                self.set_template(templatearray, **kwargs)
-                template = self.get_template(**kwargs, make_it=False)
+                #templatearray = self.make_templatearray_from_data(data)
+                self.set_template(data, **kwargs)
+                template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-
-        output = self.set_data_to_template(data, template)
+            
+        output = self.set_data_to_template(data, template_dict)
         output = set_type(output)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
@@ -383,7 +384,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             
             self.notif_opts['metadata'] = output.attrs
             self.notify(self.notif_opts)
-
+    
         # write the data
         self._write_data(output, output_file)
 
@@ -490,26 +491,33 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self.fn = fn
 
     ## METHODS TO MANIPULATE THE TEMPLATE
-    def get_template(self, make_it:bool = True, **kwargs):
+    def get_template_dict(self, make_it:bool = True, **kwargs):
         tile = kwargs.pop('tile', '__tile__')
         template_dict = self._template.get(tile, None)
         start_time = self.get_start(**kwargs)
         if template_dict is None and start_time is not None and make_it:
             start_data = self.get_data(time = start_time, tile = tile, **kwargs)
-            templatearray = self.make_templatearray_from_data(start_data)
-            self.set_template(templatearray, tile = tile)
-        elif template_dict is not None:
-            templatearray = self.build_templatearray(template_dict)
-        else:
-            templatearray = None
+            #templatearray = self.make_templatearray_from_data(start_data)
+            self.set_template(start_data, tile = tile)
+            template_dict = self.get_template_dict(make_it = False, **kwargs)
+        # elif template_dict is not None:
+        #     templatearray = self.build_templatearray(template_dict)
+        # else:
+        #     templatearray = None
         
-        return templatearray
+        return template_dict
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
-        self._template[tile] = {'crs': templatearray.attrs.get('crs'),
+        crs = templatearray.attrs.get('crs')
+        if crs is not None:
+            crs_wkt = crs.to_wkt()
+        else:
+            crs_wkt = templatearray.spatial_ref.crs_wkt
+
+        self._template[tile] = {'crs': crs_wkt,
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
                                 'dims_names' : templatearray.dims,
                                 'spatial_dims' : (templatearray.rio.x_dim, templatearray.rio.y_dim),
@@ -528,29 +536,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._template[tile]['dims_starts'][dim] = float(start)
             self._template[tile]['dims_ends'][dim] = float(end)
             self._template[tile]['dims_lengths'][dim] = length
-
-    @staticmethod
-    def make_templatearray_from_data(data: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
-        """
-        Make a template xarray.DataArray from a given xarray.DataArray.
-        """
-        nodata_value = data.attrs.get('_FillValue', np.nan)
-
-        if isinstance(data, xr.Dataset):
-            vararrays = [Dataset.make_templatearray_from_data(data[var]) for var in data]
-            template  = xr.merge(vararrays)
-        else:
-            template = data.copy(data = np.full(data.shape, nodata_value))
-
-        # clear all attributes
-        template.attrs = {}
-        template.encoding = {}
-        
-        # make crs and nodata explicit as attributes
-        template.attrs = {'crs': data.rio.crs.to_wkt(),
-                          '_FillValue': nodata_value}
-
-        return template
 
     @staticmethod
     def build_templatearray(template_dict: dict) -> xr.DataArray|xr.Dataset:
@@ -577,19 +562,31 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @staticmethod
     def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
-                             template: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
+                             template_dict: dict) -> xr.DataArray|xr.Dataset:
         
         if isinstance(data, xr.DataArray):
-            data = data.rio.set_spatial_dims(template.rio.x_dim, template.rio.y_dim).rio.write_coordinate_system()
-            data = data.transpose(*template.dims)
-            output = template.copy(data = data)
+            x_dim, y_dim = template_dict['spatial_dims']
+            crs = template_dict['crs']
+            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.set_crs(crs).rio.write_coordinate_system()
+
+            for dim in template_dict['dims_names']:
+                start  = template_dict['dims_starts'][dim]
+                end    = template_dict['dims_ends'][dim]
+                length = template_dict['dims_lengths'][dim]
+                data[dim] = np.linspace(start, end, length)
+            data = data.transpose(*template_dict['dims_names'])
+
+            nodata_value = template_dict['_FillValue']
+            data.attrs['_FillValue'] = nodata_value
+
         elif isinstance(data, np.ndarray):
-            output = template.copy(data = data)
+            template = Dataset.build_templatearray(template_dict)
+            data = template.copy(data = data)
         elif isinstance(data, xr.Dataset):
-            all_outputs = [Dataset.set_data_to_template(data[var], template[var]) for var in template]
-            output = xr.merge(all_outputs)
+            all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template['variables']]
+            data = xr.merge(all_data)
         
-        return output
+        return data
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
@@ -713,8 +710,9 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
     new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
     fill_value = data.attrs.get('_FillValue', new_fill_value)
 
-    data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
-    data.attrs['_FillValue'] = new_fill_value
+    if not np.isclose(fill_value, new_fill_value, equal_nan = True):
+        data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
+        data.attrs['_FillValue'] = new_fill_value
 
     return data
 
