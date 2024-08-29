@@ -375,13 +375,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
         all_times = self.update(**kwargs).available_tags.get('time', [])
+        all_times.sort()
         for time in all_times:
             if time_range.contains(time):
                 yield time
         
         if len(all_times) == 0 and hasattr(self, 'parents') and self.parents is not None:
             parent_times = [parent.get_times(time_range, **kwargs) for parent in self.parents.values()]
-            for time in parent_times[0]:
+            all_times = parent_times[0]
+            all_times.sort()
+            for time in all_times:
                 if all(time in parent_times[i] for i in range(1, len(parent_times))):
                     yield time
 
