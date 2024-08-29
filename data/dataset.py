@@ -104,6 +104,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         raise NotImplementedError
 
     @property
+    def is_static(self):
+        return not '{' in self.key_pattern and not '%' in self.key_pattern
+
+    @property
     def available_tags(self):
         all_keys = self.available_keys
         all_tags = {}

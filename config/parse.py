@@ -144,9 +144,21 @@ def extract_date_and_tags(string: str, string_pattern:str):
         raise ValueError("The string does not match the pattern")
     
     # Extract the date components
-    year = int(match.group('year'))
-    month = int(match.group('month'))
-    day = int(match.group('day'))
+    if 'year' in substituted_names:
+        year = int(match.group('year'))
+    else:
+        year = 1900
+    
+    if 'month' in substituted_names:
+        month = int(match.group('month'))
+    else:
+        month = 1
+    
+    if 'day' in substituted_names:
+        day = int(match.group('day'))
+    else:
+        day = 1
+
     date = dt.datetime(year, month, day)
     
     # Extract the other key-value pairs
