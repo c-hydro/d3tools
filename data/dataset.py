@@ -146,6 +146,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_dataset.tags = new_tags
             return new_dataset
 
+    def copy(self, template = False):
+        new_dataset = self.update()
+        if template:
+            new_dataset._template = self._template
+        return new_dataset
+
     ## CLASS METHODS FOR FACTORY
     @classmethod
     def from_options(cls, options: dict):
