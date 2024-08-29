@@ -12,12 +12,12 @@ import re
 try:
     from ..timestepping import TimeRange
     from ..timestepping.timestep import TimeStep
-    from ..config.parse import substitute_string
+    from ..config.parse import substitute_string, extract_date_and_tags
     from ..config.options import Options
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
-    from config.parse import substitute_string
+    from config.parse import substitute_string, extract_date_and_tags
     from config.options import Options
 
 def withcases(func):
@@ -80,6 +80,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return f"{self.__class__.__name__}({self.name})"
 
     @property
+    def has_tiles (self):
+        return '{tile}' in self.key_pattern
+
+    @property
+    def tile_names(self):
+        return self.available_tags.get('tile', ['__tile__'])
+    
+    @property
+    def ntiles(self):
+        return len(self.tile_names)
+
+    @property
     def key_pattern(self):
         raise NotImplementedError
 
@@ -90,6 +102,25 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @property
     def available_keys(self):
         raise NotImplementedError
+
+    @property
+    def available_tags(self):
+        all_keys = self.available_keys
+        all_tags = {}
+        all_dates = set()
+        for key in all_keys:
+            this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
+            for tag in this_tags:
+                if tag not in all_tags:
+                    all_tags[tag] = set()
+                all_tags[tag].add(this_tags[tag])
+            all_dates.add(this_date)
+        
+        all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
+        all_tags['time'] = list(all_dates)
+
+        return all_tags
+
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -343,12 +374,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        for timestep in time_range.days:
-            time = timestep.start
-            if self.check_data(time, **kwargs):
+        all_times = self.update(**kwargs).available_tags.get('time', [])
+        for time in all_times:
+            if time_range.contains(time):
                 yield time
-            elif hasattr(self, 'parents') and self.parents is not None:
-                if all(parent.check_data(time, **kwargs) for parent in self.parents.values()):
+        
+        if len(all_times) == 0 and hasattr(self, 'parents') and self.parents is not None:
+            parent_times = [parent.get_times(time_range, **kwargs) for parent in self.parents.values()]
+            for time in parent_times[0]:
+                if all(time in parent_times[i] for i in range(1, len(parent_times))):
                     yield time
 
     @withcases
@@ -359,12 +393,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return list(self._get_times(time_range, **kwargs))
         
     @withcases
-    def check_data(self, time: Optional[TimeStep] = None, **kwargs) -> bool:
+    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
         """
         Check if data is available for a given time.
         """
-        full_key = self.get_key(time, **kwargs)
-        return self._check_data(full_key)
+        updated_self:Dataset = self.update(**kwargs)
+        all_keys = updated_self.available_keys
+        for tile in updated_self.tile_names:
+            full_key = updated_self.get_key(time, tile = tile)
+            if full_key not in all_keys:
+                return False
+        else:
+            return True
     
     @withcases
     def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:

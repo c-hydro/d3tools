@@ -121,3 +121,36 @@ def get_unique_values(values):
         unique_values.add(make_hashable(value))
     return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
 
+def extract_date_and_tags(string: str, string_pattern:str):
+    pattern = string_pattern
+    pattern = re.sub(r'\{(\w+)\}', r'(?P<\1>[^/]+)', pattern)
+    pattern = pattern.replace('%Y', '(?P<year>\\d{4})')
+    pattern = pattern.replace('%m', '(?P<month>\\d{2})')
+    pattern = pattern.replace('%d', '(?P<day>\\d{2})')
+
+    # get all the substituted names (i.e. the parts of the pattern that are between < and >)
+    substituted_names = re.findall(r'(?<=<)\w+(?=>)', pattern)
+
+    # if there are duplicate names, change them to avoid conflicts
+    for name in set(substituted_names):
+        count = substituted_names.count(name)
+        if count > 1:
+            for i in range(count-1):
+                pattern = pattern.replace(f'(?P<{name}>', f'(?P<{name}{i}>', 1)
+
+    # Match the string with the pattern
+    match = re.match(pattern, string)
+    if not match:
+        raise ValueError("The string does not match the pattern")
+    
+    # Extract the date components
+    year = int(match.group('year'))
+    month = int(match.group('month'))
+    day = int(match.group('day'))
+    date = dt.datetime(year, month, day)
+    
+    # Extract the other key-value pairs
+    all_tags = match.groupdict()
+    tags = {key: value for key, value in all_tags.items() if key in substituted_names and key not in ['year', 'month', 'day']}
+    
+    return date, tags
