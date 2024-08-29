@@ -13,7 +13,7 @@ class TimePeriod(ABC):
         self.start = start if isinstance(start, datetime.datetime) else get_date_from_str(start)
         self.end = end if isinstance(end, datetime.datetime) else get_date_from_str(end, end = True)
 
-    def length(self, unit = 'days'):
+    def get_length(self, unit = 'days'):
         days = (self.end - self.start).days + 1
         if unit == 'days':
             return days
@@ -21,6 +21,10 @@ class TimePeriod(ABC):
             return days * 24
         else:
             raise ValueError(f'Unknown unit "{unit}", must be "days" or "hours"')
+    
+    #TODO remove this method eventually, it conflicts with the .length property of FixedLenTimeStep
+    def length(self, **kwargs):
+        return self.get_length(**kwargs)
 
     def __repr__(self):
         return f'{self.__class__.__name__} ({self.start:%Y%m%d} - {self.end:%Y%m%d})'
