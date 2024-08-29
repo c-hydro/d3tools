@@ -12,12 +12,12 @@ import re
 try:
     from ..timestepping import TimeRange
     from ..timestepping.timestep import TimeStep
-    from ..config.parse import substitute_string
+    from ..config.parse import substitute_string, extract_date_and_tags
     from ..config.options import Options
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
-    from config.parse import substitute_string
+    from config.parse import substitute_string, extract_date_and_tags
     from config.options import Options
 
 def withcases(func):
@@ -72,6 +72,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
 
+        if 'tile_names' in kwargs:
+            self.tile_names = kwargs.pop('tile_names')
+
         self._template = {}
         self.options = Options(kwargs)
         self.tags = {}
@@ -80,12 +83,63 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return f"{self.__class__.__name__}({self.name})"
 
     @property
+    def has_tiles (self):
+        return '{tile}' in self.key_pattern
+
+    @property
+    def tile_names(self):
+        if not hasattr(self, '_tile_names'):
+            self._tile_names = self.available_tags.get('tile', ['__tile__'])
+
+        return self._tile_names
+    
+    @tile_names.setter
+    def tile_names(self, value):
+        if isinstance(value, str):
+            with open(value, 'r') as f:
+                self._tile_names = [l.strip() for l in f.readlines()]
+        elif isinstance(value, list) or isinstance(value, tuple):
+            self._tile_names = list(value)
+        else:
+            raise ValueError('Invalid tile names.')
+
+    @property
+    def ntiles(self):
+        return len(self.tile_names)
+
+    @property
     def key_pattern(self):
         raise NotImplementedError
-    
+
     @key_pattern.setter
     def key_pattern(self, value):
         raise NotImplementedError
+
+    @property
+    def available_keys(self):
+        raise NotImplementedError
+
+    @property
+    def is_static(self):
+        return not '{' in self.key_pattern and not '%' in self.key_pattern
+
+    @property
+    def available_tags(self):
+        all_keys = self.available_keys
+        all_tags = {}
+        all_dates = set()
+        for key in all_keys:
+            this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
+            for tag in this_tags:
+                if tag not in all_tags:
+                    all_tags[tag] = set()
+                all_tags[tag].add(this_tags[tag])
+            all_dates.add(this_date)
+        
+        all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
+        all_tags['time'] = list(all_dates)
+
+        return all_tags
 
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
@@ -102,11 +156,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_dataset = self.__class__(**new_options)
 
             new_dataset._template = self._template
+            new_dataset.tile_names = self.tile_names
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
             new_dataset.tags = new_tags
             return new_dataset
+
+    def copy(self, template = False):
+        new_dataset = self.update()
+        if template:
+            new_dataset._template = self._template
+        return new_dataset
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
@@ -227,15 +288,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise ValueError(f'Could not resolve data from {full_key}.')
 
         # if there is no template for the dataset, create it from the data
-        template = self.get_template(make_it=False, **kwargs)
-        if template is None:
-            template = self.make_templatearray_from_data(data)
-            self.set_template(template, **kwargs)
+        template_dict = self.get_template_dict(make_it=False, **kwargs)
+        if template_dict is None:
+            #template = self.make_templatearray_from_data(data)
+            self.set_template(data, **kwargs)
         else:
             # otherwise, update the data in the template
             # (this will make sure there is no errors in the coordinates due to minor rounding)
             attrs = data.attrs
-            data = self.set_data_to_template(data, template)
+            data = self.set_data_to_template(data, template_dict)
             data.attrs.update(attrs)
         
         data.attrs.update({'source_key': full_key})
@@ -274,16 +335,17 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return
 
         # if data is a numpy array, ensure there is a template available
-        template = self.get_template(**kwargs, make_it=False)
-        if template is None:
+        template_dict = self.get_template_dict(**kwargs, make_it=False)
+
+        if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-                templatearray = self.make_templatearray_from_data(data)
-                self.set_template(templatearray, **kwargs)
-                template = self.get_template(**kwargs, make_it=False)
+                #templatearray = self.make_templatearray_from_data(data)
+                self.set_template(data, **kwargs)
+                template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-
-        output = self.set_data_to_template(data, template)
+            
+        output = self.set_data_to_template(data, template_dict)
         output = set_type(output)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
@@ -322,7 +384,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             
             self.notif_opts['metadata'] = output.attrs
             self.notify(self.notif_opts)
-
+    
         # write the data
         self._write_data(output, output_file)
 
@@ -340,12 +402,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        for timestep in time_range.days:
-            time = timestep.start
-            if self.check_data(time, **kwargs):
+        all_times = self.update(**kwargs).available_tags.get('time', [])
+        all_times.sort()
+        for time in all_times:
+            if time_range.contains(time):
                 yield time
-            elif hasattr(self, 'parents') and self.parents is not None:
-                if all(parent.check_data(time, **kwargs) for parent in self.parents.values()):
+        
+        if len(all_times) == 0 and hasattr(self, 'parents') and self.parents is not None:
+            parent_times = [parent.get_times(time_range, **kwargs) for parent in self.parents.values()]
+            all_times = parent_times[0]
+            all_times.sort()
+            for time in all_times:
+                if all(time in parent_times[i] for i in range(1, len(parent_times))):
                     yield time
 
     @withcases
@@ -354,17 +422,23 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Get a list of times between two dates.
         """
         return list(self._get_times(time_range, **kwargs))
-
+        
     @withcases
-    def check_data(self, time: Optional[TimeStep] = None, **kwargs) -> bool:
+    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
         """
         Check if data is available for a given time.
         """
-        full_key = self.get_key(time, **kwargs)
-        return self._check_data(full_key)
+        updated_self:Dataset = self.update(**kwargs)
+        all_keys = updated_self.available_keys
+        for tile in updated_self.tile_names:
+            full_key = updated_self.get_key(time, tile = tile)
+            if full_key not in all_keys:
+                return False
+        else:
+            return True
     
     @withcases
-    def find_times(self, times: list[TimeStep], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
+    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
         """
         Find the times for which data is available.
         """
@@ -377,7 +451,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return ids
         else:
             return [times[i] for i in ids]
-    
+
+    @withcases
+    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False,**kwargs) -> list[str]:
+        """
+        Find the tiles for which data is available.
+        """
+        all_tiles = self.tile_names
+        available_tiles = [tile for tile in all_tiles if self.check_data(time, tile = tile, **kwargs)]
+        if not rev:
+            return available_tiles
+        else:
+            return [tile for tile in all_tiles if tile not in available_tiles]
+
     @abstractmethod
     def _check_data(self, data_key) -> bool:
         raise NotImplementedError
@@ -392,7 +478,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return time
 
     ## METHODS TO MANIPULATE THE DATASET
-    def get_key(self, time: Optional[TimeStep] = None, **kwargs):
+    def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
         
         time = self.get_time_signature(time)
 
@@ -405,26 +491,33 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self.fn = fn
 
     ## METHODS TO MANIPULATE THE TEMPLATE
-    def get_template(self, make_it:bool = True, **kwargs):
+    def get_template_dict(self, make_it:bool = True, **kwargs):
         tile = kwargs.pop('tile', '__tile__')
         template_dict = self._template.get(tile, None)
         start_time = self.get_start(**kwargs)
         if template_dict is None and start_time is not None and make_it:
             start_data = self.get_data(time = start_time, tile = tile, **kwargs)
-            templatearray = self.make_templatearray_from_data(start_data)
-            self.set_template(templatearray, tile = tile)
-        elif template_dict is not None:
-            templatearray = self.build_templatearray(template_dict)
-        else:
-            templatearray = None
+            #templatearray = self.make_templatearray_from_data(start_data)
+            self.set_template(start_data, tile = tile)
+            template_dict = self.get_template_dict(make_it = False, **kwargs)
+        # elif template_dict is not None:
+        #     templatearray = self.build_templatearray(template_dict)
+        # else:
+        #     templatearray = None
         
-        return templatearray
+        return template_dict
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
-        self._template[tile] = {'crs': templatearray.attrs.get('crs'),
+        crs = templatearray.attrs.get('crs')
+        if crs is not None:
+            crs_wkt = crs.to_wkt()
+        else:
+            crs_wkt = templatearray.spatial_ref.crs_wkt
+
+        self._template[tile] = {'crs': crs_wkt,
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
                                 'dims_names' : templatearray.dims,
                                 'spatial_dims' : (templatearray.rio.x_dim, templatearray.rio.y_dim),
@@ -443,29 +536,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._template[tile]['dims_starts'][dim] = float(start)
             self._template[tile]['dims_ends'][dim] = float(end)
             self._template[tile]['dims_lengths'][dim] = length
-
-    @staticmethod
-    def make_templatearray_from_data(data: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
-        """
-        Make a template xarray.DataArray from a given xarray.DataArray.
-        """
-        nodata_value = data.attrs.get('_FillValue', np.nan)
-
-        if isinstance(data, xr.Dataset):
-            vararrays = [Dataset.make_templatearray_from_data(data[var]) for var in data]
-            template  = xr.merge(vararrays)
-        else:
-            template = data.copy(data = np.full(data.shape, nodata_value))
-
-        # clear all attributes
-        template.attrs = {}
-        template.encoding = {}
-        
-        # make crs and nodata explicit as attributes
-        template.attrs = {'crs': data.rio.crs.to_wkt(),
-                          '_FillValue': nodata_value}
-
-        return template
 
     @staticmethod
     def build_templatearray(template_dict: dict) -> xr.DataArray|xr.Dataset:
@@ -492,19 +562,31 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @staticmethod
     def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
-                             template: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
+                             template_dict: dict) -> xr.DataArray|xr.Dataset:
         
         if isinstance(data, xr.DataArray):
-            data = data.rio.set_spatial_dims(template.rio.x_dim, template.rio.y_dim).rio.write_coordinate_system()
-            data = data.transpose(*template.dims)
-            output = template.copy(data = data)
+            x_dim, y_dim = template_dict['spatial_dims']
+            crs = template_dict['crs']
+            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.set_crs(crs).rio.write_coordinate_system()
+
+            for dim in template_dict['dims_names']:
+                start  = template_dict['dims_starts'][dim]
+                end    = template_dict['dims_ends'][dim]
+                length = template_dict['dims_lengths'][dim]
+                data[dim] = np.linspace(start, end, length)
+            data = data.transpose(*template_dict['dims_names'])
+
+            nodata_value = template_dict['_FillValue']
+            data.attrs['_FillValue'] = nodata_value
+
         elif isinstance(data, np.ndarray):
-            output = template.copy(data = data)
+            template = Dataset.build_templatearray(template_dict)
+            data = template.copy(data = data)
         elif isinstance(data, xr.Dataset):
-            all_outputs = [Dataset.set_data_to_template(data[var], template[var]) for var in template]
-            output = xr.merge(all_outputs)
+            all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template['variables']]
+            data = xr.merge(all_data)
         
-        return output
+        return data
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
@@ -628,8 +710,9 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
     new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
     fill_value = data.attrs.get('_FillValue', new_fill_value)
 
-    data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
-    data.attrs['_FillValue'] = new_fill_value
+    if not np.isclose(fill_value, new_fill_value, equal_nan = True):
+        data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
+        data.attrs['_FillValue'] = new_fill_value
 
     return data
 

@@ -3,8 +3,10 @@ import pandas as pd
 
 try:
     from .dataset import Dataset
+    from ..config.parse import extract_date_and_tags
 except ImportError:
     from dataset import Dataset
+    from config.parse import extract_date_and_tags
 
 class MemoryDataset(Dataset):
     type = 'memory'
@@ -36,3 +38,23 @@ class MemoryDataset(Dataset):
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
         return data_path in self.data_dict
+    
+    @property
+    def available_keys(self):
+        return list(self.data_dict.keys())
+    
+    def update(self, in_place = False, **kwargs):
+        new_self = super().update(in_place = in_place, **kwargs)
+
+        for key in self.available_keys:
+            try: 
+                extract_date_and_tags(key, new_self.key_pattern)
+                new_self.data_dict[key] = self.data_dict.get(key)
+            except ValueError:
+                pass
+
+        if in_place:
+            self = new_self
+            return self
+        else:
+            return new_self
