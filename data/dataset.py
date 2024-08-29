@@ -169,6 +169,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return None
         if isinstance(timestep, dt.datetime):
             time = timestep
+            # calculating the length in this way is not perfect,
+            # but should work given that timesteps are always requested in order
+            if hasattr(self, 'previous_requested_time'):
+                length = (time - self.previous_requested_time).days
+            else:
+                length = None
+            self.previous_requested_time = time
         else:
             time_signature = self.time_signature
             if time_signature == 'start':
@@ -177,12 +184,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 time = timestep.end
             elif time_signature == 'end+1':
                 time = (timestep+1).start
+            length = timestep.get_length()
+            self.previous_requested_time = time
 
         key_without_tags = re.sub(r'\{.*\}', '', self.key_pattern)
         hasyear = '%Y' in key_without_tags
 
+        # change the date to 28th of February if it is the 29th of February,
+        # but only if no year is present in the path (i.e. this is a parameter)
+        # and the length is greater than 1 (i.e. not a daily timestep)
         if not hasyear and time.month == 2 and time.day == 29:
-            time = time.replace(day = 28)
+            if length is not None and length > 1:
+                time = time.replace(day = 28)
         
         return time
 
