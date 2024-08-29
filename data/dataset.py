@@ -72,6 +72,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
 
+        if 'tile_names' in kwargs:
+            self.tile_names = kwargs.pop('tile_names')
+
         self._template = {}
         self.options = Options(kwargs)
         self.tags = {}
@@ -85,8 +88,21 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def tile_names(self):
-        return self.available_tags.get('tile', ['__tile__'])
+        if not hasattr(self, '_tile_names'):
+            self._tile_names = self.available_tags.get('tile', ['__tile__'])
+
+        return self._tile_names
     
+    @tile_names.setter
+    def tile_names(self, value):
+        if isinstance(value, str):
+            with open(value, 'r') as f:
+                self._tile_names = [l.strip() for l in f.readlines()]
+        elif isinstance(value, list) or isinstance(value, tuple):
+            self._tile_names = list(value)
+        else:
+            raise ValueError('Invalid tile names.')
+
     @property
     def ntiles(self):
         return len(self.tile_names)
@@ -140,6 +156,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_dataset = self.__class__(**new_options)
 
             new_dataset._template = self._template
+            new_dataset.tile_names = self.tile_names
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
@@ -433,6 +450,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return ids
         else:
             return [times[i] for i in ids]
+
+    @withcases
+    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False,**kwargs) -> list[str]:
+        """
+        Find the tiles for which data is available.
+        """
+        all_tiles = self.tile_names
+        available_tiles = [tile for tile in all_tiles if self.check_data(time, tile = tile, **kwargs)]
+        if not rev:
+            return available_tiles
+        else:
+            return [tile for tile in all_tiles if tile not in available_tiles]
 
     @abstractmethod
     def _check_data(self, data_key) -> bool:
