@@ -200,7 +200,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return time
 
     ## INPUT/OUTPUT METHODS
-    def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+    def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
         full_key = self.get_key(time, **kwargs)
 
         if self.format == 'csv' and self.check_data(full_key):
@@ -208,6 +208,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
+            if as_is:
+                return data
 
             # ensure that the data has descending latitudes
             data = straighten_data(data)
@@ -218,6 +220,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
             data = self.make_data(time, **kwargs)
+            if as_is:
+                return data
 
         else:
             raise ValueError(f'Could not resolve data from {full_key}.')
