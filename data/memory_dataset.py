@@ -36,3 +36,7 @@ class MemoryDataset(Dataset):
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
         return data_path in self.data_dict
+    
+    @property
+    def available_keys(self):
+        return list(self.data_dict.keys())

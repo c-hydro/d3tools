@@ -87,6 +87,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def key_pattern(self, value):
         raise NotImplementedError
 
+    @property
+    def available_keys(self):
+        raise NotImplementedError
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
