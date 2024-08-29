@@ -82,7 +82,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @property
     def key_pattern(self):
         raise NotImplementedError
-    
+
     @key_pattern.setter
     def key_pattern(self, value):
         raise NotImplementedError
@@ -357,7 +357,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Get a list of times between two dates.
         """
         return list(self._get_times(time_range, **kwargs))
-
+        
     @withcases
     def check_data(self, time: Optional[TimeStep] = None, **kwargs) -> bool:
         """
@@ -367,7 +367,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return self._check_data(full_key)
     
     @withcases
-    def find_times(self, times: list[TimeStep], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
+    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
         """
         Find the times for which data is available.
         """
@@ -380,7 +380,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return ids
         else:
             return [times[i] for i in ids]
-    
+
     @abstractmethod
     def _check_data(self, data_key) -> bool:
         raise NotImplementedError
@@ -395,7 +395,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return time
 
     ## METHODS TO MANIPULATE THE DATASET
-    def get_key(self, time: Optional[TimeStep] = None, **kwargs):
+    def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
         
         time = self.get_time_signature(time)
 
