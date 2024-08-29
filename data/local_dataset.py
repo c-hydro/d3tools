@@ -21,7 +21,7 @@ class LocalDataset(Dataset):
         elif 'dir' in kwargs:
             self.dir = kwargs.pop('dir')
         elif 'key_pattern' in kwargs:
-            self.dir = os.path.dirname(kwargs.pop('key_pattern'))
+            self.dir = os.path.dirname(kwargs.get('key_pattern'))
 
         if filename is not None:
             self.file = filename
