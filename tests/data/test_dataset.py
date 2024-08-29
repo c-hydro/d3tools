@@ -127,7 +127,7 @@ class TestDataset:
         self.ds1.parents = None
         with mock.patch(f'{__name__}.ConcreteDataset.check_data') as mock_check_data:
             time_range = TimeRange('2024-01-01', '2024-01-09')
-            ndays = time_range.length('days')
+            ndays = time_range.get_length('days')
             alternate = [True, False] * (ndays//2) + [True] * (ndays%2)
             mock_check_data.side_effect = alternate
             times = self.ds1.get_times(time_range)

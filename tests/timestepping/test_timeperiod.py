@@ -14,11 +14,11 @@ class TestTimePeriod:
         assert self.ts.start == datetime.datetime(2022, 1, 1)
         assert self.ts.end == datetime.datetime(2022, 1, 2)
 
-    def test_timeperiod_length(self):
-        assert self.ts.length('days') == 2
-        assert self.ts.length('hours') == 48
+    def test_timeperiod_get_length(self):
+        assert self.ts.get_length('days') == 2
+        assert self.ts.get_length('hours') == 48
         with pytest.raises(ValueError):
-            self.ts.length('invalid')
+            self.ts.get_length('invalid')
 
     def test_timeperiod_repr(self):
         assert repr(self.ts) == 'ConcreteTimePeriod (20220101 - 20220102)'
