@@ -14,11 +14,13 @@ try:
     from ..timestepping.timestep import TimeStep
     from ..config.parse import substitute_string, extract_date_and_tags
     from ..config.options import Options
+    from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
     from config.parse import substitute_string, extract_date_and_tags
     from config.options import Options
+    from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -61,7 +63,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'format' in kwargs:
             self.format = kwargs.pop('format')
         else:
-            self.format = os.path.basename(self.key_pattern).split('.')[-1]
+            self.format = get_format_from_path(self.key_pattern)
 
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
@@ -81,66 +83,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
-
-    @property
-    def has_tiles (self):
-        return '{tile}' in self.key_pattern
-
-    @property
-    def tile_names(self):
-        if not hasattr(self, '_tile_names'):
-            self._tile_names = self.available_tags.get('tile', ['__tile__'])
-
-        return self._tile_names
     
-    @tile_names.setter
-    def tile_names(self, value):
-        if isinstance(value, str):
-            with open(value, 'r') as f:
-                self._tile_names = [l.strip() for l in f.readlines()]
-        elif isinstance(value, list) or isinstance(value, tuple):
-            self._tile_names = list(value)
-        else:
-            raise ValueError('Invalid tile names.')
-
-    @property
-    def ntiles(self):
-        return len(self.tile_names)
-
-    @property
-    def key_pattern(self):
-        raise NotImplementedError
-
-    @key_pattern.setter
-    def key_pattern(self, value):
-        raise NotImplementedError
-
-    @property
-    def available_keys(self):
-        raise NotImplementedError
-
-    @property
-    def is_static(self):
-        return not '{' in self.key_pattern and not '%' in self.key_pattern
-
-    @property
-    def available_tags(self):
-        all_keys = self.available_keys
-        all_tags = {}
-        all_dates = set()
-        for key in all_keys:
-            this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
-            for tag in this_tags:
-                if tag not in all_tags:
-                    all_tags[tag] = set()
-                all_tags[tag].add(this_tags[tag])
-            all_dates.add(this_date)
-        
-        all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
-        all_tags['time'] = list(all_dates)
-
-        return all_tags
-
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -201,14 +144,69 @@ class Dataset(ABC, metaclass=DatasetMeta):
     
     @format.setter
     def format(self, value):
-        if value in ['tif', 'tiff']:
-            self._format = 'geotiff'
-        elif value in ['nc', 'netcdf']:
-            self._format = 'netcdf'
-        elif value in ['csv']:
-            self._format = 'csv'
+        self._format = value
+
+    @property
+    def has_tiles (self):
+        return '{tile}' in self.key_pattern
+
+    @property
+    def tile_names(self):
+        if not hasattr(self, '_tile_names'):
+            self._tile_names = self.available_tags.get('tile', ['__tile__'])
+
+        return self._tile_names
+    
+    @tile_names.setter
+    def tile_names(self, value):
+        if isinstance(value, str):
+            self._tile_names = self.get_tile_names_from_file(value)
+        elif isinstance(value, list) or isinstance(value, tuple):
+            self._tile_names = list(value)
         else:
-            raise ValueError(f"Invalid format: {value}, only geotiff and csv are currently supported")
+            raise ValueError('Invalid tile names.')
+        
+    def get_tile_names_from_file(self, filename: str) -> list[str]:
+        with open(filename, 'r') as f:
+            return [l.strip() for l in f.readlines()]
+
+    @property
+    def ntiles(self):
+        return len(self.tile_names)
+
+    @property
+    def key_pattern(self):
+        raise NotImplementedError
+
+    @key_pattern.setter
+    def key_pattern(self, value):
+        raise NotImplementedError
+
+    @property
+    def available_keys(self):
+        raise NotImplementedError
+
+    @property
+    def is_static(self):
+        return not '{' in self.key_pattern and not '%' in self.key_pattern
+
+    @property
+    def available_tags(self):
+        all_keys = self.available_keys
+        all_tags = {}
+        all_dates = set()
+        for key in all_keys:
+            this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
+            for tag in this_tags:
+                if tag not in all_tags:
+                    all_tags[tag] = set()
+                all_tags[tag].add(this_tags[tag])
+            all_dates.add(this_date)
+        
+        all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
+        all_tags['time'] = list(all_dates)
+
+        return all_tags
 
     ## TIME-SIGNATURE MANAGEMENT
     @property
@@ -336,7 +334,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # if data is a numpy array, ensure there is a template available
         template_dict = self.get_template_dict(**kwargs, make_it=False)
-
         if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
                 #templatearray = self.make_templatearray_from_data(data)
@@ -429,10 +426,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Check if data is available for a given time.
         """
         updated_self:Dataset = self.update(**kwargs)
-        all_keys = updated_self.available_keys
+        if 'tile' in kwargs:
+            full_key = updated_self.get_key(time)
+            return self._check_data(full_key)
+        
         for tile in updated_self.tile_names:
             full_key = updated_self.get_key(time, tile = tile)
-            if full_key not in all_keys:
+            if not self._check_data(full_key):
                 return False
         else:
             return True
@@ -494,12 +494,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_template_dict(self, make_it:bool = True, **kwargs):
         tile = kwargs.pop('tile', '__tile__')
         template_dict = self._template.get(tile, None)
-        start_time = self.get_start(**kwargs)
-        if template_dict is None and start_time is not None and make_it:
-            start_data = self.get_data(time = start_time, tile = tile, **kwargs)
-            #templatearray = self.make_templatearray_from_data(start_data)
-            self.set_template(start_data, tile = tile)
-            template_dict = self.get_template_dict(make_it = False, **kwargs)
+        if template_dict is None and make_it:
+            start_time = self.get_start(**kwargs)
+            if start_time is not None:
+                start_data = self.get_data(time = start_time, tile = tile, **kwargs)
+                #templatearray = self.make_templatearray_from_data(start_data)
+                self.set_template(start_data, tile = tile)
+                template_dict = self.get_template_dict(make_it = False, **kwargs)
         # elif template_dict is not None:
         #     templatearray = self.build_templatearray(template_dict)
         # else:
@@ -667,88 +668,3 @@ class Dataset(ABC, metaclass=DatasetMeta):
         recipients = notification_options.pop('to')
         subject = notification_options.pop('subject')
         notification.send(recipients, subject, **notification_options)
-
-## FUNCTIONS TO MANIPULATE THE DATA
-
-# DECORATOR TO MAKE THE FUNCTION WORK WITH XR.DATASET
-def withxrds(func):
-    def wrapper(*args, **kwargs):
-        if isinstance(args[0], xr.Dataset):
-            return xr.Dataset({var: func(args[0][var], **kwargs) for var in args[0]})
-        else:
-            return func(*args, **kwargs)
-    return wrapper
-
-@withxrds
-def straighten_data(data: xr.DataArray) -> xr.DataArray:
-    """
-    Ensure that the data has descending latitudes.
-    """
-    
-    try:
-        y_dim = data.rio.y_dim
-    except rxr.exceptions.MissingSpatialDimensionError:
-        y_dim = None
-
-    if y_dim is None:
-        for dim in data.dims:
-            if 'lat' in dim.lower() or 'y' in dim.lower():
-                y_dim = dim
-                break
-    if data[y_dim].data[0] < data[y_dim].data[-1]:
-        data = data.sortby(y_dim, ascending = False)
-
-    return data
-
-@withxrds
-def reset_nan(data: xr.DataArray) -> xr.DataArray:
-    """
-    Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
-    """
-
-    data_type = data.dtype
-    new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
-    fill_value = data.attrs.get('_FillValue', new_fill_value)
-
-    if not np.isclose(fill_value, new_fill_value, equal_nan = True):
-        data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
-        data.attrs['_FillValue'] = new_fill_value
-
-    return data
-
-@withxrds
-def set_type(data: xr.DataArray) -> xr.DataArray:
-    """
-    Make sure that the data is the smallest possible.
-    """
-
-    max_value = data.max()
-    min_value = data.min()
-
-    # check if output contains floats or integers
-    if np.issubdtype(data.dtype, np.floating):
-        if max_value < 2**31 and min_value > -2**31:
-            data = data.astype(np.float32)
-        else:
-            data = data.astype(np.float64)
-    elif np.issubdtype(data.dtype, np.integer):
-        if min_value >= 0:
-            if max_value <= 255:
-                data = data.astype(np.uint8)
-            elif max_value <= 65535:
-                data = data.astype(np.uint16)
-            elif max_value < 2**31:
-                data = data.astype(np.uint32)
-            else:
-                data = data.astype(np.uint64)
-        else:
-            if max_value <= 127 and min_value >= -128:
-                data = data.astype(np.int8)
-            elif max_value <= 32767 and min_value >= -32768:
-                data = data.astype(np.int16)
-            elif max_value < 2**31 and min_value > -2**31:
-                data = data.astype(np.int32)
-            else:
-                data = data.astype(np.int64)
-
-    return reset_nan(data)
