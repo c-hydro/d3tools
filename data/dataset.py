@@ -83,6 +83,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
+    
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -159,12 +160,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @tile_names.setter
     def tile_names(self, value):
         if isinstance(value, str):
-            with open(value, 'r') as f:
-                self._tile_names = [l.strip() for l in f.readlines()]
+            self._tile_names = self.get_tile_names_from_file(value)
         elif isinstance(value, list) or isinstance(value, tuple):
             self._tile_names = list(value)
         else:
             raise ValueError('Invalid tile names.')
+        
+    def get_tile_names_from_file(self, filename: str) -> list[str]:
+        with open(filename, 'r') as f:
+            return [l.strip() for l in f.readlines()]
 
     @property
     def ntiles(self):
@@ -330,7 +334,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # if data is a numpy array, ensure there is a template available
         template_dict = self.get_template_dict(**kwargs, make_it=False)
-
         if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
                 #templatearray = self.make_templatearray_from_data(data)
@@ -423,10 +426,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Check if data is available for a given time.
         """
         updated_self:Dataset = self.update(**kwargs)
-        all_keys = updated_self.available_keys
+        if 'tile' in kwargs:
+            full_key = updated_self.get_key(time)
+            return self._check_data(full_key)
+        
         for tile in updated_self.tile_names:
             full_key = updated_self.get_key(time, tile = tile)
-            if full_key not in all_keys:
+            if not self._check_data(full_key):
                 return False
         else:
             return True
@@ -488,12 +494,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_template_dict(self, make_it:bool = True, **kwargs):
         tile = kwargs.pop('tile', '__tile__')
         template_dict = self._template.get(tile, None)
-        start_time = self.get_start(**kwargs)
-        if template_dict is None and start_time is not None and make_it:
-            start_data = self.get_data(time = start_time, tile = tile, **kwargs)
-            #templatearray = self.make_templatearray_from_data(start_data)
-            self.set_template(start_data, tile = tile)
-            template_dict = self.get_template_dict(make_it = False, **kwargs)
+        if template_dict is None and make_it:
+            start_time = self.get_start(**kwargs)
+            if start_time is not None:
+                start_data = self.get_data(time = start_time, tile = tile, **kwargs)
+                #templatearray = self.make_templatearray_from_data(start_data)
+                self.set_template(start_data, tile = tile)
+                template_dict = self.get_template_dict(make_it = False, **kwargs)
         # elif template_dict is not None:
         #     templatearray = self.build_templatearray(template_dict)
         # else:

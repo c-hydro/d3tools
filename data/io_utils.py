@@ -2,6 +2,7 @@ import pandas as pd
 import rioxarray as rxr
 import xarray as xr
 import numpy as np
+import os
 
 from typing import Optional
 
@@ -50,13 +51,15 @@ def write_to_file(data, path, format: Optional[str] = None) -> None:
     if format is None:
         format = get_format_from_path(path)
 
+    os.makedirs(os.path.dirname(path), exist_ok = True)
+
     # write the data to a csv
     if format == 'csv':
         data.to_csv(path)
 
     # write the data to a geotiff
     elif format == 'geotiff':
-        data.rio.to_raster(path)
+        data.rio.to_raster(path, compress = 'LZW')
 
     # write the data to a netcdf
     elif format == 'netcdf':
@@ -98,12 +101,13 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
     """
     Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
     """
-
     data_type = data.dtype
     new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
-    fill_value = data.attrs.get('_FillValue', new_fill_value)
+    fill_value = data.attrs.get('_FillValue', None)
 
-    if not np.isclose(fill_value, new_fill_value, equal_nan = True):
+    if fill_value is None:
+        data.attrs['_FillValue'] = new_fill_value
+    elif not np.isclose(fill_value, new_fill_value, equal_nan = True):
         data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
         data.attrs['_FillValue'] = new_fill_value
 
