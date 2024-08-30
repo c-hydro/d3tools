@@ -78,3 +78,26 @@ class Options(dict):
             raise ValueError(f"Multiple keys found: {paths}")
         else:
             return []
+        
+    def get(self, key: list[str]|str, default = None, ignore_case = False):
+        """
+        Get the value of the specified key.
+        If the key is a list, it will return the value of the first key that is found.
+        """
+
+        if ignore_case and isinstance(key, str):
+            key = key.lower()
+            for k, v in self.items():
+                if k.lower() == key:
+                    return v
+            return default
+        
+        elif isinstance(key, list):
+            value = None
+            while not value and key:
+                value = self.get(key.pop(0), None, ignore_case)
+            
+            if not value:
+                return default
+            else:
+                return value
