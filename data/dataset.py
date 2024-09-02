@@ -17,7 +17,7 @@ try:
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
-    from dam.tools.config.parse_utils import substitute_string, extract_date_and_tags
+    from tools.config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 
 def withcases(func):
@@ -479,7 +479,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
         
         time = self.get_time_signature(time)
-
         raw_key = substitute_string(self.key_pattern, kwargs)
         key = time.strftime(raw_key) if time is not None else raw_key
         return key
@@ -490,7 +489,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO MANIPULATE THE TEMPLATE
     def get_template_dict(self, make_it:bool = True, **kwargs):
-        tile = kwargs.pop('tile', '__tile__')
+        tile = kwargs.pop('tile', None)
+        if tile is None:
+            if self.has_tiles:
+                template_dict = {}
+                for tile in self.tile_names:
+                    template_dict[tile] = self.get_template_dict(make_it = make_it, tile = tile, **kwargs)
+                return template_dict
+            else:
+                tile = '__tile__'
+
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
             start_time = self.get_start(**kwargs)
@@ -499,10 +507,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 #templatearray = self.make_templatearray_from_data(start_data)
                 self.set_template(start_data, tile = tile)
                 template_dict = self.get_template_dict(make_it = False, **kwargs)
-        # elif template_dict is not None:
-        #     templatearray = self.build_templatearray(template_dict)
-        # else:
-        #     templatearray = None
         
         return template_dict
     
