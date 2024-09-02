@@ -25,34 +25,47 @@ def substitute_string(string, tag_dict, rec = False):
     Replace the {tags} in the string with the values in the tag_dict.
     Handles datetime objects with format specifiers.
     """
-    def replace_match(match):
-        key = match.group(1)
-        fmt = match.group(2)
-        value = tag_dict.get(key)
 
-        if value is None:
-            return match.group(0)  # No substitution, return the original tag
+    if not isinstance(string, str):
+        return string
 
+    pattern = r'{([\w.]+)(?::(.*?))?}'
+    match = re.search(pattern, string)
+
+    if not match:
+        return string
+    
+    key = match.group(1)
+    fmt = match.group(2)
+    value = tag_dict.get(key)
+
+    if value is None:
+        return string
+    
+    def format_value(value, fmt):
         if isinstance(value, str):
             try:
                 value = get_date_from_str(value)
             except ValueError:
                 pass
-
+        
         if isinstance(value, dt.datetime) and fmt:
             return value.strftime(fmt)
         else:
             return str(value)
 
-    pattern = re.compile(r'{([\w.]+)(?::(.*?))?}')
-
-    while rec:
-        new_string = pattern.sub(replace_match, string)
-        if new_string == string:
-            return new_string
-        string = new_string
-
-    return pattern.sub(replace_match, string)
+    if isinstance(value, (list, tuple)):
+        return [format_value(v, fmt) for v in value]
+    else:
+        replacement = format_value(value, fmt)
+        new_str = string.replace(match.group(0), replacement)
+        while rec:
+            if string == new_str:
+                break
+            else:
+                string = new_str
+                new_str = substitute_string(string, tag_dict, rec)
+        return new_str
 
 def set_dataset(structure, obj_dict):
     """
