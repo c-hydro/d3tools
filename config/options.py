@@ -1,4 +1,5 @@
-from .parse import parse_options, get_unique_values
+from .parse_utils import get_unique_values, flatten_dict, substitute_values, set_dataset
+from ..data import Dataset
 
 import json
 

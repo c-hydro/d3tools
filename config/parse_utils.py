@@ -54,6 +54,38 @@ def substitute_string(string, tag_dict, rec = False):
 
     return pattern.sub(replace_match, string)
 
+def set_dataset(structure, obj_dict):
+    """
+    Replace the {obj, tag = 'value'} in the structure with the corresponding dataset in the obj_dict.
+    the tag = 'value' is used to update the tags of the dataset.
+    """
+    if isinstance(structure, dict):
+        return {set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()}
+    elif isinstance(structure, list):
+        return [set_dataset(value, obj_dict) for value in structure]
+    elif isinstance(structure, str):
+        pattern = r'{([\w.]+)(?:\s*,\s*([\w.]+\s*=\s*\'.*?\')+)?}'
+        match = re.match(pattern, structure)
+        if match:
+            key   = match.group(1)
+            ds = obj_dict.get(key, structure)
+
+            if len(match.groups()) > 1:
+                tag_values = match.group(2)
+                if tag_values:
+                    tags = {}
+                    tag_values_pattern = r'([\w.]+)\s*=\s*\'(.*?)\''
+                    for tag_values_match in re.finditer(tag_values_pattern, tag_values):
+                        tags[tag_values_match.group(1)] = tag_values_match.group(2)
+
+                    ds = ds.update(**tags)
+
+            return ds
+        else:
+            return structure
+    else:
+        return structure
+
 def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
     """
     Flatten a nested dictionary into a single level dictionary.
@@ -83,15 +115,6 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
             flat_dict[key] = value
         
     return flat_dict
-
-def parse_options(options: dict, **kwargs):
-    """
-    Parse the options, using themselves as tags.
-    """
-    tags = flatten_dict(options, **kwargs)
-    tags = substitute_values(tags, tags, rec=True)
-
-    return substitute_values(options, tags, rec=True)
 
 def make_hashable(obj):
     """

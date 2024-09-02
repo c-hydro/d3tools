@@ -12,14 +12,12 @@ import re
 try:
     from ..timestepping import TimeRange
     from ..timestepping.timestep import TimeStep
-    from ..config.parse import substitute_string, extract_date_and_tags
-    from ..config.options import Options
+    from ..config.parse_utils import substitute_string, extract_date_and_tags
     from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
-    from config.parse import substitute_string, extract_date_and_tags
-    from config.options import Options
+    from dam.tools.config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 
 def withcases(func):
@@ -78,7 +76,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self.tile_names = kwargs.pop('tile_names')
 
         self._template = {}
-        self.options = Options(kwargs)
+        self.options = kwargs
         self.tags = {}
 
     def __repr__(self):
