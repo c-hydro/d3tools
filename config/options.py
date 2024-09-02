@@ -52,8 +52,31 @@ class Options(dict):
         with open(path, 'r') as file:
             config:dict = json.load(file)
 
-        return Options(parse_options(config, **kwargs))
+        config_options = Options(config)
+        parsed_options = config_options.parse(**kwargs)
 
+        return Options(parsed_options)
+
+    def parse(self, **kwargs):
+        """
+        Parse the options, using themselves as tags.
+        And parse the datasets in the options.
+        """
+        
+        tags = flatten_dict(self, **kwargs)
+        tags = substitute_values(tags, tags, rec=True)
+        parsed_options = Options(substitute_values(self, tags, rec=True))
+
+        # parse datasets
+        dataset_options, ds_key = parsed_options.get('datasets', {}, ignore_case=True, get_key=True)
+        for dsname, dsopt in dataset_options.items():
+            dataset_options[dsname] = Dataset.from_options(dsopt)
+
+        flat_dsoptions = flatten_dict({ds_key: dataset_options})
+        parsed_options = set_dataset(parsed_options, flat_dsoptions)
+
+        return parsed_options
+    
     def find_keys(self, key: str, get_all = False) -> list[str]:
         """
         Returns the tree of keys that contain the specified key.
@@ -80,25 +103,31 @@ class Options(dict):
         else:
             return []
         
-    def get(self, key: list[str]|str, default = None, ignore_case = False):
+    def get(self, key: list[str]|str, default = None, ignore_case = False, get_key = False):
         """
         Get the value of the specified key.
         If the key is a list, it will return the value of the first key that is found.
         """
-
         if ignore_case and isinstance(key, str):
             key = key.lower()
             for k, v in self.items():
                 if k.lower() == key:
-                    return v
-            return default
+                    outvalue, outkey = v, k
+                    break
+            else:
+                outvalue, outkey = default, None
         
         elif isinstance(key, list):
-            value = None
-            while not value and key:
-                value = self.get(key.pop(0), None, ignore_case)
+            v = None
+            while not v and key:
+                v, k = self.get(key.pop(0), None, ignore_case, get_key = True)
             
-            if not value:
-                return default
+            if not v:
+                outvalue, outkey = default, None
             else:
-                return value
+                outvalue, outkey = v, k
+
+        if get_key:
+            return outvalue, outkey
+        else:
+            return outvalue
