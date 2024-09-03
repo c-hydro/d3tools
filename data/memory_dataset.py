@@ -3,10 +3,10 @@ import pandas as pd
 
 try:
     from .dataset import Dataset
-    from ..config.parse import extract_date_and_tags
+    from ..config.parse_utils import extract_date_and_tags
 except ImportError:
     from dataset import Dataset
-    from config.parse import extract_date_and_tags
+    from dam.tools.config.parse_utils import extract_date_and_tags
 
 class MemoryDataset(Dataset):
     type = 'memory'

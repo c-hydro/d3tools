@@ -20,39 +20,86 @@ def substitute_values(structure, tag_dict, **kwargs):
     else:
         return structure
 
-def substitute_string(string, tag_dict, rec = False):
+def substitute_string(string, tag_dict, rec=False):
     """
     Replace the {tags} in the string with the values in the tag_dict.
     Handles datetime objects with format specifiers.
     """
-    def replace_match(match):
+
+    if not isinstance(string, str):
+        return string
+
+    pattern = r'{([\w.]+)(?::(.*?))?}'
+
+    def replace_match(match, tag_dict):
         key = match.group(1)
         fmt = match.group(2)
         value = tag_dict.get(key)
 
         if value is None:
-            return match.group(0)  # No substitution, return the original tag
-
-        if isinstance(value, str):
-            try:
-                value = get_date_from_str(value)
-            except ValueError:
-                pass
+            return match.group(0)  # Return the original match if the key is not found
 
         if isinstance(value, dt.datetime) and fmt:
             return value.strftime(fmt)
+        elif fmt:
+            return format(value, fmt)
         else:
             return str(value)
 
-    pattern = re.compile(r'{([\w.]+)(?::(.*?))?}')
+    def generate_strings(string, tag_dict):
+        matches = re.findall(pattern, string)
+        if not matches:
+            return string
 
-    while rec:
-        new_string = pattern.sub(replace_match, string)
-        if new_string == string:
-            return new_string
-        string = new_string
+        key = matches[0][0]
+        fmt = matches[0][1]
+        value = tag_dict.get(key)
 
-    return pattern.sub(replace_match, string)
+        if isinstance(value, list):
+            results = []
+            for val in value:
+                temp_dict = tag_dict.copy()
+                temp_dict[key] = val
+                this_replace = lambda m: replace_match(m, temp_dict)
+                this_replacement = re.sub(pattern, this_replace, string, count=1)
+                results.append(generate_strings(this_replacement, temp_dict))
+            return results
+        else:
+            return re.sub(pattern, lambda m: replace_match(m, tag_dict), string)
+
+    return generate_strings(string, tag_dict)
+
+def set_dataset(structure, obj_dict):
+    """
+    Replace the {obj, tag = 'value'} in the structure with the corresponding dataset in the obj_dict.
+    the tag = 'value' is used to update the tags of the dataset.
+    """
+    if isinstance(structure, dict):
+        return {set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()}
+    elif isinstance(structure, list):
+        return [set_dataset(value, obj_dict) for value in structure]
+    elif isinstance(structure, str):
+        pattern = r'{([\w.]+)(?:\s*,\s*([\w.]+\s*=\s*\'.*?\')+)?}'
+        match = re.match(pattern, structure)
+        if match:
+            key   = match.group(1)
+            ds = obj_dict.get(key, structure)
+
+            if len(match.groups()) > 1:
+                tag_values = match.group(2)
+                if tag_values:
+                    tags = {}
+                    tag_values_pattern = r'([\w.]+)\s*=\s*\'(.*?)\''
+                    for tag_values_match in re.finditer(tag_values_pattern, tag_values):
+                        tags[tag_values_match.group(1)] = tag_values_match.group(2)
+
+                    ds = ds.update(**tags)
+
+            return ds
+        else:
+            return structure
+    else:
+        return structure
 
 def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
     """
@@ -83,15 +130,6 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
             flat_dict[key] = value
         
     return flat_dict
-
-def parse_options(options: dict, **kwargs):
-    """
-    Parse the options, using themselves as tags.
-    """
-    tags = flatten_dict(options, **kwargs)
-    tags = substitute_values(tags, tags, rec=True)
-
-    return substitute_values(options, tags, rec=True)
 
 def make_hashable(obj):
     """

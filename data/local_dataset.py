@@ -7,12 +7,12 @@ import datetime as dt
 try:
     from .dataset import Dataset
     from ..timestepping.timestep import TimeStep
-    from ..config.parse import extract_date_and_tags
+    from ..config.parse_utils import extract_date_and_tags
     from .io_utils import write_to_file, read_from_file
 except ImportError:
     from dataset import Dataset
     from timestepping.timestep import TimeStep
-    from config.parse import extract_date_and_tags
+    from dam.tools.config.parse_utils import extract_date_and_tags
 
 from typing import Optional
 
