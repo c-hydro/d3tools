@@ -20,7 +20,7 @@ def substitute_values(structure, tag_dict, **kwargs):
     else:
         return structure
 
-def substitute_string(string, tag_dict, rec = False):
+def substitute_string(string, tag_dict, rec=False):
     """
     Replace the {tags} in the string with the values in the tag_dict.
     Handles datetime objects with format specifiers.
@@ -30,42 +30,44 @@ def substitute_string(string, tag_dict, rec = False):
         return string
 
     pattern = r'{([\w.]+)(?::(.*?))?}'
-    match = re.search(pattern, string)
 
-    if not match:
-        return string
-    
-    key = match.group(1)
-    fmt = match.group(2)
-    value = tag_dict.get(key)
+    def replace_match(match, tag_dict):
+        key = match.group(1)
+        fmt = match.group(2)
+        value = tag_dict.get(key)
 
-    if value is None:
-        return string
-    
-    def format_value(value, fmt):
-        if isinstance(value, str):
-            try:
-                value = get_date_from_str(value)
-            except ValueError:
-                pass
-        
+        if value is None:
+            return match.group(0)  # Return the original match if the key is not found
+
         if isinstance(value, dt.datetime) and fmt:
             return value.strftime(fmt)
+        elif fmt:
+            return format(value, fmt)
         else:
             return str(value)
 
-    if isinstance(value, (list, tuple)):
-        return [format_value(v, fmt) for v in value]
-    else:
-        replacement = format_value(value, fmt)
-        new_str = string.replace(match.group(0), replacement)
-        while rec:
-            if string == new_str:
-                break
-            else:
-                string = new_str
-                new_str = substitute_string(string, tag_dict, rec)
-        return new_str
+    def generate_strings(string, tag_dict):
+        matches = re.findall(pattern, string)
+        if not matches:
+            return string
+
+        key = matches[0][0]
+        fmt = matches[0][1]
+        value = tag_dict.get(key)
+
+        if isinstance(value, list):
+            results = []
+            for val in value:
+                temp_dict = tag_dict.copy()
+                temp_dict[key] = val
+                this_replace = lambda m: replace_match(m, temp_dict)
+                this_replacement = re.sub(pattern, this_replace, string, count=1)
+                results.append(generate_strings(this_replacement, temp_dict))
+            return results
+        else:
+            return re.sub(pattern, lambda m: replace_match(m, tag_dict), string)
+
+    return generate_strings(string, tag_dict)
 
 def set_dataset(structure, obj_dict):
     """
