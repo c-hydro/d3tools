@@ -12,13 +12,13 @@ import re
 try:
     from ..timestepping import TimeRange
     from ..timestepping.timestep import TimeStep
-    from ..config.parse import substitute_string
-    from ..config.options import Options
+    from ..config.parse_utils import substitute_string, extract_date_and_tags
+    from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 except ImportError:
     from timestepping import TimeRange
     from timestepping.timestep import TimeStep
-    from config.parse import substitute_string
-    from config.options import Options
+    from tools.config.parse_utils import substitute_string, extract_date_and_tags
+    from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -42,23 +42,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
-    def __init__(self, path: Optional[str] = None, filename: Optional[str] = None, **kwargs):
-        if path is not None:
-            self.dir = path
-        elif 'dir' in kwargs:
-            self.dir = kwargs.pop('dir')
-
-        if filename is not None:
-            self.file = filename
-        elif 'file' in kwargs:
-            self.file = kwargs.pop('file')
-        
-        self.path_pattern = os.path.join(self.dir, self.file)
+    def __init__(self, **kwargs):
 
         if 'name' in kwargs:
             self.name   = kwargs.pop('name')
         else:
-            basename_noext  = '.'.join(os.path.basename(self.file).split('.')[:-1])
+            basename_noext  = '.'.join(os.path.basename(self.key_pattern).split('.')[:-1])
             basename_nodate = basename_noext.replace('%Y', '').replace('%m', '').replace('%d', '')
             if basename_nodate.endswith('_'):
                 basename_nodate = basename_nodate[:-1]
@@ -72,7 +61,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'format' in kwargs:
             self.format = kwargs.pop('format')
         else:
-            self.format = os.path.basename(self.file).split('.')[-1]
+            self.format = get_format_from_path(self.key_pattern)
 
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
@@ -83,36 +72,43 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
 
+        if 'tile_names' in kwargs:
+            self.tile_names = kwargs.pop('tile_names')
+
         self._template = {}
-        self.options = Options(kwargs)
+        self.options = kwargs
         self.tags = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
-
+    
     def update(self, in_place = False, **kwargs):
-        new_path = substitute_string(self.dir, kwargs)
-        new_file = substitute_string(self.file, kwargs)
         new_name = substitute_string(self.name, kwargs)
+        new_key_pattern = substitute_string(self.key_pattern, kwargs)
 
         if in_place:
-            self.dir  = new_path
-            self.file = new_file
             self.name = new_name
-            self.path_pattern = self.path(**kwargs)
+            self.key_pattern = self.get_key(**kwargs)
             self.tags.update(kwargs)
             return self
         else:
             new_options = self.options.copy()
-            new_options.update({'dir': new_path, 'file': new_file, 'name': new_name})
+            new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
             new_dataset = self.__class__(**new_options)
 
             new_dataset._template = self._template
+            new_dataset.tile_names = self.tile_names
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
             new_dataset.tags = new_tags
             return new_dataset
+
+    def copy(self, template = False):
+        new_dataset = self.update()
+        if template:
+            new_dataset._template = self._template
+        return new_dataset
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
@@ -146,14 +142,69 @@ class Dataset(ABC, metaclass=DatasetMeta):
     
     @format.setter
     def format(self, value):
-        if value in ['tif', 'tiff']:
-            self._format = 'geotiff'
-        elif value in ['nc', 'netcdf']:
-            self._format = 'netcdf'
-        elif value in ['csv']:
-            self._format = 'csv'
+        self._format = value
+
+    @property
+    def has_tiles (self):
+        return '{tile}' in self.key_pattern
+
+    @property
+    def tile_names(self):
+        if not hasattr(self, '_tile_names'):
+            self._tile_names = self.available_tags.get('tile', ['__tile__'])
+
+        return self._tile_names
+    
+    @tile_names.setter
+    def tile_names(self, value):
+        if isinstance(value, str):
+            self._tile_names = self.get_tile_names_from_file(value)
+        elif isinstance(value, list) or isinstance(value, tuple):
+            self._tile_names = list(value)
         else:
-            raise ValueError(f"Invalid format: {value}, only geotiff and csv are currently supported")
+            raise ValueError('Invalid tile names.')
+        
+    def get_tile_names_from_file(self, filename: str) -> list[str]:
+        with open(filename, 'r') as f:
+            return [l.strip() for l in f.readlines()]
+
+    @property
+    def ntiles(self):
+        return len(self.tile_names)
+
+    @property
+    def key_pattern(self):
+        raise NotImplementedError
+
+    @key_pattern.setter
+    def key_pattern(self, value):
+        raise NotImplementedError
+
+    @property
+    def available_keys(self):
+        raise NotImplementedError
+
+    @property
+    def is_static(self):
+        return not '{' in self.key_pattern and not '%' in self.key_pattern
+
+    @property
+    def available_tags(self):
+        all_keys = self.available_keys
+        all_tags = {}
+        all_dates = set()
+        for key in all_keys:
+            this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
+            for tag in this_tags:
+                if tag not in all_tags:
+                    all_tags[tag] = set()
+                all_tags[tag].add(this_tags[tag])
+            all_dates.add(this_date)
+        
+        all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
+        all_tags['time'] = list(all_dates)
+
+        return all_tags
 
     ## TIME-SIGNATURE MANAGEMENT
     @property
@@ -175,6 +226,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return None
         if isinstance(timestep, dt.datetime):
             time = timestep
+            # calculating the length in this way is not perfect,
+            # but should work given that timesteps are always requested in order
+            if hasattr(self, 'previous_requested_time'):
+                length = (time - self.previous_requested_time).days
+            else:
+                length = None
+            self.previous_requested_time = time
         else:
             time_signature = self.time_signature
             if time_signature == 'start':
@@ -183,24 +241,32 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 time = timestep.end
             elif time_signature == 'end+1':
                 time = (timestep+1).start
+            length = timestep.get_length()
+            self.previous_requested_time = time
 
-        path_without_tags = re.sub(r'\{.*\}', '', self.path_pattern)
-        hasyear = '%Y' in path_without_tags
+        key_without_tags = re.sub(r'\{.*\}', '', self.key_pattern)
+        hasyear = '%Y' in key_without_tags
 
+        # change the date to 28th of February if it is the 29th of February,
+        # but only if no year is present in the path (i.e. this is a parameter)
+        # and the length is greater than 1 (i.e. not a daily timestep)
         if not hasyear and time.month == 2 and time.day == 29:
-            time = time.replace(day = 28)
+            if length is not None and length > 1:
+                time = time.replace(day = 28)
         
         return time
 
     ## INPUT/OUTPUT METHODS
-    def get_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
-        full_path = self.path(time, **kwargs)
+    def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
+        full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv':
-            return self._read_data(full_path)
+        if self.format == 'csv' and self.check_data(full_key):
+            return self._read_data(full_key)
 
         if self.check_data(time, **kwargs):
-            data = self._read_data(full_path)
+            data = self._read_data(full_key)
+            if as_is:
+                return data
 
             # ensure that the data has descending latitudes
             data = straighten_data(data)
@@ -211,27 +277,29 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
             data = self.make_data(time, **kwargs)
+            if as_is:
+                return data
 
         else:
-            raise ValueError(f'Could not resolve data from {full_path}.')
+            raise ValueError(f'Could not resolve data from {full_key}.')
 
         # if there is no template for the dataset, create it from the data
-        template = self.get_template(make_it=False, **kwargs)
-        if template is None:
-            template = self.make_templatearray_from_data(data)
-            self.set_template(template, **kwargs)
+        template_dict = self.get_template_dict(make_it=False, **kwargs)
+        if template_dict is None:
+            #template = self.make_templatearray_from_data(data)
+            self.set_template(data, **kwargs)
         else:
             # otherwise, update the data in the template
             # (this will make sure there is no errors in the coordinates due to minor rounding)
             attrs = data.attrs
-            data = self.set_data_to_template(data, template)
+            data = self.set_data_to_template(data, template_dict)
             data.attrs.update(attrs)
         
-        data.attrs.update({'source_path': full_path})
+        data.attrs.update({'source_key': full_key})
         return data
     
     @abstractmethod
-    def _read_data(self, input_path:str):
+    def _read_data(self, input_key:str):
         raise NotImplementedError
     
     def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame):
@@ -256,26 +324,26 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         self.check_data_for_writing(data)
 
-        output_file = self.path(time, **kwargs)
+        output_file = self.get_key(time, **kwargs)
 
         if self.format == 'csv':
             self._write_data(data, output_file)
             return
 
         # if data is a numpy array, ensure there is a template available
-        template = self.get_template(**kwargs, make_it=False)
-        if template is None:
+        template_dict = self.get_template_dict(**kwargs, make_it=False)
+        if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-                templatearray = self.make_templatearray_from_data(data)
-                self.set_template(templatearray, **kwargs)
-                template = self.get_template(**kwargs, make_it=False)
+                #templatearray = self.make_templatearray_from_data(data)
+                self.set_template(data, **kwargs)
+                template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-
-        output = self.set_data_to_template(data, template)
+            
+        output = self.set_data_to_template(data, template_dict)
         output = set_type(output)
         output = straighten_data(output)
-        output.attrs['source_path'] = output_file
+        output.attrs['source_key'] = output_file
 
         # if necessary generate the thubnail
         if 'parents' in metadata:
@@ -311,12 +379,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
             
             self.notif_opts['metadata'] = output.attrs
             self.notify(self.notif_opts)
-
+    
         # write the data
         self._write_data(output, output_file)
 
     @abstractmethod
-    def _write_data(self, output: xr.DataArray, output_path: str):
+    def _write_data(self, output: xr.DataArray, output_key: str):
         raise NotImplementedError
 
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
@@ -329,12 +397,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        for timestep in time_range.days:
-            time = timestep.start
-            if self.check_data(time, **kwargs):
+        all_times = self.update(**kwargs).available_tags.get('time', [])
+        all_times.sort()
+        for time in all_times:
+            if time_range.contains(time):
                 yield time
-            elif hasattr(self, 'parents') and self.parents is not None:
-                if all(parent.check_data(time, **kwargs) for parent in self.parents.values()):
+        
+        if len(all_times) == 0 and hasattr(self, 'parents') and self.parents is not None:
+            parent_times = [parent.get_times(time_range, **kwargs) for parent in self.parents.values()]
+            all_times = parent_times[0]
+            all_times.sort()
+            for time in all_times:
+                if all(time in parent_times[i] for i in range(1, len(parent_times))):
                     yield time
 
     @withcases
@@ -343,17 +417,26 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Get a list of times between two dates.
         """
         return list(self._get_times(time_range, **kwargs))
-
+        
     @withcases
-    def check_data(self, time: Optional[TimeStep] = None, **kwargs) -> bool:
+    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
         """
         Check if data is available for a given time.
         """
-        full_path = self.path(time, **kwargs)
-        return self._check_data(full_path)
+        updated_self:Dataset = self.update(**kwargs)
+        if 'tile' in kwargs:
+            full_key = updated_self.get_key(time)
+            return self._check_data(full_key)
+        
+        for tile in updated_self.tile_names:
+            full_key = updated_self.get_key(time, tile = tile)
+            if not self._check_data(full_key):
+                return False
+        else:
+            return True
     
     @withcases
-    def find_times(self, times: list[TimeStep], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
+    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
         """
         Find the times for which data is available.
         """
@@ -366,9 +449,21 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return ids
         else:
             return [times[i] for i in ids]
-    
+
+    @withcases
+    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False,**kwargs) -> list[str]:
+        """
+        Find the tiles for which data is available.
+        """
+        all_tiles = self.tile_names
+        available_tiles = [tile for tile in all_tiles if self.check_data(time, tile = tile, **kwargs)]
+        if not rev:
+            return available_tiles
+        else:
+            return [tile for tile in all_tiles if tile not in available_tiles]
+
     @abstractmethod
-    def _check_data(self, data_path) -> bool:
+    def _check_data(self, data_key) -> bool:
         raise NotImplementedError
 
     def get_start(self, **kwargs) -> dt.datetime:
@@ -381,39 +476,51 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return time
 
     ## METHODS TO MANIPULATE THE DATASET
-    def path(self, time: Optional[TimeStep] = None, **kwargs):
+    def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
         
         time = self.get_time_signature(time)
-
-        raw_path = substitute_string(self.path_pattern, kwargs)
-        path = time.strftime(raw_path) if time is not None else raw_path
-        return path
+        raw_key = substitute_string(self.key_pattern, kwargs)
+        key = time.strftime(raw_key) if time is not None else raw_key
+        return key
 
     def set_parents(self, parents:dict[str:'Dataset'], fn:Callable):
         self.parents = parents
         self.fn = fn
 
     ## METHODS TO MANIPULATE THE TEMPLATE
-    def get_template(self, make_it:bool = True, **kwargs):
-        tile = kwargs.pop('tile', '__tile__')
+    def get_template_dict(self, make_it:bool = True, **kwargs):
+        tile = kwargs.pop('tile', None)
+        if tile is None:
+            if self.has_tiles:
+                template_dict = {}
+                for tile in self.tile_names:
+                    template_dict[tile] = self.get_template_dict(make_it = make_it, tile = tile, **kwargs)
+                return template_dict
+            else:
+                tile = '__tile__'
+
         template_dict = self._template.get(tile, None)
-        start_time = self.get_start(**kwargs)
-        if template_dict is None and start_time is not None and make_it:
-            start_data = self.get_data(time = start_time, tile = tile, **kwargs)
-            templatearray = self.make_templatearray_from_data(start_data)
-            self.set_template(templatearray, tile = tile)
-        elif template_dict is not None:
-            templatearray = self.build_templatearray(template_dict)
-        else:
-            templatearray = None
+        if template_dict is None and make_it:
+            start_time = self.get_start(**kwargs)
+            if start_time is not None:
+                start_data = self.get_data(time = start_time, tile = tile, **kwargs)
+                #templatearray = self.make_templatearray_from_data(start_data)
+                self.set_template(start_data, tile = tile)
+                template_dict = self.get_template_dict(make_it = False, **kwargs)
         
-        return templatearray
+        return template_dict
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
-        self._template[tile] = {'crs': templatearray.attrs.get('crs'),
+        crs = templatearray.attrs.get('crs')
+        if crs is not None:
+            crs_wkt = crs.to_wkt()
+        else:
+            crs_wkt = templatearray.spatial_ref.crs_wkt
+
+        self._template[tile] = {'crs': crs_wkt,
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
                                 'dims_names' : templatearray.dims,
                                 'spatial_dims' : (templatearray.rio.x_dim, templatearray.rio.y_dim),
@@ -432,29 +539,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._template[tile]['dims_starts'][dim] = float(start)
             self._template[tile]['dims_ends'][dim] = float(end)
             self._template[tile]['dims_lengths'][dim] = length
-
-    @staticmethod
-    def make_templatearray_from_data(data: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
-        """
-        Make a template xarray.DataArray from a given xarray.DataArray.
-        """
-        nodata_value = data.attrs.get('_FillValue', np.nan)
-
-        if isinstance(data, xr.Dataset):
-            vararrays = [Dataset.make_templatearray_from_data(data[var]) for var in data]
-            template  = xr.merge(vararrays)
-        else:
-            template = data.copy(data = np.full(data.shape, nodata_value))
-
-        # clear all attributes
-        template.attrs = {}
-        template.encoding = {}
-        
-        # make crs and nodata explicit as attributes
-        template.attrs = {'crs': data.rio.crs.to_wkt(),
-                          '_FillValue': nodata_value}
-
-        return template
 
     @staticmethod
     def build_templatearray(template_dict: dict) -> xr.DataArray|xr.Dataset:
@@ -481,19 +565,31 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @staticmethod
     def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
-                             template: xr.DataArray|xr.Dataset) -> xr.DataArray|xr.Dataset:
+                             template_dict: dict) -> xr.DataArray|xr.Dataset:
         
         if isinstance(data, xr.DataArray):
-            data = data.rio.set_spatial_dims(template.rio.x_dim, template.rio.y_dim).rio.write_coordinate_system()
-            data = data.transpose(*template.dims)
-            output = template.copy(data = data)
+            x_dim, y_dim = template_dict['spatial_dims']
+            crs = template_dict['crs']
+            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.set_crs(crs).rio.write_coordinate_system()
+
+            for dim in template_dict['dims_names']:
+                start  = template_dict['dims_starts'][dim]
+                end    = template_dict['dims_ends'][dim]
+                length = template_dict['dims_lengths'][dim]
+                data[dim] = np.linspace(start, end, length)
+            data = data.transpose(*template_dict['dims_names'])
+
+            nodata_value = template_dict['_FillValue']
+            data.attrs['_FillValue'] = nodata_value
+
         elif isinstance(data, np.ndarray):
-            output = template.copy(data = data)
+            template = Dataset.build_templatearray(template_dict)
+            data = template.copy(data = data)
         elif isinstance(data, xr.Dataset):
-            all_outputs = [Dataset.set_data_to_template(data[var], template[var]) for var in template]
-            output = xr.merge(all_outputs)
+            all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template['variables']]
+            data = xr.merge(all_data)
         
-        return output
+        return data
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
@@ -501,12 +597,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Set metadata for the data.
         """
-        metadata = {}
-        
-        metadata.update(kwargs)
+        metadata = {}        
         if hasattr(data, 'attrs'):
+            if 'long_name' in data.attrs:
+                data.attrs.pop('long_name')
             metadata.update(data.attrs)
         
+        metadata.update(kwargs)
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if time is not None:
             datatime = self.get_time_signature(time)
@@ -573,87 +670,3 @@ class Dataset(ABC, metaclass=DatasetMeta):
         recipients = notification_options.pop('to')
         subject = notification_options.pop('subject')
         notification.send(recipients, subject, **notification_options)
-
-## FUNCTIONS TO MANIPULATE THE DATA
-
-# DECORATOR TO MAKE THE FUNCTION WORK WITH XR.DATASET
-def withxrds(func):
-    def wrapper(*args, **kwargs):
-        if isinstance(args[0], xr.Dataset):
-            return xr.Dataset({var: func(args[0][var], **kwargs) for var in args[0]})
-        else:
-            return func(*args, **kwargs)
-    return wrapper
-
-@withxrds
-def straighten_data(data: xr.DataArray) -> xr.DataArray:
-    """
-    Ensure that the data has descending latitudes.
-    """
-    
-    try:
-        y_dim = data.rio.y_dim
-    except rxr.exceptions.MissingSpatialDimensionError:
-        y_dim = None
-
-    if y_dim is None:
-        for dim in data.dims:
-            if 'lat' in dim.lower() or 'y' in dim.lower():
-                y_dim = dim
-                break
-    if data[y_dim].data[0] < data[y_dim].data[-1]:
-        data = data.sortby(y_dim, ascending = False)
-
-    return data
-
-@withxrds
-def reset_nan(data: xr.DataArray) -> xr.DataArray:
-    """
-    Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
-    """
-
-    data_type = data.dtype
-    new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
-    fill_value = data.attrs.get('_FillValue', new_fill_value)
-
-    data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
-    data.attrs['_FillValue'] = new_fill_value
-
-    return data
-
-@withxrds
-def set_type(data: xr.DataArray) -> xr.DataArray:
-    """
-    Make sure that the data is the smallest possible.
-    """
-
-    max_value = data.max()
-    min_value = data.min()
-
-    # check if output contains floats or integers
-    if np.issubdtype(data.dtype, np.floating):
-        if max_value < 2**31 and min_value > -2**31:
-            data = data.astype(np.float32)
-        else:
-            data = data.astype(np.float64)
-    elif np.issubdtype(data.dtype, np.integer):
-        if min_value >= 0:
-            if max_value <= 255:
-                data = data.astype(np.uint8)
-            elif max_value <= 65535:
-                data = data.astype(np.uint16)
-            elif max_value < 2**31:
-                data = data.astype(np.uint32)
-            else:
-                data = data.astype(np.uint64)
-        else:
-            if max_value <= 127 and min_value >= -128:
-                data = data.astype(np.int8)
-            elif max_value <= 32767 and min_value >= -32768:
-                data = data.astype(np.int16)
-            elif max_value < 2**31 and min_value > -2**31:
-                data = data.astype(np.int32)
-            else:
-                data = data.astype(np.int64)
-
-    return reset_nan(data)

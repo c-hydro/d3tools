@@ -183,8 +183,8 @@ class Thumbnail:
             if isinstance(kwargs['annotation'], dict):
                 annotation_opts = kwargs.pop('annotation')
                 if 'text' not in annotation_opts:
-                    if 'source_path' in self.src.attrs:
-                        annotation_opts['text'] = os.path.basename(self.src.attrs['source_path'])
+                    if 'source_key' in self.src.attrs:
+                        annotation_opts['text'] = os.path.basename(self.src.attrs['source_key'])
                     elif hasattr(self, 'raster_file'):
                         annotation_opts['text'] = os.path.basename(self.raster_file)
                 self.add_annotation(**annotation_opts)
@@ -193,8 +193,8 @@ class Thumbnail:
             elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
                 pass
     
-        elif 'source_path' in self.src.attrs:
-            annotation_txt = os.path.basename(self.src.attrs['source_path'])
+        elif 'source_key' in self.src.attrs:
+            annotation_txt = os.path.basename(self.src.attrs['source_key'])
             self.add_annotation(annotation_txt)
         elif hasattr(self, 'raster_file'):
             annotation_txt = os.path.basename(self.raster_file)
