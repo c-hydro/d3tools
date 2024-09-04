@@ -8,11 +8,12 @@ try:
     from .dataset import Dataset
     from ..timestepping.timestep import TimeStep
     from ..config.parse_utils import extract_date_and_tags
-    from .io_utils import write_to_file, read_from_file
+    from .io_utils import write_to_file, read_from_file, rm_file
 except ImportError:
     from dataset import Dataset
     from timestepping.timestep import TimeStep
-    from dam.tools.config.parse_utils import extract_date_and_tags
+    from tools.config.parse_utils import extract_date_and_tags
+    from io_utils import write_to_file, read_from_file, rm_file
 
 from typing import Optional
 
@@ -54,6 +55,9 @@ class LocalDataset(Dataset):
     
     def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str) -> None:
         write_to_file(output, output_path, self.format)
+
+    def _rm_data(self, path) -> None:
+        rm_file(path)
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:

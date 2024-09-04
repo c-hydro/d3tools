@@ -39,6 +39,12 @@ def substitute_string(string, tag_dict, rec=False):
         if value is None:
             return match.group(0)  # Return the original match if the key is not found
 
+        if isinstance(value, str):
+            try:
+                value = get_date_from_str(value)
+            except ValueError:
+                value = value
+
         if isinstance(value, dt.datetime) and fmt:
             return value.strftime(fmt)
         elif fmt:

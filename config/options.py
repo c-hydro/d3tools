@@ -108,10 +108,14 @@ class Options(dict):
         Get the value of the specified key.
         If the key is a list, it will return the value of the first key that is found.
         """
-        if ignore_case and isinstance(key, str):
-            key = key.lower()
+        if isinstance(key, str):
+            if ignore_case:
+                key = key.lower()
+
             for k, v in self.items():
-                if k.lower() == key:
+                if ignore_case:
+                    k = k.lower()
+                if k == key:
                     outvalue, outkey = v, k
                     break
             else:
