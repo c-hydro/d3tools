@@ -3,6 +3,7 @@ import rioxarray as rxr
 import xarray as xr
 import numpy as np
 import os
+import json
 
 from typing import Optional
 
@@ -21,6 +22,9 @@ def get_format_from_path(path: str) -> str:
     # check if the file is a netcdf
     elif extension == 'nc':
         return 'netcdf'
+    
+    elif extension == 'json':
+        return 'json'
 
     raise ValueError(f'File format not supported: {extension}')
 
@@ -32,6 +36,11 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
     # read the data from a csv
     if format == 'csv':
         data = pd.read_csv(path)
+
+    # read the data from a json
+    elif format == 'json':
+        with open(path, 'r') as f:
+            data = json.load(f)
 
     # read the data from a geotiff
     elif format == 'geotiff':
@@ -56,6 +65,11 @@ def write_to_file(data, path, format: Optional[str] = None) -> None:
     # write the data to a csv
     if format == 'csv':
         data.to_csv(path)
+
+    # write the data to a json
+    elif format == 'json':
+        with open(path, 'w') as f:
+            json.dump(data, f)
 
     # write the data to a geotiff
     elif format == 'geotiff':

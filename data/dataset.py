@@ -276,8 +276,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
         full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv' and self.check_data(full_key):
-            return self._read_data(full_key)
+        if self.format == 'csv' or self.format == 'json':
+            if self._check_data(full_key):
+                return self._read_data(full_key)
 
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
@@ -399,8 +400,29 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # write the data
         self._write_data(output, output_file)
 
+    def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        data = self.get_data(time, **kwargs)
+        timestamp = self.get_time_signature(time)
+        if timestamp is None:
+            new_key = substitute_string(new_key_pattern, kwargs)
+        else:
+            new_key = timestamp.strftime(substitute_string(new_key_pattern, kwargs))
+        self._write_data(data, new_key)
+
+    def rm_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        key = self.get_key(time, **kwargs)
+        self._rm_data(key)
+
+    def move_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        self.copy_data(new_key_pattern, time, **kwargs)
+        self.rm_data(time, **kwargs)
+
     @abstractmethod
     def _write_data(self, output: xr.DataArray, output_key: str):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _rm_data(self, key: str):
         raise NotImplementedError
 
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
