@@ -97,7 +97,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_dataset = self.__class__(**new_options)
 
             new_dataset._template = self._template
-            new_dataset.tile_names = self.tile_names
+            if hasattr(self, '_tile_names'):
+                new_dataset._tile_names = self._tile_names
+
+            new_dataset.time_signature = self.time_signature
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
@@ -150,8 +153,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def tile_names(self):
-        if not hasattr(self, '_tile_names'):
-            self._tile_names = self.available_tags.get('tile', ['__tile__'])
+        if not self.has_tiles:
+            self._tile_names = ['__tile__']
+        
+        if not hasattr(self, '_tile_names') or self._tile_names is None:
+            self._tile_names = self.available_tags.get('tile')
 
         return self._tile_names
     
@@ -190,11 +196,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def available_tags(self):
-        all_keys = self.available_keys
+        return self.get_available_tags()
+
+    def get_available_tags(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        updated_self = self.update(**kwargs)
+
+        if isinstance(time, TimeStep):
+            time = self.get_time_signature(time)
+
+        all_keys = updated_self.available_keys
         all_tags = {}
         all_dates = set()
         for key in all_keys:
             this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
+            if time is not None and this_date != time:
+                continue
+
             for tag in this_tags:
                 if tag not in all_tags:
                     all_tags[tag] = set()
@@ -221,7 +238,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._time_signature = value
 
     def get_time_signature(self, timestep: Optional[TimeStep | dt.datetime]) -> dt.datetime:
-        
         if timestep is None:
             return None
         if isinstance(timestep, dt.datetime):
@@ -244,7 +260,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = timestep.get_length()
             self.previous_requested_time = time
 
-        key_without_tags = re.sub(r'\{.*\}', '', self.key_pattern)
+        key_without_tags = re.sub(r'\{[^}]*\}', '', self.key_pattern)
         hasyear = '%Y' in key_without_tags
 
         # change the date to 28th of February if it is the 29th of February,
@@ -260,8 +276,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
         full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv' and self.check_data(full_key):
-            return self._read_data(full_key)
+        if self.format == 'csv' or self.format == 'json':
+            if self._check_data(full_key):
+                return self._read_data(full_key)
 
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
@@ -383,8 +400,29 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # write the data
         self._write_data(output, output_file)
 
+    def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        data = self.get_data(time, **kwargs)
+        timestamp = self.get_time_signature(time)
+        if timestamp is None:
+            new_key = substitute_string(new_key_pattern, kwargs)
+        else:
+            new_key = timestamp.strftime(substitute_string(new_key_pattern, kwargs))
+        self._write_data(data, new_key)
+
+    def rm_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        key = self.get_key(time, **kwargs)
+        self._rm_data(key)
+
+    def move_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        self.copy_data(new_key_pattern, time, **kwargs)
+        self.rm_data(time, **kwargs)
+
     @abstractmethod
     def _write_data(self, output: xr.DataArray, output_key: str):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _rm_data(self, key: str):
         raise NotImplementedError
 
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
@@ -570,7 +608,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if isinstance(data, xr.DataArray):
             x_dim, y_dim = template_dict['spatial_dims']
             crs = template_dict['crs']
-            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.set_crs(crs).rio.write_coordinate_system()
+            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.write_crs(crs).rio.write_coordinate_system()
 
             for dim in template_dict['dims_names']:
                 start  = template_dict['dims_starts'][dim]
