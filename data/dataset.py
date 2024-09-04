@@ -97,7 +97,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_dataset = self.__class__(**new_options)
 
             new_dataset._template = self._template
-            new_dataset.tile_names = self.tile_names
+            if hasattr(self, '_tile_names'):
+                new_dataset._tile_names = self._tile_names
+
+            new_dataset.time_signature = self.time_signature
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
@@ -150,8 +153,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def tile_names(self):
-        if not hasattr(self, '_tile_names'):
-            self._tile_names = self.available_tags.get('tile', ['__tile__'])
+        if not self.has_tiles:
+            self._tile_names = ['__tile__']
+        
+        if not hasattr(self, '_tile_names') or self._tile_names is None:
+            self._tile_names = self.available_tags.get('tile')
 
         return self._tile_names
     
@@ -221,7 +227,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._time_signature = value
 
     def get_time_signature(self, timestep: Optional[TimeStep | dt.datetime]) -> dt.datetime:
-        
         if timestep is None:
             return None
         if isinstance(timestep, dt.datetime):
