@@ -35,6 +35,9 @@ class MemoryDataset(Dataset):
     def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str):
         self.data_dict[output_key] = output
 
+    def _rm_data(self, key):
+        self.data_dict.pop(key)
+
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
         return data_path in self.data_dict

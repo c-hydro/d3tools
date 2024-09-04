@@ -79,6 +79,9 @@ def write_to_file(data, path, format: Optional[str] = None) -> None:
     elif format == 'netcdf':
         data.to_netcdf(path)
 
+def rm_file(path) -> None:
+    os.remove(path)
+
 # DECORATOR TO MAKE THE FUNCTION BELOW WORK WITH XR.DATASET
 def withxrds(func):
     def wrapper(*args, **kwargs):

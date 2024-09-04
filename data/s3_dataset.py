@@ -65,6 +65,15 @@ class S3Dataset(Dataset):
             if output_key not in self.available_keys:
                 self.available_keys.append(output_key)
 
+    def _rm_data(self, key):
+        local_key = os.path.join(self.tmp_dir, key)
+        if os.path.exists(local_key):
+            os.remove(local_key)
+        self.s3_client.delete_object(Bucket = self.bucket_name, Key = key)
+        if self.available_keys_are_cached:
+            if key in self.available_keys:
+                self.available_keys.pop(key)
+
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
         try:
