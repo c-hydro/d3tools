@@ -260,7 +260,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = timestep.get_length()
             self.previous_requested_time = time
 
-        key_without_tags = re.sub(r'\{.*\}', '', self.key_pattern)
+        key_without_tags = re.sub(r'\{[^}]*\}', '', self.key_pattern)
         hasyear = '%Y' in key_without_tags
 
         # change the date to 28th of February if it is the 29th of February,
