@@ -196,11 +196,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def available_tags(self):
-        all_keys = self.available_keys
+        return self.get_available_tags()
+
+    def get_available_tags(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        updated_self = self.update(**kwargs)
+
+        if isinstance(time, TimeStep):
+            time = self.get_time_signature(time)
+
+        all_keys = updated_self.available_keys
         all_tags = {}
         all_dates = set()
         for key in all_keys:
             this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
+            if time is not None and this_date != time:
+                continue
+
             for tag in this_tags:
                 if tag not in all_tags:
                     all_tags[tag] = set()
