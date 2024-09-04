@@ -586,7 +586,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if isinstance(data, xr.DataArray):
             x_dim, y_dim = template_dict['spatial_dims']
             crs = template_dict['crs']
-            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.set_crs(crs).rio.write_coordinate_system()
+            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.write_crs(crs).rio.write_coordinate_system()
 
             for dim in template_dict['dims_names']:
                 start  = template_dict['dims_starts'][dim]
