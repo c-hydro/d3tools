@@ -11,6 +11,8 @@ class Options(dict):
         for k, v in self.items():
             if isinstance(v, dict):
                 self[k] = Options(v)
+            elif isinstance(v, list):
+                self[k] = [Options(i) if isinstance(i, dict) else i for i in v]
 
     def __getattr__(self, item):
         key_paths = self.find_keys(item, get_all = True)
@@ -59,11 +61,11 @@ class Options(dict):
 
     def parse(self, **kwargs):
         """
-        Parse the options, using themselves as tags.
+        Parse the options, using the tags.
         And parse the datasets in the options.
         """
         
-        tags = flatten_dict(self, **kwargs)
+        tags = self.get('tags', {}, ignore_case = True) #flatten_dict(self, **kwargs)
         tags = substitute_values(tags, tags, rec=True)
         parsed_options = Options(substitute_values(self, tags, rec=True))
 
@@ -113,9 +115,8 @@ class Options(dict):
                 key = key.lower()
 
             for k, v in self.items():
-                if ignore_case:
-                    k = k.lower()
-                if k == key:
+                _key = k.lower() if ignore_case else k
+                if _key == key:
                     outvalue, outkey = v, k
                     break
             else:
