@@ -113,9 +113,8 @@ class Options(dict):
                 key = key.lower()
 
             for k, v in self.items():
-                if ignore_case:
-                    k = k.lower()
-                if k == key:
+                _key = k.lower() if ignore_case else k
+                if _key == key:
                     outvalue, outkey = v, k
                     break
             else:
