@@ -59,11 +59,11 @@ class Options(dict):
 
     def parse(self, **kwargs):
         """
-        Parse the options, using themselves as tags.
+        Parse the options, using the tags.
         And parse the datasets in the options.
         """
         
-        tags = flatten_dict(self, **kwargs)
+        tags = self.get('tags', {}, ignore_case = True) #flatten_dict(self, **kwargs)
         tags = substitute_values(tags, tags, rec=True)
         parsed_options = Options(substitute_values(self, tags, rec=True))
 
