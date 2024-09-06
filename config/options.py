@@ -11,6 +11,8 @@ class Options(dict):
         for k, v in self.items():
             if isinstance(v, dict):
                 self[k] = Options(v)
+            elif isinstance(v, list):
+                self[k] = [Options(i) if isinstance(i, dict) else i for i in v]
 
     def __getattr__(self, item):
         key_paths = self.find_keys(item, get_all = True)
