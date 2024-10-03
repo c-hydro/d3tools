@@ -72,6 +72,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
 
+        if 'log' in kwargs:
+            self.log_opts = kwargs.pop('log')
+
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
 
@@ -358,13 +361,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _read_data(self, input_key:str):
         raise NotImplementedError
     
-    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame):
+    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame|str|dict):
         """"
         Ensures that the data is compatible with the format of the dataset.
         """
         if isinstance(data, pd.DataFrame):
             if not self.format == 'csv':
                 raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
+        elif isinstance(data, str):
+            if not self.format == 'txt':
+                raise ValueError(f'Cannot write a string to a {self.format} file.')
+        elif isinstance(data, dict):
+            if not self.format == 'json':
+                raise ValueError(f'Cannot write a dictionary to a {self.format} file.')
         elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
             if self.format == 'csv':
                 raise ValueError(f'Cannot write matrix data to a csv file.')
@@ -382,10 +391,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         output_file = self.get_key(time, **kwargs)
 
-        if self.format == 'csv':
-            self._write_data(data, output_file)
+        if self.format in ['csv', 'json', 'txt']:
+            append = kwargs.pop('append', False)
+            self._write_data(data, output_file, append = append)
             return
-
+        
         # if data is a numpy array, ensure there is a template available
         template_dict = self.get_template_dict(**kwargs, make_it=False)
         if template_dict is None:
@@ -429,6 +439,33 @@ class Dataset(ABC, metaclass=DatasetMeta):
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
 
+        # write the data
+        self._write_data(output, output_file)
+        
+        if hasattr(self, 'log_opts'):
+            if isinstance(self.log_opts, str|Dataset):
+                log_output = self.log_opts
+                log_opts = {}
+            elif isinstance(self.log_opts, dict):
+                log_opts = self.log_opts.copy()
+                log_output = log_opts.pop('file')
+            other_to_log = {}
+            other_to_log['source_key'] = output_file
+            if any(k != '' for k in parents):
+                other_to_log['parents'] = []
+                for key, value in parents.items():
+                    other_to_log['parents'] = value.attrs.get('source_key', key)
+            if hasattr(self, 'thumbnail_file'):
+                other_to_log['thumbnail'] = self.thumbnail_file
+            log_dict = self.get_log(output, time, kwargs, other_to_log, **log_opts)
+            tags = kwargs.copy()
+            tags['now'] = dt.datetime.now()
+            if isinstance(log_output, str):
+                log_output = timestamp.strftime(substitute_string(log_output, tags))
+            elif isinstance(log_output, Dataset):
+                log_output = log_output.update(time, **tags)
+            self.write_log(log_dict, log_output, time, **kwargs)
+        
         if hasattr(self, 'notif_opts'):
             for key, value in self.notif_opts.items():
                 if isinstance(value, str):
@@ -436,9 +473,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
             
             self.notif_opts['metadata'] = output.attrs
             self.notify(self.notif_opts.copy())
-    
-        # write the data
-        self._write_data(output, output_file)
 
     def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         data = self.get_data(time, **kwargs)
@@ -751,3 +785,72 @@ class Dataset(ABC, metaclass=DatasetMeta):
         recipients = notification_options.pop('to')
         subject = notification_options.pop('subject')
         notification.send(recipients, subject, **notification_options)
+
+    ## LOGGING METHODS
+    def get_log(self,data: xr.DataArray, time: TimeStep|dt.datetime, tags: dict, other: dict[str, xr.DataArray], **log_options) -> dict:
+        log_dict = {}
+        log_dict['name'] = self.name
+
+        for key, value in tags.items():
+            log_dict[key] = value
+
+        if isinstance(time, dt.datetime):
+            time = time.strftime('%Y-%m-%d')
+            log_dict['timestamp'] = time
+        elif(isinstance(time, TimeStep)):
+            log_dict['timestamp'] = self.get_time_signature(time).strftime('%Y-%m-%d')
+            log_dict['timestep_start'] = time.start.strftime('%Y-%m-%d')
+            log_dict['timestep_end'] = time.end.strftime('%Y-%m-%d')
+
+        log_dict['time_added'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        for key, value in other.items():
+            log_dict[key] = value
+
+        log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
+        return log_dict
+
+    @staticmethod
+    def write_log(log_dict, log_ds, time, **kwargs):
+        if isinstance(log_ds, str):
+            log_ds = Dataset.from_options({'type': 'local', 'key_pattern': log_ds})
+        
+        if log_ds.format == 'txt':
+            # convert the log_dict to a string
+            log_str = '---'
+            for key, value in log_dict.items():
+                log_str += f'{key}: {value}\n'
+            log_str += '---'
+            log_output = log_str
+        elif log_ds.format == 'json':
+            log_output = log_dict
+    
+        log_ds.write_data(log_output, time, append = True, **kwargs)
+
+    @staticmethod
+    def qc_checks(data: xr.DataArray) -> dict:
+        """
+        Perform quality checks on the data.
+        - max and min values
+        - percentage and absolute number of NaNs
+        - percentage and absolute number of zeros
+        - sum of values
+        - sum of absolute values
+        """
+        data = data.values
+        qc_dict = {}
+        qc_dict['max'] = np.nanmax(data)
+        qc_dict['min'] = np.nanmin(data)
+        qc_dict['nans'] = int(np.sum(np.isnan(data)))
+        qc_dict['nans_pc'] = qc_dict['nans'] / data.size
+        qc_dict['zeros'] = int(np.sum(data == 0))
+        qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans'])
+        qc_dict['sum'] = np.nansum(data)
+        qc_dict['sum_abs'] = np.nansum(np.abs(data))
+
+        for key, value in qc_dict.items():
+            if not isinstance(value, int):
+                qc_dict[key] = round(float(value), 4)
+
+        return qc_dict
+    
