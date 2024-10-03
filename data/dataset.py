@@ -10,12 +10,12 @@ import os
 import re
 
 try:
-    from ..timestepping import TimeRange
+    from ..timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
     from ..timestepping.timestep import TimeStep
     from ..config.parse_utils import substitute_string, extract_date_and_tags
     from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 except ImportError:
-    from timestepping import TimeRange
+    from timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
     from timestepping.timestep import TimeStep
     from tools.config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
@@ -222,6 +222,45 @@ class Dataset(ABC, metaclass=DatasetMeta):
         all_tags['time'] = list(all_dates)
 
         return all_tags
+
+    def estimate_timestep(self) -> TimeStep:
+        from scipy.stats import mode
+        all_times = self.available_tags['time']
+        all_times.sort()
+        all_diff = [(all_times[i+1] - all_times[i]).days for i in range(len(all_times)-1)]
+        step_length = mode(all_diff).mode
+        
+        if np.isclose(step_length, 1):
+            return Day
+        elif np.isclose(step_length, 8):
+            return ViirsModisTimeStep
+        elif np.isclose(step_length, 10):
+            return Dekad
+        elif 30 <= step_length <= 31:
+            return Month
+        elif 365 <= step_length <= 366:
+            return Year
+        else:
+            raise None
+
+    def get_last_date(self) -> dt.datetime:
+        all_times = self['time']
+        if len(all_times) == 0:
+            return None
+        return max(all_times)
+
+    def get_last_ts(self) -> TimeStep:
+        last_date = self.get_last_date()
+        if last_date is None:
+            return None
+        timestep = self.estimate_timestep()
+        if timestep is None:
+            return None
+
+        if self.time_signature == 'end+1':
+            return timestep.from_date(last_date) -1
+        else:
+            return timestep.from_date(last_date)
 
     ## TIME-SIGNATURE MANAGEMENT
     @property
