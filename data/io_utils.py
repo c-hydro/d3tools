@@ -25,6 +25,12 @@ def get_format_from_path(path: str) -> str:
     
     elif extension == 'json':
         return 'json'
+    
+    elif extension == 'txt':
+        return 'txt'
+    
+    elif extension == 'shp':
+        return 'shp'
 
     raise ValueError(f'File format not supported: {extension}')
 
@@ -41,6 +47,16 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
     elif format == 'json':
         with open(path, 'r') as f:
             data = json.load(f)
+
+    # read the data from a txt file
+    elif format == 'txt':
+        with open(path, 'r') as f:
+            data = f.readlines()
+
+    # read the data from a shapefile
+    elif format == 'shp':
+        import geopandas as gpd
+        data:gpd.GeoDataFrame = gpd.read_file(path)
 
     # read the data from a geotiff
     elif format == 'geotiff':

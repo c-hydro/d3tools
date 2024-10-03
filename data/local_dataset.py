@@ -12,7 +12,7 @@ try:
 except ImportError:
     from dataset import Dataset
     from timestepping.timestep import TimeStep
-    from tools.config.parse_utils import extract_date_and_tags
+    from config.parse_utils import extract_date_and_tags
     from io_utils import write_to_file, read_from_file, rm_file
 
 from typing import Optional

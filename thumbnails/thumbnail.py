@@ -8,8 +8,10 @@ import matplotlib.pyplot as plt
 
 try:
     from . import colors as col
+    from ..data import Dataset
 except ImportError:
     import colors as col
+    from data import Dataset
 
 #TODO TEST
 class Thumbnail:
@@ -36,7 +38,7 @@ class Thumbnail:
                         self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
             self.txt_file = color_definition_file
-            all_breaks, all_colors, all_labels = col.parse_txt(color_definition_file)
+            all_breaks, all_colors, all_labels = col.parse_colors(color_definition_file)
 
             self.digital_img = self.discretize_raster(all_breaks)
             self.breaks = np.unique(self.digital_img)
@@ -97,10 +99,13 @@ class Thumbnail:
         self.fig = fig
         self.im = im
 
-    def add_overlay(self, shp_file: str, **kwargs):
-        import geopandas as gpd
-
-        shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
+    def add_overlay(self, shp_file: str|Dataset, **kwargs):
+        if isinstance(shp_file, Dataset):
+            shapes = shp_file.get_data()
+        else:
+            import geopandas as gpd
+            shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
+        
         shapes = shapes.to_crs(self.crs.to_string())
 
         if 'facecolor' not in kwargs:
@@ -174,9 +179,9 @@ class Thumbnail:
         if 'overlay' in kwargs:
             if isinstance(kwargs['overlay'], dict):
                 self.add_overlay(**kwargs.pop('overlay'))
-            elif isinstance(kwargs['overlay'], str):
+            elif isinstance(kwargs['overlay'], str|Dataset):
                 self.add_overlay(kwargs['overlay'])
-            elif kwargs['overlay'] == False or kwargs['overlay'] is None or kwargs['overlay'].lower == 'none' :
+            elif kwargs['overlay'] == False or kwargs['overlay'] is None:
                 pass
 
         if 'annotation' in kwargs:

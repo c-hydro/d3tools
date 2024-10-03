@@ -276,7 +276,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
         full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv' or self.format == 'json':
+        if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
 
@@ -672,18 +672,21 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             return
 
-        if isinstance(colors, str):
-            col_file = substitute_string(colors, kwargs)
+        if isinstance(colors, str|Dataset):
+            col_def = substitute_string(colors, kwargs) if isinstance(colors, str) else colors.update(**kwargs)
             if isinstance(data, dict):
                 data = data['']
-            this_thumbnail = Thumbnail(data, col_file)
+            this_thumbnail = Thumbnail(data, col_def)
             destination = destination.replace('.tif', '.png')
 
         elif isinstance(colors, dict):
             keys = list(colors.keys())
-            col_files = list(substitute_string(colors[key], kwargs) for key in keys)
+            col_defs = []
+            for key in keys:
+                col_def = substitute_string(colors[key], kwargs) if isinstance(colors[key], str) else colors[key].update(**kwargs)
+                col_defs.append(col_def)
             data      = list(data[key] for key in keys)
-            this_thumbnail = ThumbnailCollection(data, col_files)
+            this_thumbnail = ThumbnailCollection(data, col_defs)
             destination = destination.replace('.tif', '.pdf')
             
         this_thumbnail.save(destination, **options)
