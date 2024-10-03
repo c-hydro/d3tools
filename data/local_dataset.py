@@ -53,8 +53,8 @@ class LocalDataset(Dataset):
     def _read_data(self, input_path) -> xr.DataArray|xr.Dataset|pd.DataFrame:
         return read_from_file(input_path, self.format)
     
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str) -> None:
-        write_to_file(output, output_path, self.format)
+    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str, **kwargs) -> None:
+        write_to_file(output, output_path, self.format, **kwargs)
 
     def _rm_data(self, path) -> None:
         rm_file(path)

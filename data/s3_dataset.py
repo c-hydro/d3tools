@@ -57,9 +57,9 @@ class S3Dataset(Dataset):
 
         return read_from_file(local_key, self.format)
 
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str):
+    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
         local_key = os.path.join(self.tmp_dir, output_key)
-        write_to_file(output, local_key, self.format)
+        write_to_file(output, local_key, self.format, **kwargs)
         self.s3_client.upload_file(local_key, self.bucket_name, output_key)
         if self.available_keys_are_cached:
             if output_key not in self.available_keys:
