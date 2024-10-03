@@ -371,13 +371,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
         timestamp = self.get_time_signature(time)
         if hasattr(self, 'thumb_opts'):
             parents[''] = output
-            if 'destination' in self.thumb_opts:
-                destination = self.thumb_opts.pop('destination')
+            thumb_opts = self.thumb_opts.copy()
+            if 'destination' in thumb_opts:
+                destination = thumb_opts.pop('destination')
                 destination = timestamp.strftime(substitute_string(destination, kwargs))
             else:
                 destination = output_file
             thumbnail_file = self.make_thumbnail(data = parents,
-                                                 options = self.thumb_opts,
+                                                 options = thumb_opts,
                                                  destination = destination,
                                                  **kwargs)
             self.thumbnail_file = thumbnail_file
@@ -395,7 +396,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                     self.notif_opts[key] = timestamp.strftime(substitute_string(value, kwargs))
             
             self.notif_opts['metadata'] = output.attrs
-            self.notify(self.notif_opts)
+            self.notify(self.notif_opts.copy())
     
         # write the data
         self._write_data(output, output_file)
