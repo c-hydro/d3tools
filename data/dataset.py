@@ -266,7 +266,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise None
 
     def get_last_date(self) -> dt.datetime:
-        all_times = self['time']
+        all_times = self.available_tags['time']
         if len(all_times) == 0:
             return None
         return max(all_times)
