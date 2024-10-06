@@ -352,12 +352,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
-
+            
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
+
             if as_is:
                 return data
-
+            
             # ensure that the data has descending latitudes
             data = straighten_data(data)
 
@@ -438,7 +439,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-            
+
         output = self.set_data_to_template(data, template_dict)
         output = set_type(output)
         output = straighten_data(output)
@@ -809,7 +810,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_thubmnails = []
         for layer in layers:
             tags = layer.pop('tags')
-            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items() if len(v) > 0])
+            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items() if not (isinstance(v, str) and len(v) == 0)])
             time = layer.pop('time')
             log_dict = layer.pop('log')
             log_list.append(log_dict)
@@ -901,7 +902,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             log_output = log_str
         elif log_ds.format == 'json':
             log_output = log_dict
-    
+
         log_ds.write_data(log_output, time, append = True, **kwargs)
 
     @staticmethod
