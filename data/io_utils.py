@@ -4,6 +4,7 @@ import xarray as xr
 import numpy as np
 import os
 import json
+import datetime as dt
 
 from typing import Optional
 
@@ -89,6 +90,11 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
 
     # write the data to a json
     elif format == 'json':
+        for key in data.keys():
+            if isinstance(data[key], np.ndarray):
+                data[key] = data[key].tolist
+            elif isinstance(data[key], dt.datetime):
+                data[key] = data[key].isoformat()
         if append:
             with open(path, 'r') as f:
                 old_data = json.load(f)

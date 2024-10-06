@@ -808,7 +808,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_thubmnails = []
         for layer in layers:
             tags = layer.pop('tags')
-            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items()])
+            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items() if len(v) > 0])
             time = layer.pop('time')
             log_dict = layer.pop('log')
             log_list.append(log_dict)
@@ -853,7 +853,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
         log_dict['dataset'] = self.name
 
         for key, value in tags.items():
-            log_dict[key] = value
+            if isinstance(value, dt.datetime):
+                if value.hour == 0 and value.minute == 0 and value.second == 0:
+                    log_dict[key] = value.strftime('%Y-%m-%d')
+                else:
+                    log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(value, str) and len(value) > 0:
+                log_dict[key] = value
+            elif isinstance(value, int) or isinstance(value, float):
+                log_dict[key] = value
 
         if isinstance(time, dt.datetime):
             time = time.strftime('%Y-%m-%d')
@@ -866,8 +874,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
         log_dict['time_added'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         for key, value in other.items():
-            log_dict[key] = value
-
+            if isinstance(value, dt.datetime):
+                if value.hour == 0 and value.minute == 0 and value.second == 0:
+                    log_dict[key] = value.strftime('%Y-%m-%d')
+                else:
+                    log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(value, str) and len(value) > 0:
+                log_dict[key] = value
+            elif isinstance(value, int) or isinstance(value, float):
+                log_dict[key] = value
         log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
         return log_dict
 
