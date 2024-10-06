@@ -1,13 +1,15 @@
 from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
-import rioxarray as rxr
 import xarray as xr
 import pandas as pd
+import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
 import os
 import re
+
+import tempfile
 
 try:
     from ..timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
@@ -74,6 +76,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
+            atexit.register(self.notify)
 
         if 'log' in kwargs:
             self.log_opts = kwargs.pop('log')
@@ -451,7 +454,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
                                                  options = thumb_opts,
                                                  destination = destination,
                                                  **kwargs)
-            self.thumbnail_file = thumbnail_file
+        else:
+            thumbnail_file = None
 
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
@@ -463,29 +467,30 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # write the data
         self._write_data(output, output_file)
         
-        if hasattr(self, 'log_opts'):
+        # get the info for the logs
+        other_to_log = {}
+        other_to_log['source_key'] = output_file
+        if any(k != '' for k in parents):
+            other_to_log['parents'] = []
+            for key, value in parents.items():
+                other_to_log['parents'] = value.attrs.get('source_key', key)
+        if thumbnail_file is not None:
+            other_to_log['thumbnail'] = thumbnail_file
+        if not hasattr(self, 'log_opts'):
+            log_dict = self.get_log(output, time, kwargs, other_to_log)
+        else:
+            log_dict = self.get_log(output, time, kwargs, other_to_log, **self.log_opts)
             log_opts = self.log_opts.copy()
             log_output_ds = log_opts.pop('output')
-            other_to_log = {}
-            other_to_log['source_key'] = output_file
-            if any(k != '' for k in parents):
-                other_to_log['parents'] = []
-                for key, value in parents.items():
-                    other_to_log['parents'] = value.attrs.get('source_key', key)
-            if hasattr(self, 'thumbnail_file'):
-                other_to_log['thumbnail'] = self.thumbnail_file
-            log_dict = self.get_log(output, time, kwargs, other_to_log, **self.log_opts)
-
             log_output = log_output_ds.update(time, **kwargs)
             self.write_log(log_dict, log_output, time, **kwargs)
         
         if hasattr(self, 'notif_opts'):
-            for key, value in self.notif_opts.items():
-                if isinstance(value, str):
-                    self.notif_opts[key] = timestamp.strftime(substitute_string(value, kwargs))
-            
-            self.notif_opts['metadata'] = output.attrs
-            self.notify(self.notif_opts.copy())
+            this_layer = {'tags' : kwargs, 'time' : time, 'log' : log_dict, 'thumbnail' : thumbnail_file}
+            if 'layers' in self.notif_opts:
+                self.notif_opts['layers'].append(this_layer)
+            else:
+                self.notif_opts['layers'] = [this_layer]
 
     def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         data = self.get_data(time, **kwargs)
@@ -779,11 +784,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return destination
 
     ## NOTIFICATION METHODS
-    def notify(self, notification_options: dict):
+    def notify(self):
         try:
             from ..notification import EmailNotification
         except ImportError:
             from notification import EmailNotification
+
+        notification_options = self.notif_opts.copy()
+        layers = notification_options.pop('layers', None)
+        if layers is None:
+            return
 
         from_address = notification_options.pop('from', None)
         email_client = notification_options.pop('email_client', None)
@@ -792,17 +802,55 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         notification = EmailNotification(from_address, email_client, email_login_env, email_pwd_env)
 
-        if hasattr(self, 'thumbnail_file'):
-            notification.attach(self.thumbnail_file)
+        log_list = []
+        layers_string = ""
+        attachement_size = 0
+        other_thubmnails = []
+        for layer in layers:
+            tags = layer.pop('tags')
+            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items()])
+            time = layer.pop('time')
+            log_dict = layer.pop('log')
+            log_list.append(log_dict)
+            thumbnail_file = layer.pop('thumbnail')
+            if thumbnail_file is not None:
+                this_size = os.path.getsize(thumbnail_file)
+                if attachement_size + this_size < 25e6:
+                    notification.attach(thumbnail_file)
+                    attachement_size += this_size
+                    attachment_string = '[thumbnail attached]'
+                else:
+                    other_thubmnails.append(thumbnail_file)
+                    attachment_string = f'\n    [thumbnail: {thumbnail_file}]'
+            else:
+                attachment_string = ''
+            layers_string += f" - {time} {tags_string} {attachment_string}\n"
 
-        recipients = notification_options.pop('to')
-        subject = notification_options.pop('subject')
-        notification.send(recipients, subject, **notification_options)
+        header = 'Hello,\nthis is an automatic notification.\nSome new data is available and I thought you should know.\n'
+        main = f'\n\nHere is a list of the newly available layers for the dataset {self.name}:\n{layers_string}'
+        attach_str = 'Attached is a log file with more information for each layer.'
+        if len(other_thubmnails) > 0:
+            attach_str += 'Due to the size of the attachments, some thumbnails are not attached but are available for download.'
+        footer = '\n\nBest regards,\nYour friendly data provider.'
+
+        body = header + main + footer
+
+        import json
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            now = dt.datetime.now()
+            log_file = os.path.join(tmpdirname, f'{self.name}_{now:%Y%m%d_%H%M%S}.json')
+            with open(log_file, 'w') as f:
+                json.dump(log_list, f, indent = 4)
+            notification.attach(log_file)
+
+            recipients = notification_options.pop('to')
+            subject = notification_options.pop('subject', f'[AUTOMATIC NOTIFICATION] {self.name} : new data available')
+            notification.send(recipients, subject, body = body)
 
     ## LOGGING METHODS
     def get_log(self,data: xr.DataArray, time: TimeStep|dt.datetime, tags: dict, other: dict[str, xr.DataArray], **log_options) -> dict:
         log_dict = {}
-        log_dict['name'] = self.name
+        log_dict['dataset'] = self.name
 
         for key, value in tags.items():
             log_dict[key] = value
