@@ -114,7 +114,10 @@ class S3Dataset(Dataset):
 
     def cleanup(self):
         if os.path.exists(self.tmp_dir):
-            shutil.rmtree(self.tmp_dir)
+            try:
+                shutil.rmtree(self.tmp_dir)
+            except:
+                print(f"Failed to remove temporary directory: {self.tmp_dir}")
 
     def get_tile_names_from_file(self, filename: str) -> list[str]:
         local_file = os.path.join(self.tmp_dir, filename)
