@@ -132,16 +132,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
-    def from_options(cls, options: dict):
+    def from_options(cls, options: dict, defaults: dict = None):
         type = options.pop('type', None)
         type = cls.get_type(type)
         Subclass: 'Dataset' = cls.get_subclass(type)
-        return Subclass(**options)
+        if defaults is not None:
+            defaults.update(options)
+        return Subclass(**defaults)
 
     @classmethod
     def get_subclass(cls, type: str):
         type = cls.get_type(type)
-        Subclass: 'Dataset'|None = cls.subclasses.get(type)
+        Subclass: 'Dataset'|None = cls.subclasses.get(type.lower())
         if Subclass is None:
             raise ValueError(f"Invalid type of dataset: {type}")
         return Subclass
