@@ -15,7 +15,7 @@ try:
 except ImportError:
     from dataset import Dataset
     from io_utils import write_to_file, read_from_file
-    from dam.tools.config.parse_utils import extract_date_and_tags
+    from config.parse_utils import extract_date_and_tags
 
 class S3Dataset(Dataset):
     type = 's3'
@@ -57,9 +57,9 @@ class S3Dataset(Dataset):
 
         return read_from_file(local_key, self.format)
 
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str):
+    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
         local_key = os.path.join(self.tmp_dir, output_key)
-        write_to_file(output, local_key, self.format)
+        write_to_file(output, local_key, self.format, **kwargs)
         self.s3_client.upload_file(local_key, self.bucket_name, output_key)
         if self.available_keys_are_cached:
             if output_key not in self.available_keys:
@@ -114,7 +114,10 @@ class S3Dataset(Dataset):
 
     def cleanup(self):
         if os.path.exists(self.tmp_dir):
-            shutil.rmtree(self.tmp_dir)
+            try:
+                shutil.rmtree(self.tmp_dir)
+            except:
+                print(f"Failed to remove temporary directory: {self.tmp_dir}")
 
     def get_tile_names_from_file(self, filename: str) -> list[str]:
         local_file = os.path.join(self.tmp_dir, filename)

@@ -12,7 +12,7 @@ try:
 except ImportError:
     from dataset import Dataset
     from timestepping.timestep import TimeStep
-    from tools.config.parse_utils import extract_date_and_tags
+    from config.parse_utils import extract_date_and_tags
     from io_utils import write_to_file, read_from_file, rm_file
 
 from typing import Optional
@@ -53,8 +53,8 @@ class LocalDataset(Dataset):
     def _read_data(self, input_path) -> xr.DataArray|xr.Dataset|pd.DataFrame:
         return read_from_file(input_path, self.format)
     
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str) -> None:
-        write_to_file(output, output_path, self.format)
+    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str, **kwargs) -> None:
+        write_to_file(output, output_path, self.format, **kwargs)
 
     def _rm_data(self, path) -> None:
         rm_file(path)

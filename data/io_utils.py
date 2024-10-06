@@ -25,6 +25,12 @@ def get_format_from_path(path: str) -> str:
     
     elif extension == 'json':
         return 'json'
+    
+    elif extension == 'txt':
+        return 'txt'
+    
+    elif extension == 'shp':
+        return 'shp'
 
     raise ValueError(f'File format not supported: {extension}')
 
@@ -42,6 +48,16 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
         with open(path, 'r') as f:
             data = json.load(f)
 
+    # read the data from a txt file
+    elif format == 'txt':
+        with open(path, 'r') as f:
+            data = f.readlines()
+
+    # read the data from a shapefile
+    elif format == 'shp':
+        import geopandas as gpd
+        data:gpd.GeoDataFrame = gpd.read_file(path)
+
     # read the data from a geotiff
     elif format == 'geotiff':
         data = rxr.open_rasterio(path)
@@ -55,21 +71,40 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
 
     return data
 
-def write_to_file(data, path, format: Optional[str] = None) -> None:
+def write_to_file(data, path, format: Optional[str] = None, append = False) -> None:
 
     if format is None:
         format = get_format_from_path(path)
 
     os.makedirs(os.path.dirname(path), exist_ok = True)
+    if not os.path.exists(path):
+        append = False
 
     # write the data to a csv
     if format == 'csv':
-        data.to_csv(path)
+        if append:
+            data.to_csv(path, mode = 'a', header = False)
+        else:
+            data.to_csv(path)
 
     # write the data to a json
     elif format == 'json':
+        if append:
+            with open(path, 'r') as f:
+                old_data = json.load(f)
+            old_data = [old_data] if not isinstance(old_data, list) else old_data
+            old_data.append(data)
+            data = old_data
         with open(path, 'w') as f:
-            json.dump(data, f)
+            json.dump(data, f, indent = 4)
+
+    elif format == 'txt':
+        if append:
+            with open(path, 'a') as f:
+                f.writelines(data)
+        else:
+            with open(path, 'w') as f:
+                f.writelines(data)
 
     # write the data to a geotiff
     elif format == 'geotiff':

@@ -1,21 +1,23 @@
 from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
-import rioxarray as rxr
 import xarray as xr
 import pandas as pd
+import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
 import os
 import re
 
+import tempfile
+
 try:
-    from ..timestepping import TimeRange
+    from ..timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
     from ..timestepping.timestep import TimeStep
     from ..config.parse_utils import substitute_string, extract_date_and_tags
     from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 except ImportError:
-    from timestepping import TimeRange
+    from timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
     from timestepping.timestep import TimeStep
     from tools.config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
@@ -44,6 +46,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def __init__(self, **kwargs):
 
+        # subsitute "now" with the current time
+        self.key_pattern = substitute_string(self.key_pattern, {'now': dt.datetime.now()})
+
         if 'name' in kwargs:
             self.name   = kwargs.pop('name')
         else:
@@ -71,6 +76,21 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
+            atexit.register(self.notify)
+
+        if 'log' in kwargs:
+            self.log_opts = kwargs.pop('log')
+            if isinstance(self.log_opts, Dataset):
+                log_output= self.log_opts.update(now = dt.datetime.now())
+                self.log_opts = {'output' : log_output}
+            elif isinstance(self.log_opts, str):
+                log_output_file = substitute_string(self.log_opts, {'now': dt.datetime.now()})
+                log_output = Dataset.from_options({'key_pattern' : log_output_file})
+                self.log_opts = {'output' : log_output}
+            elif isinstance(self.log_opts, dict):
+                log_output_file = substitute_string(self.log_opts.pop('file'), {'now': dt.datetime.now()})
+                log_output = Dataset.from_options({'key_pattern' : log_output_file})
+                self.log_opts['output'] = log_output
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
@@ -115,16 +135,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
-    def from_options(cls, options: dict):
+    def from_options(cls, options: dict, defaults: dict = None):
         type = options.pop('type', None)
         type = cls.get_type(type)
         Subclass: 'Dataset' = cls.get_subclass(type)
-        return Subclass(**options)
+        defaults = defaults or {}
+        defaults.update(options)
+        return Subclass(**defaults)
 
     @classmethod
     def get_subclass(cls, type: str):
         type = cls.get_type(type)
-        Subclass: 'Dataset'|None = cls.subclasses.get(type)
+        Subclass: 'Dataset'|None = cls.subclasses.get(type.lower())
         if Subclass is None:
             raise ValueError(f"Invalid type of dataset: {type}")
         return Subclass
@@ -223,6 +245,50 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return all_tags
 
+    def estimate_timestep(self) -> TimeStep:
+        from scipy.stats import mode
+        all_times = self.available_tags['time']
+        all_times.sort()
+        all_diff = [(all_times[i+1] - all_times[i]).days for i in range(len(all_times)-1)]
+        step_length = mode(all_diff).mode
+        
+        if np.isclose(step_length, 1):
+            return Day
+        elif np.isclose(step_length, 8):
+            return ViirsModisTimeStep
+        elif np.isclose(step_length, 10):
+            return Dekad
+        elif 30 <= step_length <= 31:
+            return Month
+        elif 365 <= step_length <= 366:
+            return Year
+        else:
+            raise None
+
+    def get_last_date(self) -> dt.datetime:
+        all_times = self['time']
+        if len(all_times) == 0:
+            return None
+        return max(all_times)
+
+    def get_last_ts(self) -> TimeStep:
+        last_date = self.get_last_date()
+        if last_date is None:
+            return None
+        timestep = self.estimate_timestep()
+        if timestep is None:
+            return None
+
+        if self.time_signature == 'end+1':
+            return timestep.from_date(last_date) -1
+        else:
+            return timestep.from_date(last_date)
+
+    def is_subdataset(self, other: 'Dataset') -> bool:
+        ds1_keys = self.available_keys
+        ds2_keys = other.available_keys
+        return set(ds1_keys).issubset(set(ds2_keys))
+
     ## TIME-SIGNATURE MANAGEMENT
     @property
     def time_signature(self):
@@ -276,7 +342,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
         full_key = self.get_key(time, **kwargs)
 
-        if self.format == 'csv' or self.format == 'json':
+        if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
 
@@ -319,13 +385,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _read_data(self, input_key:str):
         raise NotImplementedError
     
-    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame):
+    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame|str|dict):
         """"
         Ensures that the data is compatible with the format of the dataset.
         """
         if isinstance(data, pd.DataFrame):
             if not self.format == 'csv':
                 raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
+        elif isinstance(data, str):
+            if not self.format == 'txt':
+                raise ValueError(f'Cannot write a string to a {self.format} file.')
+        elif isinstance(data, dict):
+            if not self.format == 'json':
+                raise ValueError(f'Cannot write a dictionary to a {self.format} file.')
         elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
             if self.format == 'csv':
                 raise ValueError(f'Cannot write matrix data to a csv file.')
@@ -343,10 +415,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         output_file = self.get_key(time, **kwargs)
 
-        if self.format == 'csv':
-            self._write_data(data, output_file)
+        if self.format in ['csv', 'json', 'txt']:
+            append = kwargs.pop('append', False)
+            self._write_data(data, output_file, append = append)
             return
-
+        
         # if data is a numpy array, ensure there is a template available
         template_dict = self.get_template_dict(**kwargs, make_it=False)
         if template_dict is None:
@@ -371,16 +444,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
         timestamp = self.get_time_signature(time)
         if hasattr(self, 'thumb_opts'):
             parents[''] = output
-            if 'destination' in self.thumb_opts:
-                destination = self.thumb_opts.pop('destination')
+            thumb_opts = self.thumb_opts.copy()
+            if 'destination' in thumb_opts:
+                destination = thumb_opts.pop('destination')
                 destination = timestamp.strftime(substitute_string(destination, kwargs))
             else:
                 destination = output_file
             thumbnail_file = self.make_thumbnail(data = parents,
-                                                 options = self.thumb_opts,
+                                                 options = thumb_opts,
                                                  destination = destination,
                                                  **kwargs)
-            self.thumbnail_file = thumbnail_file
+        else:
+            thumbnail_file = None
 
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
@@ -389,16 +464,33 @@ class Dataset(ABC, metaclass=DatasetMeta):
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
 
-        if hasattr(self, 'notif_opts'):
-            for key, value in self.notif_opts.items():
-                if isinstance(value, str):
-                    self.notif_opts[key] = timestamp.strftime(substitute_string(value, kwargs))
-            
-            self.notif_opts['metadata'] = output.attrs
-            self.notify(self.notif_opts)
-    
         # write the data
         self._write_data(output, output_file)
+        
+        # get the info for the logs
+        other_to_log = {}
+        other_to_log['source_key'] = output_file
+        if any(k != '' for k in parents):
+            other_to_log['parents'] = []
+            for key, value in parents.items():
+                other_to_log['parents'] = value.attrs.get('source_key', key)
+        if thumbnail_file is not None:
+            other_to_log['thumbnail'] = thumbnail_file
+        if not hasattr(self, 'log_opts'):
+            log_dict = self.get_log(output, time, kwargs, other_to_log)
+        else:
+            log_dict = self.get_log(output, time, kwargs, other_to_log, **self.log_opts)
+            log_opts = self.log_opts.copy()
+            log_output_ds = log_opts.pop('output')
+            log_output = log_output_ds.update(time, **kwargs)
+            self.write_log(log_dict, log_output, time, **kwargs)
+        
+        if hasattr(self, 'notif_opts'):
+            this_layer = {'tags' : kwargs, 'time' : time, 'log' : log_dict, 'thumbnail' : thumbnail_file}
+            if 'layers' in self.notif_opts:
+                self.notif_opts['layers'].append(this_layer)
+            else:
+                self.notif_opts['layers'] = [this_layer]
 
     def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         data = self.get_data(time, **kwargs)
@@ -671,29 +763,37 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             return
 
-        if isinstance(colors, str):
-            col_file = substitute_string(colors, kwargs)
+        if isinstance(colors, str|Dataset):
+            col_def = substitute_string(colors, kwargs) if isinstance(colors, str) else colors.update(**kwargs)
             if isinstance(data, dict):
                 data = data['']
-            this_thumbnail = Thumbnail(data, col_file)
+            this_thumbnail = Thumbnail(data, col_def)
             destination = destination.replace('.tif', '.png')
 
         elif isinstance(colors, dict):
             keys = list(colors.keys())
-            col_files = list(substitute_string(colors[key], kwargs) for key in keys)
+            col_defs = []
+            for key in keys:
+                col_def = substitute_string(colors[key], kwargs) if isinstance(colors[key], str) else colors[key].update(**kwargs)
+                col_defs.append(col_def)
             data      = list(data[key] for key in keys)
-            this_thumbnail = ThumbnailCollection(data, col_files)
+            this_thumbnail = ThumbnailCollection(data, col_defs)
             destination = destination.replace('.tif', '.pdf')
             
         this_thumbnail.save(destination, **options)
         return destination
 
     ## NOTIFICATION METHODS
-    def notify(self, notification_options: dict):
+    def notify(self):
         try:
             from ..notification import EmailNotification
         except ImportError:
             from notification import EmailNotification
+
+        notification_options = self.notif_opts.copy()
+        layers = notification_options.pop('layers', None)
+        if layers is None:
+            return
 
         from_address = notification_options.pop('from', None)
         email_client = notification_options.pop('email_client', None)
@@ -702,9 +802,116 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         notification = EmailNotification(from_address, email_client, email_login_env, email_pwd_env)
 
-        if hasattr(self, 'thumbnail_file'):
-            notification.attach(self.thumbnail_file)
+        log_list = []
+        layers_string = ""
+        attachement_size = 0
+        other_thubmnails = []
+        for layer in layers:
+            tags = layer.pop('tags')
+            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items()])
+            time = layer.pop('time')
+            log_dict = layer.pop('log')
+            log_list.append(log_dict)
+            thumbnail_file = layer.pop('thumbnail')
+            if thumbnail_file is not None:
+                this_size = os.path.getsize(thumbnail_file)
+                if attachement_size + this_size < 25e6:
+                    notification.attach(thumbnail_file)
+                    attachement_size += this_size
+                    attachment_string = '[thumbnail attached]'
+                else:
+                    other_thubmnails.append(thumbnail_file)
+                    attachment_string = f'\n    [thumbnail: {thumbnail_file}]'
+            else:
+                attachment_string = ''
+            layers_string += f" - {time} {tags_string} {attachment_string}\n"
 
-        recipients = notification_options.pop('to')
-        subject = notification_options.pop('subject')
-        notification.send(recipients, subject, **notification_options)
+        header = 'Hello,\nthis is an automatic notification.\nSome new data is available and I thought you should know.\n'
+        main = f'\n\nHere is a list of the newly available layers for the dataset {self.name}:\n{layers_string}'
+        attach_str = 'Attached is a log file with more information for each layer.'
+        if len(other_thubmnails) > 0:
+            attach_str += 'Due to the size of the attachments, some thumbnails are not attached but are available for download.'
+        footer = '\n\nBest regards,\nYour friendly data provider.'
+
+        body = header + main + footer
+
+        import json
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            now = dt.datetime.now()
+            log_file = os.path.join(tmpdirname, f'{self.name}_{now:%Y%m%d_%H%M%S}.json')
+            with open(log_file, 'w') as f:
+                json.dump(log_list, f, indent = 4)
+            notification.attach(log_file)
+
+            recipients = notification_options.pop('to')
+            subject = notification_options.pop('subject', f'[AUTOMATIC NOTIFICATION] {self.name} : new data available')
+            notification.send(recipients, subject, body = body)
+
+    ## LOGGING METHODS
+    def get_log(self,data: xr.DataArray, time: TimeStep|dt.datetime, tags: dict, other: dict[str, xr.DataArray], **log_options) -> dict:
+        log_dict = {}
+        log_dict['dataset'] = self.name
+
+        for key, value in tags.items():
+            log_dict[key] = value
+
+        if isinstance(time, dt.datetime):
+            time = time.strftime('%Y-%m-%d')
+            log_dict['timestamp'] = time
+        elif(isinstance(time, TimeStep)):
+            log_dict['timestamp'] = self.get_time_signature(time).strftime('%Y-%m-%d')
+            log_dict['timestep_start'] = time.start.strftime('%Y-%m-%d')
+            log_dict['timestep_end'] = time.end.strftime('%Y-%m-%d')
+
+        log_dict['time_added'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        for key, value in other.items():
+            log_dict[key] = value
+
+        log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
+        return log_dict
+
+    @staticmethod
+    def write_log(log_dict, log_ds, time, **kwargs):
+        if isinstance(log_ds, str):
+            log_ds = Dataset.from_options({'type': 'local', 'key_pattern': log_ds})
+        
+        if log_ds.format == 'txt':
+            # convert the log_dict to a string
+            log_str = '---'
+            for key, value in log_dict.items():
+                log_str += f'{key}: {value}\n'
+            log_str += '---'
+            log_output = log_str
+        elif log_ds.format == 'json':
+            log_output = log_dict
+    
+        log_ds.write_data(log_output, time, append = True, **kwargs)
+
+    @staticmethod
+    def qc_checks(data: xr.DataArray) -> dict:
+        """
+        Perform quality checks on the data.
+        - max and min values
+        - percentage and absolute number of NaNs
+        - percentage and absolute number of zeros
+        - sum of values
+        - sum of absolute values
+        """
+        data = data.values
+        qc_dict = {}
+        qc_dict['max'] = np.nanmax(data)
+        qc_dict['min'] = np.nanmin(data)
+        qc_dict['nans'] = int(np.sum(np.isnan(data)))
+        qc_dict['nans_pc'] = qc_dict['nans'] / data.size * 100
+        qc_dict['zeros'] = int(np.sum(data == 0))
+        qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
+        qc_dict['sum'] = np.nansum(data)
+        qc_dict['sum_abs'] = np.nansum(np.abs(data))
+
+        for key, value in qc_dict.items():
+            if not isinstance(value, int):
+                qc_dict[key] = round(float(value), 4)
+
+        return qc_dict
+    

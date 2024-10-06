@@ -4,7 +4,12 @@ from matplotlib.colors import ListedColormap
 from typing import Optional
 from copy import deepcopy
 
-def parse_txt(txt_file: str) -> tuple:
+try:
+    from ..data import Dataset
+except ImportError:
+    from data import Dataset
+
+def parse_colors(colors_definition: str|Dataset) -> tuple:
     '''
     Parse the color values from a text file.
     To create a text file, use the following format:
@@ -29,8 +34,12 @@ def parse_txt(txt_file: str) -> tuple:
     - and the second list contains the colors. (i.e. [(r1,g1,b1,a1),(r2,g2,b2,a2),(r3,g3,b3,a3),(r4,g4,b4,a4)])
     '''
 
-    with open(txt_file, 'r') as f:
-        lines = f.readlines()
+    if isinstance(colors_definition, str):
+        txt_file = colors_definition
+        with open(txt_file, 'r') as f:
+            lines = f.readlines()
+    else:
+        lines = colors_definition.get_data()
 
     # skip all the lines at that have invalid format
 
