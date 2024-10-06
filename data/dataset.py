@@ -265,6 +265,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             return timestep.from_date(last_date)
 
+    def is_subdataset(self, other: 'Dataset') -> bool:
+        ds1_keys = self.available_keys
+        ds2_keys = other.available_keys
+        return set(ds1_keys).issubset(set(ds2_keys))
+
     ## TIME-SIGNATURE MANAGEMENT
     @property
     def time_signature(self):
