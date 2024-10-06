@@ -136,8 +136,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         type = options.pop('type', None)
         type = cls.get_type(type)
         Subclass: 'Dataset' = cls.get_subclass(type)
-        if defaults is not None:
-            defaults.update(options)
+        defaults = defaults or {}
+        defaults.update(options)
         return Subclass(**defaults)
 
     @classmethod
@@ -855,9 +855,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         qc_dict['max'] = np.nanmax(data)
         qc_dict['min'] = np.nanmin(data)
         qc_dict['nans'] = int(np.sum(np.isnan(data)))
-        qc_dict['nans_pc'] = qc_dict['nans'] / data.size
+        qc_dict['nans_pc'] = qc_dict['nans'] / data.size * 100
         qc_dict['zeros'] = int(np.sum(data == 0))
-        qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans'])
+        qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
         qc_dict['sum'] = np.nansum(data)
         qc_dict['sum_abs'] = np.nansum(np.abs(data))
 

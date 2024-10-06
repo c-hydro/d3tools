@@ -96,7 +96,7 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
             old_data.append(data)
             data = old_data
         with open(path, 'w') as f:
-            json.dump(data, f)
+            json.dump(data, f, indent = 4)
 
     elif format == 'txt':
         if append:
