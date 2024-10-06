@@ -44,6 +44,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def __init__(self, **kwargs):
 
+        # subsitute "now" with the current time
+        self.key_pattern = substitute_string(self.key_pattern, {'now': dt.datetime.now()})
+
         if 'name' in kwargs:
             self.name   = kwargs.pop('name')
         else:
@@ -74,6 +77,17 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'log' in kwargs:
             self.log_opts = kwargs.pop('log')
+            if isinstance(self.log_opts, Dataset):
+                log_output= self.log_opts.update(now = dt.datetime.now())
+                self.log_opts = {'output' : log_output}
+            elif isinstance(self.log_opts, str):
+                log_output_file = substitute_string(self.log_opts, {'now': dt.datetime.now()})
+                log_output = Dataset.from_options({'key_pattern' : log_output_file})
+                self.log_opts = {'output' : log_output}
+            elif isinstance(self.log_opts, dict):
+                log_output_file = substitute_string(self.log_opts.pop('file'), {'now': dt.datetime.now()})
+                log_output = Dataset.from_options({'key_pattern' : log_output_file})
+                self.log_opts['output'] = log_output
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
@@ -448,12 +462,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._write_data(output, output_file)
         
         if hasattr(self, 'log_opts'):
-            if isinstance(self.log_opts, str|Dataset):
-                log_output = self.log_opts
-                log_opts = {}
-            elif isinstance(self.log_opts, dict):
-                log_opts = self.log_opts.copy()
-                log_output = log_opts.pop('file')
+            log_opts = self.log_opts.copy()
+            log_output_ds = log_opts.pop('output')
             other_to_log = {}
             other_to_log['source_key'] = output_file
             if any(k != '' for k in parents):
@@ -462,13 +472,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                     other_to_log['parents'] = value.attrs.get('source_key', key)
             if hasattr(self, 'thumbnail_file'):
                 other_to_log['thumbnail'] = self.thumbnail_file
-            log_dict = self.get_log(output, time, kwargs, other_to_log, **log_opts)
-            tags = kwargs.copy()
-            tags['now'] = dt.datetime.now()
-            if isinstance(log_output, str):
-                log_output = timestamp.strftime(substitute_string(log_output, tags))
-            elif isinstance(log_output, Dataset):
-                log_output = log_output.update(time, **tags)
+            log_dict = self.get_log(output, time, kwargs, other_to_log, **self.log_opts)
+
+            log_output = log_output_ds.update(time, **kwargs)
             self.write_log(log_dict, log_output, time, **kwargs)
         
         if hasattr(self, 'notif_opts'):
