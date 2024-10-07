@@ -835,7 +835,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             attach_str += 'Due to the size of the attachments, some thumbnails are not attached but are available for download.'
         footer = '\n\nBest regards,\nYour friendly data provider.'
 
-        body = header + main + footer
+        body = header + main + attach_str + footer
 
         import json
         with tempfile.TemporaryDirectory() as tmpdirname:
