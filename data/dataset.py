@@ -482,10 +482,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_to_log['source_key'] = output_file
         if thumbnail_file is not None:
             other_to_log['thumbnail'] = thumbnail_file
-        if not hasattr(self, 'log_opts'):
-            log_dict = self.get_log(output, time, kwargs, other_to_log)
-        else:
-            log_dict = self.get_log(output, time, kwargs, other_to_log, **self.log_opts)
+        
+        log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
+        if hasattr(self, 'log_opts'):
+            log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
             log_opts = self.log_opts.copy()
             log_output_ds = log_opts.pop('output')
             log_output = log_output_ds.update(time, **kwargs)
@@ -835,7 +835,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             attach_str += 'Due to the size of the attachments, some thumbnails are not attached but are available for download.'
         footer = '\n\nBest regards,\nYour friendly data provider.'
 
-        body = header + main + attach_str + footer
+        body = header + main + footer
 
         import json
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -850,43 +850,42 @@ class Dataset(ABC, metaclass=DatasetMeta):
             notification.send(recipients, subject, body = body)
 
     ## LOGGING METHODS
-    def get_log(self,data: xr.DataArray, time: TimeStep|dt.datetime, tags: dict, other: dict[str, xr.DataArray], **log_options) -> dict:
+    def get_log(self, data: xr.DataArray, options = None, **kwargs) -> dict:
         log_dict = {}
+
+        metadata = data.attrs
+
         log_dict['dataset'] = self.name
+        log_dict['data'] = metadata.get('name', kwargs.get('name', self.name))
+        log_dict['source_key'] = metadata.get('source_key', kwargs.get('source_key', None))
+        log_dict['thumbnail'] = kwargs.get('thumbnail', None)
+        log_dict['time'] = metadata.get('time', kwargs.get('time', None))
+        log_dict['time_produced'] = metadata.get('time_produced', dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
-        for key, value in tags.items():
+        kwargs.update(metadata)
+        for k, v in kwargs:
+            if k not in log_dict:
+                log_dict[k] = v
+        
+        kwargs.update(metadata)
+
+        # format the log_dict correctly
+        final_log_dict = {}
+        for key, value in log_dict.items():
+            if isinstance(value, TimeStep):
+                final_log_dict[key] = self.get_time_signature(value).strftime('%Y-%m-%d %H:%M:%S')
             if isinstance(value, dt.datetime):
-                if value.hour == 0 and value.minute == 0 and value.second == 0:
-                    log_dict[key] = value.strftime('%Y-%m-%d')
-                else:
-                    log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-            elif isinstance(value, str) and len(value) > 0:
-                log_dict[key] = value
-            elif isinstance(value, int) or isinstance(value, float):
-                log_dict[key] = value
+                final_log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(value, str) and len(value.strip()) > 0 and not value.startswith('__'):
+                final_log_dict[key] = value
+            elif isinstance(value, int): 
+                final_log_dict[key] = str(value)
+            elif isinstance(value, float):
+                final_log_dict[key] = str(round(value, 4))
 
-        if isinstance(time, dt.datetime):
-            time = time.strftime('%Y-%m-%d')
-            log_dict['timestamp'] = time
-        elif(isinstance(time, TimeStep)):
-            log_dict['timestamp'] = self.get_time_signature(time).strftime('%Y-%m-%d')
-            log_dict['timestep_start'] = time.start.strftime('%Y-%m-%d')
-            log_dict['timestep_end'] = time.end.strftime('%Y-%m-%d')
+        final_log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
 
-        log_dict['time_added'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        for key, value in other.items():
-            if isinstance(value, dt.datetime):
-                if value.hour == 0 and value.minute == 0 and value.second == 0:
-                    log_dict[key] = value.strftime('%Y-%m-%d')
-                else:
-                    log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-            elif isinstance(value, str) and len(value) > 0:
-                log_dict[key] = value
-            elif isinstance(value, int) or isinstance(value, float):
-                log_dict[key] = value
-        log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
-        return log_dict
+        return final_log_dict
 
     @staticmethod
     def write_log(log_dict, log_ds, time, **kwargs):
