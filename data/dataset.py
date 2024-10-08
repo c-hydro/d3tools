@@ -19,7 +19,7 @@ try:
 except ImportError:
     from timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
     from timestepping.timestep import TimeStep
-    from tools.config.parse_utils import substitute_string, extract_date_and_tags
+    from config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 
 def withcases(func):
@@ -131,6 +131,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         new_dataset = self.update()
         if template:
             new_dataset._template = self._template
+        if hasattr(self, 'log_opts'):
+            new_dataset.log_opts = self.log_opts
+        if hasattr(self, 'thumb_opts'):
+            new_dataset.thumb_opts = self.thumb_opts
+        if hasattr(self, 'notif_opts'):
+            new_dataset.notif_opts = self.notif_opts
         return new_dataset
 
     ## CLASS METHODS FOR FACTORY
@@ -140,8 +146,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         type = cls.get_type(type)
         Subclass: 'Dataset' = cls.get_subclass(type)
         defaults = defaults or {}
-        defaults.update(options)
-        return Subclass(**defaults)
+        new_options = defaults.copy()
+        new_options.update(options)
+        return Subclass(**new_options)
 
     @classmethod
     def get_subclass(cls, type: str):
@@ -266,7 +273,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             raise None
 
     def get_last_date(self) -> dt.datetime:
-        all_times = self['time']
+        all_times = self.available_tags['time']
         if len(all_times) == 0:
             return None
         return max(all_times)
@@ -345,12 +352,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
-
+            
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
+
             if as_is:
                 return data
-
+            
             # ensure that the data has descending latitudes
             data = straighten_data(data)
 
@@ -362,6 +370,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = self.make_data(time, **kwargs)
             if as_is:
                 return data
+            data = straighten_data(data)
+            data = reset_nan(data)
 
         else:
             raise ValueError(f'Could not resolve data from {full_key}.')
@@ -410,7 +420,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                    time_format: str = '%Y-%m-%d',
                    metadata = {},
                    **kwargs):
-
+        
         self.check_data_for_writing(data)
 
         output_file = self.get_key(time, **kwargs)
@@ -421,7 +431,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return
         
         # if data is a numpy array, ensure there is a template available
-        template_dict = self.get_template_dict(**kwargs, make_it=False)
+        template_dict = self.get_template_dict(**kwargs)
         if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
                 #templatearray = self.make_templatearray_from_data(data)
@@ -429,7 +439,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-            
+
         output = self.set_data_to_template(data, template_dict)
         output = set_type(output)
         output = straighten_data(output)
@@ -463,23 +473,17 @@ class Dataset(ABC, metaclass=DatasetMeta):
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
-
         # write the data
         self._write_data(output, output_file)
         
         # get the info for the logs
         other_to_log = {}
         other_to_log['source_key'] = output_file
-        if any(k != '' for k in parents):
-            other_to_log['parents'] = []
-            for key, value in parents.items():
-                other_to_log['parents'] = value.attrs.get('source_key', key)
         if thumbnail_file is not None:
             other_to_log['thumbnail'] = thumbnail_file
-        if not hasattr(self, 'log_opts'):
-            log_dict = self.get_log(output, time, kwargs, other_to_log)
-        else:
-            log_dict = self.get_log(output, time, kwargs, other_to_log, **self.log_opts)
+        log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
+        if hasattr(self, 'log_opts'):
+            log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
             log_opts = self.log_opts.copy()
             log_output_ds = log_opts.pop('output')
             log_output = log_output_ds.update(time, **kwargs)
@@ -524,6 +528,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
         data = self.fn(**parent_data)
         self.write_data(data, time, **kwargs)
+        return data
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
@@ -533,12 +538,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if time_range.contains(time):
                 yield time
         
-        if len(all_times) == 0 and hasattr(self, 'parents') and self.parents is not None:
-            parent_times = [parent.get_times(time_range, **kwargs) for parent in self.parents.values()]
-            all_times = parent_times[0]
-            all_times.sort()
-            for time in all_times:
-                if all(time in parent_times[i] for i in range(1, len(parent_times))):
+        if hasattr(self, 'parents') and self.parents is not None:
+            parent_times = [set(parent.get_times(time_range, **kwargs)) for parent in self.parents.values()]
+            # get the intersection of all times
+            parent_times = set.intersection(*parent_times)
+            for time in parent_times:
+                if time not in all_times and time_range.contains(time):
                     yield time
 
     @withcases
@@ -556,11 +561,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         updated_self:Dataset = self.update(**kwargs)
         if 'tile' in kwargs:
             full_key = updated_self.get_key(time)
-            return self._check_data(full_key)
-        
+            if self._check_data(full_key):
+                return True
+            else:
+                return False
+
         for tile in updated_self.tile_names:
-            full_key = updated_self.get_key(time, tile = tile)
-            if not self._check_data(full_key):
+            if not self.check_data(time, tile = tile, **kwargs):
                 return False
         else:
             return True
@@ -633,7 +640,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if template_dict is None and make_it:
             start_time = self.get_start(**kwargs)
             if start_time is not None:
-                start_data = self.get_data(time = start_time, tile = tile, **kwargs)
+                start_data = self.get_data(time = start_time, tile = tile, as_is=True, **kwargs)
+                start_data = straighten_data(start_data)
                 #templatearray = self.make_templatearray_from_data(start_data)
                 self.set_template(start_data, tile = tile)
                 template_dict = self.get_template_dict(make_it = False, **kwargs)
@@ -671,12 +679,17 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._template[tile]['dims_lengths'][dim] = length
 
     @staticmethod
-    def build_templatearray(template_dict: dict) -> xr.DataArray|xr.Dataset:
+    def build_templatearray(template_dict: dict, data = None) -> xr.DataArray|xr.Dataset:
         """
         Build a template xarray.DataArray from a dictionary.
         """
+
         shape = [template_dict['dims_lengths'][dim] for dim in template_dict['dims_names']]
-        template = xr.DataArray(np.full(shape, template_dict['_FillValue']), dims = template_dict['dims_names'])
+        if data is None:
+            data = np.full(shape, template_dict['_FillValue'])
+        else:
+            data = data.reshape(shape)
+        template = xr.DataArray(data, dims = template_dict['dims_names'])
         
         for dim in template_dict['dims_names']:
             start  = template_dict['dims_starts'][dim]
@@ -685,7 +698,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             template[dim] = np.linspace(start, end, length)
 
         template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
-        template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_coordinate_system()
+        template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_crs(template_dict['crs']).rio.write_coordinate_system()
 
         if 'variables' in template_dict:
             template_ds = xr.Dataset({var: template.copy() for var in template_dict['variables']})
@@ -698,25 +711,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
                              template_dict: dict) -> xr.DataArray|xr.Dataset:
         
         if isinstance(data, xr.DataArray):
-            x_dim, y_dim = template_dict['spatial_dims']
-            crs = template_dict['crs']
-            data = data.rio.set_spatial_dims(x_dim, y_dim).rio.write_crs(crs).rio.write_coordinate_system()
-
-            for dim in template_dict['dims_names']:
-                start  = template_dict['dims_starts'][dim]
-                end    = template_dict['dims_ends'][dim]
-                length = template_dict['dims_lengths'][dim]
-                data[dim] = np.linspace(start, end, length)
-            data = data.transpose(*template_dict['dims_names'])
-
-            nodata_value = template_dict['_FillValue']
-            data.attrs['_FillValue'] = nodata_value
-
+            #data = straighten_data(data)
+            data = Dataset.build_templatearray(template_dict, data.values)
         elif isinstance(data, np.ndarray):
-            template = Dataset.build_templatearray(template_dict)
-            data = template.copy(data = data)
+            data = Dataset.build_templatearray(template_dict, data)
         elif isinstance(data, xr.Dataset):
-            all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template['variables']]
+            all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template_dict['variables']]
             data = xr.merge(all_data)
         
         return data
@@ -727,13 +727,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Set metadata for the data.
         """
-        metadata = {}        
+     
         if hasattr(data, 'attrs'):
             if 'long_name' in data.attrs:
                 data.attrs.pop('long_name')
-            metadata.update(data.attrs)
+            kwargs.update(data.attrs)
         
-        metadata.update(kwargs)
+        metadata = kwargs.copy()
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if time is not None:
             datatime = self.get_time_signature(time)
@@ -808,7 +808,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_thubmnails = []
         for layer in layers:
             tags = layer.pop('tags')
-            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items()])
+            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items() if not (isinstance(v, str) and len(v) == 0)])
             time = layer.pop('time')
             log_dict = layer.pop('log')
             log_list.append(log_dict)
@@ -848,28 +848,41 @@ class Dataset(ABC, metaclass=DatasetMeta):
             notification.send(recipients, subject, body = body)
 
     ## LOGGING METHODS
-    def get_log(self,data: xr.DataArray, time: TimeStep|dt.datetime, tags: dict, other: dict[str, xr.DataArray], **log_options) -> dict:
+    def get_log(self, data: xr.DataArray, options = None, **kwargs) -> dict:
         log_dict = {}
+
+        metadata = data.attrs
+
         log_dict['dataset'] = self.name
+        log_dict['source_key'] = metadata.get('source_key', kwargs.get('source_key', None))
+        log_dict['thumbnail'] = kwargs.get('thumbnail', None)
+        log_dict['time'] = metadata.get('time', kwargs.get('time', None))
+        log_dict['time_produced'] = metadata.get('time_produced', dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
-        for key, value in tags.items():
-            log_dict[key] = value
+        kwargs.update(metadata)
+        for k, v in kwargs.items():
+            if k not in log_dict:
+                log_dict[k] = v
+        
+        kwargs.update(metadata)
 
-        if isinstance(time, dt.datetime):
-            time = time.strftime('%Y-%m-%d')
-            log_dict['timestamp'] = time
-        elif(isinstance(time, TimeStep)):
-            log_dict['timestamp'] = self.get_time_signature(time).strftime('%Y-%m-%d')
-            log_dict['timestep_start'] = time.start.strftime('%Y-%m-%d')
-            log_dict['timestep_end'] = time.end.strftime('%Y-%m-%d')
+        # format the log_dict correctly
+        final_log_dict = {}
+        for key, value in log_dict.items():
+            if isinstance(value, TimeStep):
+                final_log_dict[key] = self.get_time_signature(value).strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(value, dt.datetime):
+                final_log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(value, str) and len(value.strip()) > 0 and not value.startswith('__'):
+                final_log_dict[key] = value
+            elif isinstance(value, int): 
+                final_log_dict[key] = str(value)
+            elif isinstance(value, float):
+                final_log_dict[key] = str(round(value, 4))
 
-        log_dict['time_added'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        final_log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
 
-        for key, value in other.items():
-            log_dict[key] = value
-
-        log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
-        return log_dict
+        return final_log_dict
 
     @staticmethod
     def write_log(log_dict, log_ds, time, **kwargs):
@@ -885,7 +898,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             log_output = log_str
         elif log_ds.format == 'json':
             log_output = log_dict
-    
+
         log_ds.write_data(log_output, time, append = True, **kwargs)
 
     @staticmethod
