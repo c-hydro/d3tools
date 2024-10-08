@@ -32,6 +32,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
 
     @classmethod
     def from_date(cls, date: datetime.datetime, start_doys: Optional[Iterable[int]] = None):
+        date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
         start_doys = cls.get_start_doys(start_doys)
         Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
         if Subclass:
