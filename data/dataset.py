@@ -19,7 +19,7 @@ try:
 except ImportError:
     from timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
     from timestepping.timestep import TimeStep
-    from tools.config.parse_utils import substitute_string, extract_date_and_tags
+    from config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 
 def withcases(func):
@@ -420,7 +420,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                    time_format: str = '%Y-%m-%d',
                    metadata = {},
                    **kwargs):
-
+        
         self.check_data_for_writing(data)
 
         output_file = self.get_key(time, **kwargs)
@@ -473,7 +473,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
-
         # write the data
         self._write_data(output, output_file)
         
@@ -482,7 +481,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_to_log['source_key'] = output_file
         if thumbnail_file is not None:
             other_to_log['thumbnail'] = thumbnail_file
-        
         log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
         if hasattr(self, 'log_opts'):
             log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
@@ -729,13 +727,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Set metadata for the data.
         """
-        metadata = {}        
+     
         if hasattr(data, 'attrs'):
             if 'long_name' in data.attrs:
                 data.attrs.pop('long_name')
-            metadata.update(data.attrs)
+            kwargs.update(data.attrs)
         
-        metadata.update(kwargs)
+        metadata = kwargs.copy()
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if time is not None:
             datatime = self.get_time_signature(time)
@@ -856,14 +854,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         metadata = data.attrs
 
         log_dict['dataset'] = self.name
-        log_dict['data'] = metadata.get('name', kwargs.get('name', self.name))
         log_dict['source_key'] = metadata.get('source_key', kwargs.get('source_key', None))
         log_dict['thumbnail'] = kwargs.get('thumbnail', None)
         log_dict['time'] = metadata.get('time', kwargs.get('time', None))
         log_dict['time_produced'] = metadata.get('time_produced', dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
         kwargs.update(metadata)
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             if k not in log_dict:
                 log_dict[k] = v
         
