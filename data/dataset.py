@@ -142,12 +142,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## CLASS METHODS FOR FACTORY
     @classmethod
     def from_options(cls, options: dict, defaults: dict = None):
-        type = options.pop('type', None)
-        type = cls.get_type(type)
-        Subclass: 'Dataset' = cls.get_subclass(type)
         defaults = defaults or {}
         new_options = defaults.copy()
         new_options.update(options)
+
+        type = new_options.pop('type', None)
+        type = cls.get_type(type)
+        Subclass: 'Dataset' = cls.get_subclass(type)
+
         return Subclass(**new_options)
 
     @classmethod
