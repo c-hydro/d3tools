@@ -644,7 +644,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 start_data = straighten_data(start_data)
                 #templatearray = self.make_templatearray_from_data(start_data)
                 self.set_template(start_data, tile = tile)
-                template_dict = self.get_template_dict(make_it = False, **kwargs)
+                template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
         
         return template_dict
     
