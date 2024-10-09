@@ -558,15 +558,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Check if data is available for a given time.
         """
-        updated_self:Dataset = self.update(**kwargs)
         if 'tile' in kwargs:
-            full_key = updated_self.get_key(time)
+            full_key = self.get_key(time, **kwargs)
             if self._check_data(full_key):
                 return True
             else:
                 return False
 
-        for tile in updated_self.tile_names:
+        for tile in self.tile_names:
             if not self.check_data(time, tile = tile, **kwargs):
                 return False
         else:
