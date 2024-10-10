@@ -919,7 +919,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         qc_dict['nans'] = int(np.sum(np.isnan(data)))
         qc_dict['nans_pc'] = qc_dict['nans'] / data.size * 100
         qc_dict['zeros'] = int(np.sum(data == 0))
-        qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
+        if (data.size - qc_dict['nans']) != 0:
+            qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
+        else:
+            qc_dict['zeros_pc'] = 0
         qc_dict['sum'] = np.nansum(data)
         qc_dict['sum_abs'] = np.nansum(np.abs(data))
 
