@@ -639,7 +639,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            start_time = self.get_start(**kwargs)
+            start_time = self.get_start(tile = tile, **kwargs)
             if start_time is not None:
                 start_data = self.get_data(time = start_time, tile = tile, as_is=True, **kwargs)
                 start_data = straighten_data(start_data)
