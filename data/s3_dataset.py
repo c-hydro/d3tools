@@ -20,6 +20,8 @@ except ImportError:
 class S3Dataset(Dataset):
     type = 's3'
 
+    s3_client = None  # Class-level attribute to store the S3 client
+
     def __init__(self,
                  key_pattern: str,
                  bucket_name: str,
@@ -33,7 +35,9 @@ class S3Dataset(Dataset):
         else:
             self.tmp_dir = tempfile.mkdtemp()
 
-        self.s3_client = boto3.client('s3')
+        # Initialize the S3 client if it hasn't been initialized yet
+        if S3Dataset.s3_client is None:
+            S3Dataset.s3_client = boto3.client('s3')
         self.available_keys_are_cached = False
 
         super().__init__(**kwargs)
@@ -53,14 +57,14 @@ class S3Dataset(Dataset):
         local_key = os.path.join(self.tmp_dir, input_key)
         if not os.path.exists(local_key):
             os.makedirs(os.path.dirname(local_key), exist_ok = True)
-            self.s3_client.download_file(self.bucket_name, input_key, local_key)
+            S3Dataset.s3_client.download_file(self.bucket_name, input_key, local_key)
 
         return read_from_file(local_key, self.format)
 
     def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
         local_key = os.path.join(self.tmp_dir, output_key)
         write_to_file(output, local_key, self.format, **kwargs)
-        self.s3_client.upload_file(local_key, self.bucket_name, output_key)
+        S3Dataset.s3_client.upload_file(local_key, self.bucket_name, output_key)
         if self.available_keys_are_cached:
             if output_key not in self.available_keys:
                 self.available_keys.append(output_key)
@@ -69,7 +73,7 @@ class S3Dataset(Dataset):
         local_key = os.path.join(self.tmp_dir, key)
         if os.path.exists(local_key):
             os.remove(local_key)
-        self.s3_client.delete_object(Bucket = self.bucket_name, Key = key)
+        S3Dataset.s3_client.delete_object(Bucket = self.bucket_name, Key = key)
         if self.available_keys_are_cached:
             if key in self.available_keys:
                 self.available_keys.pop(key)
@@ -77,7 +81,7 @@ class S3Dataset(Dataset):
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
         try:
-            self.s3_client.head_object(Bucket = self.bucket_name, Key = data_path)
+            S3Dataset.s3_client.head_object(Bucket = self.bucket_name, Key = data_path)
             return True
         except:
             return False
@@ -89,7 +93,7 @@ class S3Dataset(Dataset):
             prefix = os.path.dirname(prefix)
         
         files = []
-        paginator = self.s3_client.get_paginator('list_objects_v2')
+        paginator = S3Dataset.s3_client.get_paginator('list_objects_v2')
         for page in paginator.paginate(Bucket = self.bucket_name, Prefix = prefix):
             content = page.get('Contents', [])
             for file in content:
@@ -122,5 +126,5 @@ class S3Dataset(Dataset):
     def get_tile_names_from_file(self, filename: str) -> list[str]:
         local_file = os.path.join(self.tmp_dir, filename)
         os.makedirs(os.path.dirname(local_file), exist_ok = True)
-        self.s3_client.download_file(self.bucket_name, filename, local_file)
+        S3Dataset.s3_client.download_file(self.bucket_name, filename, local_file)
         return super().get_tile_names_from_file(local_file)
