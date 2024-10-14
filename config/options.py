@@ -71,7 +71,7 @@ class Options(dict):
 
         # parse datasets
         dataset_options, ds_key = parsed_options.get('datasets', {}, ignore_case=True, get_key=True)
-        defaults = dataset_options.pop('__defaults__')
+        defaults = dataset_options.pop('__defaults__', None)
         for dsname, dsopt in dataset_options.items():
             dataset_options[dsname] = Dataset.from_options(dsopt, defaults)
 
