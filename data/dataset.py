@@ -142,12 +142,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## CLASS METHODS FOR FACTORY
     @classmethod
     def from_options(cls, options: dict, defaults: dict = None):
-        type = options.pop('type', None)
-        type = cls.get_type(type)
-        Subclass: 'Dataset' = cls.get_subclass(type)
         defaults = defaults or {}
         new_options = defaults.copy()
         new_options.update(options)
+
+        type = new_options.pop('type', None)
+        type = cls.get_type(type)
+        Subclass: 'Dataset' = cls.get_subclass(type)
+
         return Subclass(**new_options)
 
     @classmethod
@@ -558,15 +560,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Check if data is available for a given time.
         """
-        updated_self:Dataset = self.update(**kwargs)
         if 'tile' in kwargs:
-            full_key = updated_self.get_key(time)
+            full_key = self.get_key(time, **kwargs)
             if self._check_data(full_key):
                 return True
             else:
                 return False
 
-        for tile in updated_self.tile_names:
+        for tile in self.tile_names:
             if not self.check_data(time, tile = tile, **kwargs):
                 return False
         else:
@@ -638,13 +639,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            start_time = self.get_start(**kwargs)
+            start_time = self.get_start(tile = tile, **kwargs)
             if start_time is not None:
                 start_data = self.get_data(time = start_time, tile = tile, as_is=True, **kwargs)
                 start_data = straighten_data(start_data)
                 #templatearray = self.make_templatearray_from_data(start_data)
                 self.set_template(start_data, tile = tile)
-                template_dict = self.get_template_dict(make_it = False, **kwargs)
+                template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
         
         return template_dict
     
@@ -918,7 +919,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         qc_dict['nans'] = int(np.sum(np.isnan(data)))
         qc_dict['nans_pc'] = qc_dict['nans'] / data.size * 100
         qc_dict['zeros'] = int(np.sum(data == 0))
-        qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
+        if (data.size - qc_dict['nans']) != 0:
+            qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
+        else:
+            qc_dict['zeros_pc'] = 0
         qc_dict['sum'] = np.nansum(data)
         qc_dict['sum_abs'] = np.nansum(np.abs(data))
 
