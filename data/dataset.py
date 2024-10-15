@@ -428,7 +428,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return
         
         # if data is a numpy array, ensure there is a template available
-        template_dict = self.get_template_dict(**kwargs)
+        try:
+            template_dict = self.get_template_dict(**kwargs)
+        except PermissionError:
+            template_dict = None
+
         if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
                 #templatearray = self.make_templatearray_from_data(data)
@@ -794,7 +798,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             destination.write_data(tmp_destination, **kwargs)
         else:
             this_thumbnail.save(destination_path, **options)
-            return destination_path
+        
+        return destination_path
 
     ## NOTIFICATION METHODS
     def notify(self):
