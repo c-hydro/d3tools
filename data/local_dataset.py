@@ -36,6 +36,7 @@ class LocalDataset(Dataset):
             self.file = os.path.basename(kwargs.pop('key_pattern'))
 
         super().__init__(**kwargs)
+        self._creation_kwargs = {'type' : self.type}
 
     @property
     def key_pattern(self):

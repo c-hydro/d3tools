@@ -30,6 +30,8 @@ class RemoteDataset(Dataset):
         else:
             self.tmp_dir = tempfile.mkdtemp()
 
+        self._creation_kwargs.update({'tmp_dir': self.tmp_dir})
+
         super().__init__(**kwargs)
         atexit.register(self.cleanup)
 
@@ -49,11 +51,18 @@ class RemoteDataset(Dataset):
             os.makedirs(os.path.dirname(local_key), exist_ok = True)
             self._download(input_key, local_key)
 
+        # if this is a shapefile, also copy the dbf, shx, and prj files
+        if self.format == 'shp':
+            for ext in ['dbf', 'shx', 'prj']:
+                local_ext = os.path.join(self.tmp_dir, f"{input_key.replace('.shp', '')}.{ext}")
+                self._download(input_key.replace('.shp', f'.{ext}'), local_ext)
+
         return read_from_file(local_key, self.format)
 
     def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
         local_key = os.path.join(self.tmp_dir, output_key)
         write_to_file(output, local_key, self.format, **kwargs)
+        breakpoint()
         self._upload(local_key, output_key)
         if self.available_keys_are_cached:
             if output_key not in self.available_keys:
@@ -108,7 +117,9 @@ class S3Dataset(RemoteDataset):
         if S3Dataset.s3_client is None:
             S3Dataset.s3_client = boto3.client('s3')
 
+        self._creation_kwargs = {'type': self.type, 'bucket_name': self.bucket_name}
         super().__init__(tmp_dir,**kwargs)
+
 
     ## INPUT/OUTPUT METHODS
     def _download(self, input_key, local_key):
@@ -177,9 +188,15 @@ class SFTPDataset(RemoteDataset):
         self.password = password
         self.port = port
         self.private_key = kwargs.pop('private_key', None)
+
         self.sftp_client = self._connect()
 
+        self._creation_kwargs = {'type': self.type, 'host': self.hostname, 'username': self.username,
+                                 'password': self.password, 'private_key': self.private_key,
+                                 'port': self.port}
+        
         super().__init__(tmp_dir, **kwargs)
+
 
     def _connect(self):
         transport = paramiko.Transport((self.hostname, self.port))
@@ -187,7 +204,10 @@ class SFTPDataset(RemoteDataset):
         try:
             if self.password is None:
                 if self.private_key is not None:
-                    private_key = paramiko.RSAKey.from_private_key_file(self.private_key)
+                    if 'rsa' in self.private_key:
+                        private_key = paramiko.RSAKey.from_private_key_file(self.private_key)
+                    elif 'ed25519' in self.private_key:
+                        private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(self.private_key)
                     transport.connect(username=self.username, pkey=private_key)
                 else:
                     possible_files = ['~/.ssh/id_ed25519', '~/.ssh/id_rsa']
@@ -226,7 +246,7 @@ class SFTPDataset(RemoteDataset):
         # make sure the directory exists
         dirname = os.path.dirname(output_key)
         if not self._check_data(dirname):
-            self.sftp_client.mkdir(os.path.dirname(output_key))
+            self.sftp_client.mkdir(dirname)
 
         self.sftp_client.put(local_key, output_key)
 
@@ -234,7 +254,8 @@ class SFTPDataset(RemoteDataset):
         self.sftp_client.remove(key)
 
     def update(self, in_place = False, **kwargs):
-        self.options.update({'host': self.hostname, 'username': self.username, 'tmp_dir': self.tmp_dir})
+        self.options.update({'host': self.hostname, 'username': self.username, 'tmp_dir': self.tmp_dir,
+                             'port': self.port, 'private_key': self.private_key, 'password': self.password})
         new_self = super().update(in_place = in_place, **kwargs)
         new_self.sftp_client = self.sftp_client
 

@@ -72,25 +72,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self.time_signature = kwargs.pop('time_signature')
 
         if 'thumbnail' in kwargs:
-            self.thumb_opts = kwargs.pop('thumbnail')
+            self.thumb_opts = self.parse_thumbnail_options(kwargs.pop('thumbnail'))
 
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
             atexit.register(self.notify)
 
         if 'log' in kwargs:
-            self.log_opts = kwargs.pop('log')
-            if isinstance(self.log_opts, Dataset):
-                log_output= self.log_opts.update(now = dt.datetime.now())
-                self.log_opts = {'output' : log_output}
-            elif isinstance(self.log_opts, str):
-                log_output_file = substitute_string(self.log_opts, {'now': dt.datetime.now()})
-                log_output = Dataset.from_options({'key_pattern' : log_output_file})
-                self.log_opts = {'output' : log_output}
-            elif isinstance(self.log_opts, dict):
-                log_output_file = substitute_string(self.log_opts.pop('file'), {'now': dt.datetime.now()})
-                log_output = Dataset.from_options({'key_pattern' : log_output_file})
-                self.log_opts['output'] = log_output
+            self.log_opts = self.parse_log_options(kwargs.pop('log'))
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
@@ -101,7 +90,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
-    
+
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -405,7 +394,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if not self.format == 'csv':
                 raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
         elif isinstance(data, str):
-            if not self.format == 'txt':
+            if self.format =='txt' or self.format == 'file':
+                pass
+            else:
                 raise ValueError(f'Cannot write a string to a {self.format} file.')
         elif isinstance(data, dict):
             if not self.format == 'json':
@@ -432,6 +423,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._write_data(data, output_file, append = append)
             return
         
+        if self.format == 'file':
+            self._write_data(data, output_file)
+            return
+        
         # if data is a numpy array, ensure there is a template available
         template_dict = self.get_template_dict(**kwargs)
         if template_dict is None:
@@ -453,19 +448,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             parents = {}
 
-        timestamp = self.get_time_signature(time)
-        if hasattr(self, 'thumb_opts'):
+        if hasattr(self, 'thumb_opts') and self.thumb_opts is not None:
             parents[''] = output
             thumb_opts = self.thumb_opts.copy()
-            if 'destination' in thumb_opts:
-                destination = thumb_opts.pop('destination')
-                destination = timestamp.strftime(substitute_string(destination, kwargs))
-            else:
-                destination = output_file
+
+            destination = thumb_opts.pop('destination')
             thumbnail_file = self.make_thumbnail(data = parents,
                                                  options = thumb_opts,
                                                  destination = destination,
-                                                 **kwargs)
+                                                 time = time, **kwargs)
         else:
             thumbnail_file = None
 
@@ -487,8 +478,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if hasattr(self, 'log_opts'):
             log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
             log_opts = self.log_opts.copy()
-            log_output_ds = log_opts.pop('output')
-            log_output = log_output_ds.update(time, **kwargs)
+            log_output = log_opts.pop('output')
             self.write_log(log_dict, log_output, time, **kwargs)
         
         if hasattr(self, 'notif_opts'):
@@ -751,38 +741,60 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return data
 
+    def parse_as_ds(self, value) -> 'Dataset':
+        if isinstance(value, str):
+            return Dataset.from_options({"key_pattern":value}, defaults = self._creation_kwargs.copy())
+        else:
+            return value
+
     ## THUMBNAIL METHODS
+
+    def parse_thumbnail_options(self, thumbnail_options: dict) -> dict:
+        if 'colors' not in thumbnail_options or 'destination' not in thumbnail_options:
+            #TODO add a warning
+            return None
+        else:
+            colors = thumbnail_options.get('colors')
+            destination = thumbnail_options.get('destination')
+
+        if isinstance(colors, dict):
+            thumbnail_options['colors'] = {key: self.parse_as_ds(colors[key]) for key in colors}
+        else:
+            thumbnail_options['colors'] = self.parse_as_ds(colors)
+
+        thumbnail_options['destination'] = self.parse_as_ds(destination)
+
+        if 'overlay' in thumbnail_options:
+            thumbnail_options['overlay'] = self.parse_as_ds(thumbnail_options['overlay'])
+        
+        return thumbnail_options
+
     @staticmethod
-    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray], options: dict, destination: str, **kwargs):
+    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray], options: dict, destination: 'Dataset', **kwargs):
         try:
             from ..thumbnails import Thumbnail, ThumbnailCollection
         except ImportError:
             from thumbnails import Thumbnail, ThumbnailCollection
 
-        if 'colors' in options:
-            colors = options.pop('colors')
+        colors = options.pop('colors')
+        if isinstance(colors, dict):
+            col_defs       = [v.update(**kwargs) for v in colors.values()]
+            data           = list(data[k] for k in colors.keys())
+            this_thumbnail = ThumbnailCollection(data, col_defs)
         else:
-            return
-
-        if isinstance(colors, str|Dataset):
-            col_def = substitute_string(colors, kwargs) if isinstance(colors, str) else colors.update(**kwargs)
+            col_def = colors.update(**kwargs)
             if isinstance(data, dict):
                 data = data['']
             this_thumbnail = Thumbnail(data, col_def)
-            destination = destination.replace('.tif', '.png')
-
-        elif isinstance(colors, dict):
-            keys = list(colors.keys())
-            col_defs = []
-            for key in keys:
-                col_def = substitute_string(colors[key], kwargs) if isinstance(colors[key], str) else colors[key].update(**kwargs)
-                col_defs.append(col_def)
-            data      = list(data[key] for key in keys)
-            this_thumbnail = ThumbnailCollection(data, col_defs)
-            destination = destination.replace('.tif', '.pdf')
-            
-        this_thumbnail.save(destination, **options)
-        return destination
+        
+        destination_path = destination.get_key(**kwargs)
+        if hasattr(destination, 'tmp_dir'):
+            tmp_destination = os.path.join(destination.tmp_dir, os.path.basename(destination_path))
+            this_thumbnail.save(tmp_destination, **options)
+            destination.write_data(tmp_destination, **kwargs)
+        else:
+            this_thumbnail.save(destination_path, **options)
+            return destination_path
 
     ## NOTIFICATION METHODS
     def notify(self):
@@ -849,6 +861,25 @@ class Dataset(ABC, metaclass=DatasetMeta):
             notification.send(recipients, subject, body = body)
 
     ## LOGGING METHODS
+    def parse_log_options(self, value) -> dict:
+        # if value is a Dataset already it will have a "key_pattern" attribute
+        if hasattr(value, 'key_pattern'):
+            log_output= value.update(now = dt.datetime.now())
+            log_opts = {'output' : log_output}
+        # if it is a string, we use that as the key_pattern and the default from the creation kwargs of this dataset
+        elif isinstance(value, str):
+            log_output_file = substitute_string(value, {'now': dt.datetime.now()})
+            log_output = Dataset.from_options({"key_pattern":log_output_file},
+                                                defaults = self._creation_kwargs.copy())
+            log_opts = {'output' : log_output}
+        # if it is a dictionary, we use the "file" key as the "key_pattern" and the rest are options for the log
+        elif isinstance(value, dict):
+            log_output_file = substitute_string(value.pop('file'), {'now': dt.datetime.now()})
+            log_output = Dataset.from_options({'key_pattern' : log_output_file},
+                                                defaults = self._creation_kwargs.copy())
+            log_opts['output'] = log_output
+        return log_opts
+
     def get_log(self, data: xr.DataArray, options = None, **kwargs) -> dict:
         log_dict = {}
 
@@ -887,8 +918,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @staticmethod
     def write_log(log_dict, log_ds, time, **kwargs):
-        if isinstance(log_ds, str):
-            log_ds = Dataset.from_options({'type': 'local', 'key_pattern': log_ds})
         
         if log_ds.format == 'txt':
             # convert the log_dict to a string

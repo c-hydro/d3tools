@@ -32,6 +32,9 @@ def get_format_from_path(path: str) -> str:
     
     elif extension == 'shp':
         return 'shp'
+    
+    elif extension in ['png', 'pdf']:
+        return 'file'
 
     raise ValueError(f'File format not supported: {extension}')
 
@@ -69,6 +72,10 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
         # check if there is a single variable in the dataset
         if len(data.data_vars) == 1:
             data = data[list(data.data_vars)[0]]
+
+    # read the data from a png or pdf
+    elif format == 'file':
+        data = path
 
     return data
 
@@ -119,6 +126,10 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
     # write the data to a netcdf
     elif format == 'netcdf':
         data.to_netcdf(path)
+
+    # write the data to a png or pdf (i.e. move the file)
+    elif format == 'file':
+        os.rename(data, path)
 
 def rm_file(path) -> None:
     os.remove(path)
