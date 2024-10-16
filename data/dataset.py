@@ -457,10 +457,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             thumb_opts = self.thumb_opts.copy()
 
             destination = thumb_opts.pop('destination')
-            thumbnail_file = self.make_thumbnail(data = parents,
-                                                 options = thumb_opts,
-                                                 destination = destination,
-                                                 time = time, **kwargs)
+            thumbnail = self.make_thumbnail(data = parents,
+                                            options = thumb_opts,
+                                            destination = destination,
+                                            time = time, **kwargs)
+            thumbnail_file = thumbnail.thumbnail_file
         else:
             thumbnail_file = None
 
@@ -799,7 +800,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             this_thumbnail.save(destination_path, **options)
         
-        return destination_path
+        return this_thumbnail
 
     ## NOTIFICATION METHODS
     def notify(self):
