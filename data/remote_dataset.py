@@ -195,6 +195,7 @@ class S3Dataset(RemoteDataset):
         
 class SFTPDataset(RemoteDataset):
     type = 'sftp'
+    sftp_clients = {}  # Class-level attribute to store the SFTP clients
 
     def __init__(self, key_pattern: str,
                        host: str,
@@ -213,7 +214,10 @@ class SFTPDataset(RemoteDataset):
         self.port = port
         self.private_key = kwargs.pop('private_key', None)
 
-        self.sftp_client = self._connect()
+        self.sftp_client = SFTPDataset.sftp_clients.get(self.hostname)
+        if self.sftp_client is None:
+            self.sftp_client = self._connect()
+            SFTPDataset.sftp_clients[self.hostname] = self.sftp_client
 
         self._creation_kwargs = {'type': self.type, 'host': self.hostname, 'username': self.username,
                                  'password': self.password, 'private_key': self.private_key,
@@ -221,10 +225,8 @@ class SFTPDataset(RemoteDataset):
         
         super().__init__(tmp_dir, **kwargs)
 
-
     def _connect(self):
-        transport = paramiko.Transport((self.hostname, self.port))
-
+        
         try:
             if self.password is None:
                 if self.private_key is not None:
@@ -232,15 +234,20 @@ class SFTPDataset(RemoteDataset):
                         private_key = paramiko.RSAKey.from_private_key_file(self.private_key)
                     elif 'ed25519' in self.private_key:
                         private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(self.private_key)
+                    transport = paramiko.Transport((self.hostname, self.port))
                     transport.connect(username=self.username, pkey=private_key)
                 else:
-                    possible_files = ['~/.ssh/id_ed25519', '~/.ssh/id_rsa']
+                    # get the list of files in '~/.ssh'
+                    ssh_files = os.listdir(os.path.expanduser('~/.ssh'))
+                    keys = [file for file in ssh_files if 'rsa' in file or 'ed25519' in file and not file.endswith('.pub')] 
+                    possible_files = [f'~/.ssh/{key}' for key in keys]
                     for file in possible_files:
                         try:
-                            if file.endswith('rsa'):
+                            if 'rsa' in file:
                                 private_key = paramiko.RSAKey.from_private_key_file(os.path.expanduser(file))
-                            elif file.endswith('ed25519'):
+                            elif 'ed25519' in file:
                                 private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(os.path.expanduser(file))
+                            transport = paramiko.Transport((self.hostname, self.port))
                             transport.connect(username=self.username, pkey=private_key)
                             break
                         except:
@@ -251,6 +258,7 @@ class SFTPDataset(RemoteDataset):
                 password = os.getenv(self.password.replace('$', '')) if self.password.startswith('$') else self.password
                 if password is None:
                     raise ValueError("Could not resolve password")
+                transport = paramiko.Transport((self.hostname, self.port))
                 transport.connect(username=self.username, password=password)
 
             self.sftp_client = paramiko.SFTPClient.from_transport(transport)
@@ -309,11 +317,9 @@ class SFTPDataset(RemoteDataset):
         for root, dirs, filenames in sftp_walk(self.sftp_client, prefix):
             for file in filenames:
                 full_path = os.path.join(root, file)
-                if full_path in files: breakpoint()
                 try:
                     extract_date_and_tags(full_path, self.key_pattern)
                     files.append(full_path)
-
                 except ValueError:
                     pass
 
