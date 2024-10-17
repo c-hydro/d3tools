@@ -6,12 +6,12 @@ import datetime as dt
 
 try:
     from .dataset import Dataset
-    from ..timestepping.timestep import TimeStep
+    from ..timestepping.timestep import TimeStep, TimeRange
     from ..config.parse_utils import extract_date_and_tags
     from .io_utils import write_to_file, read_from_file, rm_file
 except ImportError:
     from dataset import Dataset
-    from timestepping.timestep import TimeStep
+    from timestepping.timestep import TimeStep, TimeRange
     from config.parse_utils import extract_date_and_tags
     from io_utils import write_to_file, read_from_file, rm_file
 
@@ -64,20 +64,7 @@ class LocalDataset(Dataset):
     def _check_data(self, data_path) -> bool:
         return os.path.exists(data_path)
     
-    @property
-    def available_keys(self) -> list[str]:
-        dir = self.dir
-        while '%' in dir or '{' in dir:
-            dir = os.path.dirname(dir)
-    
-        files = []
-        for root, _, filenames in os.walk(dir):
+    def _walk(self, prefix):
+        for root, _, filenames in os.walk(prefix):
             for filename in filenames:
-                this_key = os.path.join(root, filename)
-                try:
-                    extract_date_and_tags(this_key, self.key_pattern)
-                    files.append(this_key)
-                except ValueError:
-                    pass
-
-        return files
+                yield os.path.join(root, filename)

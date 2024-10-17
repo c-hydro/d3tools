@@ -9,15 +9,18 @@ from functools import cached_property
 import shutil
 import atexit
 import paramiko
+import datetime as dt
 
 try:
     from .dataset import Dataset
     from .io_utils import write_to_file, read_from_file
     from ..config.parse_utils import extract_date_and_tags
+    from ..timestepping import TimeRange
 except ImportError:
     from dataset import Dataset
     from io_utils import write_to_file, read_from_file
     from config.parse_utils import extract_date_and_tags
+    from timestepping import TimeRange
 
 class RemoteDataset(Dataset):
     type = 'remote'
@@ -121,7 +124,11 @@ class RemoteDataset(Dataset):
             return self
         else:
             return new_self
-        
+    
+    @cached_property
+    def available_keys(self):
+        self.available_keys_are_cached = True
+        return self.get_available_keys()
 
 class S3Dataset(RemoteDataset):
     type = 's3'
@@ -163,25 +170,12 @@ class S3Dataset(RemoteDataset):
         except:
             return False
 
-    @cached_property
-    def available_keys(self):
-        prefix = self.key_pattern
-        while '%' in prefix or '{' in prefix:
-            prefix = os.path.dirname(prefix)
-        
-        files = []
+    def _walk(self, prefix):
         paginator = S3Dataset.s3_client.get_paginator('list_objects_v2')
         for page in paginator.paginate(Bucket = self.bucket_name, Prefix = prefix):
             content = page.get('Contents', [])
             for file in content:
-                try:
-                    extract_date_and_tags(file['Key'], self.key_pattern)
-                    files.append(file['Key'])
-                except ValueError:
-                    pass
-        
-        self.available_keys_are_cached = True
-        return files
+                yield file['Key']
 
     def update(self, in_place = False, **kwargs):
         self.options.update({'bucket_name': self.bucket_name, 'tmp_dir': self.tmp_dir})
@@ -303,33 +297,16 @@ class SFTPDataset(RemoteDataset):
             return True
         except:
             return False
-        
-    @cached_property
-    def available_keys(self):
-        prefix = self.key_pattern
-        while '%' in prefix or '{' in prefix:
-            prefix = os.path.dirname(prefix)
 
-        if not self._check_data(prefix):
-            return []
-
-        files = []
+    def _walk(self, prefix):
         for root, dirs, filenames in sftp_walk(self.sftp_client, prefix):
             for file in filenames:
-                full_path = os.path.join(root, file)
-                try:
-                    extract_date_and_tags(full_path, self.key_pattern)
-                    files.append(full_path)
-                except ValueError:
-                    pass
-
-        self.available_keys_are_cached = True
-        return files
+                yield os.path.join(root, file)
     
 import stat
 import posixpath
 
-def sftp_walk(sftp, remote_path):
+def sftp_walk(sftp, remote_path, rev = False):
     """
     Generator that walks the directory tree rooted at remote_path, similar to os.walk.
     Yields a tuple (dirpath, dirnames, filenames).
@@ -343,6 +320,8 @@ def sftp_walk(sftp, remote_path):
         else:
             files.append(item.filename)
     
+    folders.sort(reverse=rev)
+    files.sort(reverse=rev)
     yield path, folders, files
     for folder in folders:
         new_path = posixpath.join(path, folder)

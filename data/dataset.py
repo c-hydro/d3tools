@@ -208,6 +208,29 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def available_keys(self):
+        return self.get_available_keys()
+    
+    def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        
+        prefix = self.get_prefix(time, **kwargs)
+        if not self._check_data(prefix):
+            return []
+        if isinstance(time, dt.datetime):
+            time = TimeRange(time, time)
+
+        key_pattern = self.get_key(time = None, **kwargs)
+        files = []
+        for file in self._walk(prefix):
+            try:
+                this_time, _ = extract_date_and_tags(file, key_pattern)
+                if time.contains(this_time):
+                    files.append(file)
+            except ValueError:
+                pass
+        
+        return files
+
+    def _walk(self, prefix: str) -> Generator[str, None, None]:
         raise NotImplementedError
 
     @property
@@ -218,23 +241,32 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def available_tags(self):
         return self.get_available_tags()
 
-    def get_available_tags(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
-        if kwargs:
-            updated_self = self.update(**kwargs)
+    def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        if not hasattr(time, 'start'):
+            prefix = self.get_key(time = time, **kwargs)
         else:
-            updated_self = self
+            start = time.start
+            end = time.end
+            prefix = self.get_key(time = None, **kwargs)
+            if start.year == end.year:
+                prefix = prefix.replace('%Y', str(start.year))
+                if start.month == end.month:
+                    prefix = prefix.replace('%m', f'{start.month:02d}')
+                    if start.day == end.day:
+                        prefix = prefix.replace('%d', f'{start.day:02d}')
 
-        if isinstance(time, TimeStep):
-            time = self.get_time_signature(time)
+        while '%' in prefix or '{' in prefix:
+            prefix = os.path.dirname(prefix)
+        
+        return prefix
 
-        all_keys = updated_self.available_keys
+    def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        all_keys = self.get_available_keys(time, **kwargs)
         all_tags = {}
         all_dates = set()
         for key in all_keys:
             this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
-            if time is not None and this_date != time:
-                continue
-
+            
             for tag in this_tags:
                 if tag not in all_tags:
                     all_tags[tag] = set()
@@ -273,10 +305,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return max(all_times)
 
     def get_last_ts(self) -> TimeStep:
+
         last_date = self.get_last_date()
         if last_date is None:
             return None
-
+        
         timestep = self.estimate_timestep()
         if timestep is None:
             return None
