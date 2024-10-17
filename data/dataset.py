@@ -12,12 +12,11 @@ import re
 import tempfile
 
 try:
-    from ..timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
-    from ..timestepping.timestep import TimeStep
+    from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
     from ..config.parse_utils import substitute_string, extract_date_and_tags
     from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
 except ImportError:
-    from timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
+    from timestepping import TimeRange, Month, estimate_timestep, TimeStep
     from timestepping.timestep import TimeStep
     from config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
@@ -278,60 +277,113 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return all_tags
 
-    def estimate_timestep(self) -> TimeStep:
-        from scipy.stats import mode
-        all_times = self.available_tags['time']
-        all_times.sort()
-        all_diff = [(all_times[i+1] - all_times[i]).days for i in range(len(all_times)-1)]
-        step_length = mode(all_diff).mode
+    def get_last_date(self, now = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        if now is None:
+            now = dt.datetime.now()
         
-        if np.isclose(step_length, 1):
-            return Day
-        elif np.isclose(step_length, 8):
-            return ViirsModisTimeStep
-        elif np.isclose(step_length, 10):
-            return Dekad
-        elif 30 <= step_length <= 31:
-            return Month
-        elif 365 <= step_length <= 366:
-            return Year
+        # the most efficient way, I think is to search my month
+        this_month = Month(now.year, now.month)
+        last_date = []
+        while len(last_date) < n:
+            this_month_times = self.get_times(this_month, **kwargs)
+            if len(this_month_times) > 0:
+                valid_time = [t for t in this_month_times if t <= now]
+                valid_time.sort(reverse = True)
+                last_date.extend(valid_time)
+            this_month = this_month - 1
+        
+        if len(last_date) == 0:
+            return None
+        if n == 1:
+            return last_date[0]
         else:
-            raise None
+            return last_date
 
-    def get_last_date(self) -> dt.datetime:
-        all_times = self.available_tags['time']
-        if len(all_times) == 0:
-            return None
-        return max(all_times)
+    def get_last_ts(self, **kwargs) -> TimeStep:
 
-    def get_last_ts(self) -> TimeStep:
-
-        last_date = self.get_last_date()
-        if last_date is None:
+        last_dates = self.get_last_date(n = 25, **kwargs)
+        if last_dates is None:
             return None
         
-        timestep = self.estimate_timestep()
+        timestep = estimate_timestep(last_dates)
         if timestep is None:
             return None
 
         if self.time_signature == 'end+1':
-            return timestep.from_date(last_date) -1
+            return timestep.from_date(max(last_dates)) -1
         else:
-            return timestep.from_date(last_date)
-        
-    def get_first_ts(self) -> TimeStep:
-        first_date = self.get_start()
-        if first_date is None:
-            return None
+            return timestep.from_date(max(last_dates))
 
-        timestep = self.estimate_timestep()
+    def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        if start is None:
+            start = dt.datetime(1900, 1, 1)
+
+        end = self.get_last_date(**kwargs)
+        if end is None:
+            return None
+        
+        start_month = Month(start.year, start.month)
+        end_month   = Month(end.year, end.month)
+
+        # first look for a suitable time to start the search
+        while True:
+            midpoint = start_month.start + (end_month.end - start_month.start) / 2
+            mid_month = Month(midpoint.year, midpoint.month)
+            mid_month_times = self.get_times(mid_month, **kwargs)
+            # if we do actually find some times in the month
+            if len(mid_month_times) > 0:
+
+                    # end goes to midpoint
+                    end_month = mid_month
+            # if we didn't find any times in the month 
+            else:
+                # we start from the midpoint this time
+                start_month = mid_month
+
+            if start_month + 1 == end_month:
+                break
+        
+        print('START FOUND', start_month)
+        first_date = []
+        while len(first_date) < n and start_month.end <= end:
+            this_month_times = self.get_times(start_month, **kwargs)
+            valid_time = [t for t in this_month_times if t >= start]
+            valid_time.sort()
+            first_date.extend(valid_time)
+
+            start_month = start_month + 1
+
+        if len(first_date) == 0:
+            return None
+        if n == 1:
+            return first_date[0]
+        else:
+            return first_date
+
+    def get_first_ts(self, **kwargs) -> TimeStep:
+
+        first_dates = self.get_first_date(n = 25, **kwargs)
+        if first_dates is None:
+            return None
+        
+        timestep = estimate_timestep(first_dates)
         if timestep is None:
             return None
 
         if self.time_signature == 'end+1':
-            return timestep.from_date(first_date) - 1
+            return timestep.from_date(min(first_dates)) -1
         else:
-            return timestep.from_date(first_date)
+            return timestep.from_date(min(first_dates))
+
+    def get_start(self, **kwargs) -> dt.datetime:
+        """
+        Get the start of the available data.
+        """
+        first_ts = self.get_first_ts(**kwargs)
+        if first_ts is not None:
+            return first_ts.start
+        else:
+            return self.get_first_date(**kwargs)
 
     def is_subdataset(self, other: 'Dataset') -> bool:
         ds1_keys = self.available_keys
@@ -580,7 +632,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        all_times = self.update(**kwargs).available_tags.get('time', [])
+        all_times = self.get_available_tags(time_range, **kwargs)['time']
         all_times.sort()
         for time in all_times:
             if time_range.contains(time):
@@ -649,15 +701,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @abstractmethod
     def _check_data(self, data_key) -> bool:
         raise NotImplementedError
-
-    def get_start(self, **kwargs) -> dt.datetime:
-        """
-        Get the start of the available data.
-        """
-        time_start = dt.datetime(1900, 1, 1)
-        time_end = dt.datetime.now()
-        for time in self._get_times(TimeRange(time_start, time_end), **kwargs):
-            return time
 
     ## METHODS TO MANIPULATE THE DATASET
     def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):

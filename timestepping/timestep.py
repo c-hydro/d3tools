@@ -32,3 +32,28 @@ class TimeStep(TimeRange, ABC):
         all_timesteps = [self.set_year(year) for year in history_years]
 
         return [ts for ts in all_timesteps if ts.start >= history.start and ts.end <= history.end]
+    
+def estimate_timestep(sample) -> TimeStep:
+        import numpy as np
+        from scipy.stats import mode
+
+        from .fixed_num_timestep import Year, Month, Dekad
+        from .fixed_len_timestep import Day
+        from .fixed_doy_timestep import ViirsModisTimeStep
+
+        sample.sort()
+        all_diff = [(sample[i+1] - sample[i]).days for i in range(len(sample)-1)]
+        step_length = mode(all_diff).mode
+        
+        if np.isclose(step_length, 1):
+            return Day
+        elif np.isclose(step_length, 8):
+            return ViirsModisTimeStep
+        elif np.isclose(step_length, 10):
+            return Dekad
+        elif 30 <= step_length <= 31:
+            return Month
+        elif 365 <= step_length <= 366:
+            return Year
+        else:
+            raise None
