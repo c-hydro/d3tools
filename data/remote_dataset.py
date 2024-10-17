@@ -102,6 +102,25 @@ class RemoteDataset(Dataset):
         if key.startswith('/'):
             key = key[1:]
         return os.path.join(self.tmp_dir, key)
+    
+    def update(self, in_place = False, **kwargs):
+        new_self = super().update(in_place = in_place, **kwargs)
+        if self.available_keys_are_cached:
+            for key in self.available_keys:
+                try: 
+                    extract_date_and_tags(key, new_self.key_pattern)
+                    new_self.data_dict[key] = self.data_dict.get(key)
+                except ValueError:
+                    pass
+
+            new_self.available_keys_are_cached = True
+
+        if in_place:
+            self = new_self
+            return self
+        else:
+            return new_self
+        
 
 class S3Dataset(RemoteDataset):
     type = 's3'
@@ -289,16 +308,19 @@ class SFTPDataset(RemoteDataset):
         for root, dirs, filenames in sftp_walk(self.sftp_client, prefix):
             for file in filenames:
                 full_path = os.path.join(root, file)
+                if full_path in files: breakpoint()
                 try:
                     extract_date_and_tags(full_path, self.key_pattern)
                     files.append(full_path)
+
                 except ValueError:
                     pass
-        
+
         self.available_keys_are_cached = True
         return files
     
 import stat
+import posixpath
 
 def sftp_walk(sftp, remote_path):
     """
@@ -313,8 +335,9 @@ def sftp_walk(sftp, remote_path):
             folders.append(item.filename)
         else:
             files.append(item.filename)
+    
     yield path, folders, files
     for folder in folders:
-        new_path = os.path.join(path, folder)
+        new_path = posixpath.join(path, folder)
         for x in sftp_walk(sftp, new_path):
             yield x
