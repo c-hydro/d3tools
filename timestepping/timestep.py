@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 import datetime as dt
 
-from .timeperiod import TimePeriod
+from .timerange import TimeRange, TimePeriod
 
-class TimeStep(TimePeriod, ABC):
+class TimeStep(TimeRange, ABC):
     """
     A timestep is a TimePeriod that supports addition and subtraction of integers.
     (i.e. there is previous and next timesteps)
