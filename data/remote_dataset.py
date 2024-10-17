@@ -106,10 +106,11 @@ class RemoteDataset(Dataset):
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
         if self.available_keys_are_cached:
+            new_self.available_keys = []
             for key in self.available_keys:
                 try: 
                     extract_date_and_tags(key, new_self.key_pattern)
-                    new_self.data_dict[key] = self.data_dict.get(key)
+                    new_self.available_keys.append(key)
                 except ValueError:
                     pass
 
