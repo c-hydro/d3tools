@@ -219,7 +219,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return self.get_available_tags()
 
     def get_available_tags(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
-        updated_self = self.update(**kwargs)
+        if kwargs:
+            updated_self = self.update(**kwargs)
+        else:
+            updated_self = self
 
         if isinstance(time, TimeStep):
             time = self.get_time_signature(time)
@@ -273,6 +276,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         last_date = self.get_last_date()
         if last_date is None:
             return None
+
         timestep = self.estimate_timestep()
         if timestep is None:
             return None
@@ -281,6 +285,20 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return timestep.from_date(last_date) -1
         else:
             return timestep.from_date(last_date)
+        
+    def get_first_ts(self) -> TimeStep:
+        first_date = self.get_start()
+        if first_date is None:
+            return None
+
+        timestep = self.estimate_timestep()
+        if timestep is None:
+            return None
+
+        if self.time_signature == 'end+1':
+            return timestep.from_date(first_date) - 1
+        else:
+            return timestep.from_date(first_date)
 
     def is_subdataset(self, other: 'Dataset') -> bool:
         ds1_keys = self.available_keys
