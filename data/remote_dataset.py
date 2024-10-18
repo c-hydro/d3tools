@@ -271,10 +271,18 @@ class SFTPDataset(RemoteDataset):
     def _upload(self, local_key, output_key):
         # make sure the directory exists
         dirname = os.path.dirname(output_key)
-        if not self._check_data(dirname):
-            self.sftp_client.mkdir(dirname)
+        self._mkdir_recursive(dirname)
 
         self.sftp_client.put(local_key, output_key)
+
+    def _mkdir_recursive(self, remote_directory):
+        dirs = remote_directory.split('/')
+        current_dir = ''
+        for dir in dirs:
+            if dir:  # Skip empty parts
+                current_dir = os.path.join(current_dir, dir)
+                if not self._check_data(current_dir):
+                    self.sftp_client.mkdir(current_dir)
 
     def _delete(self, key):
         self.sftp_client.remove(key)
