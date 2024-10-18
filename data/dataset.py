@@ -304,7 +304,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def get_last_ts(self, **kwargs) -> TimeStep:
 
-        last_dates = self.get_last_date(n = 25, **kwargs)
+        last_dates = self.get_last_date(n = 15, **kwargs)
         if last_dates is None:
             return None
         
@@ -316,6 +316,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return timestep.from_date(max(last_dates)) -1
         else:
             return timestep.from_date(max(last_dates))
+
+    def estimate_timestep(self) -> TimeStep:
+        last_dates = self.get_last_date(n = 15)
+        timestep = estimate_timestep(last_dates)
+        return timestep
 
     def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
         if start is None:
@@ -346,7 +351,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if start_month + 1 == end_month:
                 break
         
-        print('START FOUND', start_month)
         first_date = []
         while len(first_date) < n and start_month.end <= end:
             this_month_times = self.get_times(start_month, **kwargs)
@@ -365,7 +369,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def get_first_ts(self, **kwargs) -> TimeStep:
 
-        first_dates = self.get_first_date(n = 25, **kwargs)
+        first_dates = self.get_first_date(n = 15, **kwargs)
         if first_dates is None:
             return None
         
