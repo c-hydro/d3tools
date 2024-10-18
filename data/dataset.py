@@ -290,8 +290,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 valid_time = [t for t in this_month_times if t <= now]
                 valid_time.sort(reverse = True)
                 last_date.extend(valid_time)
+            elif this_month.start.year < 1900:
+                break
+
             this_month = this_month - 1
-        
+            
         if len(last_date) == 0:
             return None
         if n == 1:
