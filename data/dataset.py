@@ -742,11 +742,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
         tile = kwargs.get('tile', '__tile__')
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
-        crs = templatearray.attrs.get('crs')
+        crs = templatearray.attrs.get('crs', templatearray.rio.crs)
+
         if crs is not None:
             crs_wkt = crs.to_wkt()
-        else:
+        elif hasattr(templatearray, 'spatial_ref'):
             crs_wkt = templatearray.spatial_ref.crs_wkt
+        elif hasattr(templatearray, 'crs'):
+            crs_wkt = templatearray.crs.crs_wkt
 
         self._template[tile] = {'crs': crs_wkt,
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
