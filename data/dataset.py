@@ -386,9 +386,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return self.get_first_date(**kwargs)
 
     def is_subdataset(self, other: 'Dataset') -> bool:
-        ds1_keys = self.available_keys
-        ds2_keys = other.available_keys
-        return set(ds1_keys).issubset(set(ds2_keys))
+        key = self.get_key(time = dt.datetime(1900,1,1))
+        try:
+            extract_date_and_tags(key, other.key_pattern)
+            return True
+        except ValueError:
+            return False
 
     ## TIME-SIGNATURE MANAGEMENT
     @property
