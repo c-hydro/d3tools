@@ -3,7 +3,7 @@ import datetime as dt
 import numpy as np
 import xarray as xr
 import pandas as pd
-import atexit
+#import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
 import os
@@ -15,11 +15,13 @@ try:
     from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
     from ..config.parse_utils import substitute_string, extract_date_and_tags
     from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
+    from ..exit import register_first
 except ImportError:
     from timestepping import TimeRange, Month, estimate_timestep, TimeStep
     from timestepping.timestep import TimeStep
     from config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
+    from exit import register_first
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -70,12 +72,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
 
-        if 'thumbnail' in kwargs:
-            self.thumb_opts = self.parse_thumbnail_options(kwargs.pop('thumbnail'))
-
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
-            atexit.register(self.notify)
+            register_first(self.notify)
+
+        if 'thumbnail' in kwargs:
+            self.thumb_opts = self.parse_thumbnail_options(kwargs.pop('thumbnail'))
 
         if 'log' in kwargs:
             self.log_opts = self.parse_log_options(kwargs.pop('log'))
@@ -738,9 +740,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            start_time = self.get_start(tile = tile, **kwargs)
-            if start_time is not None:
-                start_data = self.get_data(time = start_time, tile = tile, as_is=True, **kwargs)
+            first_date = self.get_first_date(tile = tile, **kwargs)
+            if first_date is not None:
+                start_data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
                 start_data = straighten_data(start_data)
                 #templatearray = self.make_templatearray_from_data(start_data)
                 self.set_template(start_data, tile = tile)

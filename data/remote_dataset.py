@@ -7,20 +7,19 @@ import boto3
 import os
 from functools import cached_property
 import shutil
-import atexit
+#import atexit
 import paramiko
-import datetime as dt
 
 try:
     from .dataset import Dataset
     from .io_utils import write_to_file, read_from_file
     from ..config.parse_utils import extract_date_and_tags
-    from ..timestepping import TimeRange
+    from ..exit import register
 except ImportError:
     from dataset import Dataset
     from io_utils import write_to_file, read_from_file
     from config.parse_utils import extract_date_and_tags
-    from timestepping import TimeRange
+    from exit import register
 
 class RemoteDataset(Dataset):
     type = 'remote'
@@ -36,7 +35,7 @@ class RemoteDataset(Dataset):
         self._creation_kwargs.update({'tmp_dir': self.tmp_dir})
 
         super().__init__(**kwargs)
-        atexit.register(self.cleanup)
+        register(self.cleanup)
 
         self.available_keys_are_cached = False
 
@@ -276,8 +275,13 @@ class SFTPDataset(RemoteDataset):
         self.sftp_client.put(local_key, output_key)
 
     def _mkdir_recursive(self, remote_directory):
+        if remote_directory.startswith('/'):
+            remote_directory = remote_directory[1:]
+            current_dir = '/'
+        else:
+            current_dir = ''
         dirs = remote_directory.split('/')
-        current_dir = ''
+
         for dir in dirs:
             if dir:  # Skip empty parts
                 current_dir = os.path.join(current_dir, dir)
