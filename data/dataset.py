@@ -903,7 +903,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         destination_path = destination.get_key(**kwargs)
         if hasattr(destination, 'tmp_dir'):
-            tmp_destination = os.path.join(destination.tmp_dir, os.path.basename(destination_path))
+            if destination_path.startswith('/'):
+                _path = destination_path[1:]
+            else:
+                _path = destination_path
+            tmp_destination = os.path.join(destination.tmp_dir, _path)
             this_thumbnail.save(tmp_destination, **options)
             destination.write_data(tmp_destination, **kwargs)
         else:
