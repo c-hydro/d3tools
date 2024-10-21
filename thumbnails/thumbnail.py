@@ -100,11 +100,12 @@ class Thumbnail:
         self.im = im
 
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
-        if isinstance(shp_file, Dataset):
-            shapes = shp_file.get_data()
-        else:
+
+        if isinstance(shp_file, str):
             import geopandas as gpd
             shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
+        else:
+            shapes = shp_file.get_data()
         
         shapes = shapes.to_crs(self.crs.to_string())
 
@@ -166,7 +167,7 @@ class Thumbnail:
 
         self.fig.legend(handles=patches, **kwargs)
 
-    def save(self, file:str, **kwargs):
+    def save(self, destination:str, **kwargs):
         #breakpoint()
         if self.allnan:
             return
@@ -179,7 +180,7 @@ class Thumbnail:
         if 'overlay' in kwargs:
             if isinstance(kwargs['overlay'], dict):
                 self.add_overlay(**kwargs.pop('overlay'))
-            elif isinstance(kwargs['overlay'], str|Dataset):
+            elif hasattr(kwargs['overlay'], 'key_pattern') or isinstance(kwargs['overlay'], str):
                 self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None:
                 pass
@@ -215,10 +216,10 @@ class Thumbnail:
 
         self.ax.axis('off')
         self.fig.tight_layout(pad=0)
-
-        os.makedirs(os.path.dirname(file), exist_ok=True)
-        self.fig.savefig(file, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
+    
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
 
         plt.close(self.fig)
 
-        self.thumbnail_file = file
+        self.thumbnail_file = destination
