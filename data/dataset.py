@@ -3,7 +3,7 @@ import datetime as dt
 import numpy as np
 import xarray as xr
 import pandas as pd
-import atexit
+#import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
 import os
@@ -12,15 +12,16 @@ import re
 import tempfile
 
 try:
-    from ..timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
-    from ..timestepping.timestep import TimeStep
+    from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
     from ..config.parse_utils import substitute_string, extract_date_and_tags
     from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
+    from ..exit import register_first
 except ImportError:
-    from timestepping import TimeRange, Day, ViirsModisTimeStep, Dekad, Month, Year
+    from timestepping import TimeRange, Month, estimate_timestep, TimeStep
     from timestepping.timestep import TimeStep
     from config.parse_utils import substitute_string, extract_date_and_tags
     from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
+    from exit import register_first
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -71,26 +72,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
 
-        if 'thumbnail' in kwargs:
-            self.thumb_opts = kwargs.pop('thumbnail')
-
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
-            atexit.register(self.notify)
+            register_first(self.notify)
+
+        if 'thumbnail' in kwargs:
+            self.thumb_opts = self.parse_thumbnail_options(kwargs.pop('thumbnail'))
 
         if 'log' in kwargs:
-            self.log_opts = kwargs.pop('log')
-            if isinstance(self.log_opts, Dataset):
-                log_output= self.log_opts.update(now = dt.datetime.now())
-                self.log_opts = {'output' : log_output}
-            elif isinstance(self.log_opts, str):
-                log_output_file = substitute_string(self.log_opts, {'now': dt.datetime.now()})
-                log_output = Dataset.from_options({'key_pattern' : log_output_file})
-                self.log_opts = {'output' : log_output}
-            elif isinstance(self.log_opts, dict):
-                log_output_file = substitute_string(self.log_opts.pop('file'), {'now': dt.datetime.now()})
-                log_output = Dataset.from_options({'key_pattern' : log_output_file})
-                self.log_opts['output'] = log_output
+            self.log_opts = self.parse_log_options(kwargs.pop('log'))
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
@@ -101,7 +91,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
-    
+
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -219,6 +209,29 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def available_keys(self):
+        return self.get_available_keys()
+    
+    def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        
+        prefix = self.get_prefix(time, **kwargs)
+        if not self._check_data(prefix):
+            return []
+        if isinstance(time, dt.datetime):
+            time = TimeRange(time, time)
+
+        key_pattern = self.get_key(time = None, **kwargs)
+        files = []
+        for file in self._walk(prefix):
+            try:
+                this_time, _ = extract_date_and_tags(file, key_pattern)
+                if time.contains(this_time):
+                    files.append(file)
+            except ValueError:
+                pass
+        
+        return files
+
+    def _walk(self, prefix: str) -> Generator[str, None, None]:
         raise NotImplementedError
 
     @property
@@ -229,20 +242,32 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def available_tags(self):
         return self.get_available_tags()
 
-    def get_available_tags(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
-        updated_self = self.update(**kwargs)
+    def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        if not hasattr(time, 'start'):
+            prefix = self.get_key(time = time, **kwargs)
+        else:
+            start = time.start
+            end = time.end
+            prefix = self.get_key(time = None, **kwargs)
+            if start.year == end.year:
+                prefix = prefix.replace('%Y', str(start.year))
+                if start.month == end.month:
+                    prefix = prefix.replace('%m', f'{start.month:02d}')
+                    if start.day == end.day:
+                        prefix = prefix.replace('%d', f'{start.day:02d}')
 
-        if isinstance(time, TimeStep):
-            time = self.get_time_signature(time)
+        while '%' in prefix or '{' in prefix:
+            prefix = os.path.dirname(prefix)
+        
+        return prefix
 
-        all_keys = updated_self.available_keys
+    def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        all_keys = self.get_available_keys(time, **kwargs)
         all_tags = {}
         all_dates = set()
         for key in all_keys:
             this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
-            if time is not None and this_date != time:
-                continue
-
+            
             for tag in this_tags:
                 if tag not in all_tags:
                     all_tags[tag] = set()
@@ -254,49 +279,128 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return all_tags
 
-    def estimate_timestep(self) -> TimeStep:
-        from scipy.stats import mode
-        all_times = self.available_tags['time']
-        all_times.sort()
-        all_diff = [(all_times[i+1] - all_times[i]).days for i in range(len(all_times)-1)]
-        step_length = mode(all_diff).mode
+    def get_last_date(self, now = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        if now is None:
+            now = dt.datetime.now()
         
-        if np.isclose(step_length, 1):
-            return Day
-        elif np.isclose(step_length, 8):
-            return ViirsModisTimeStep
-        elif np.isclose(step_length, 10):
-            return Dekad
-        elif 30 <= step_length <= 31:
-            return Month
-        elif 365 <= step_length <= 366:
-            return Year
+        # the most efficient way, I think is to search my month
+        this_month = Month(now.year, now.month)
+        last_date = []
+        while len(last_date) < n:
+            this_month_times = self.get_times(this_month, **kwargs)
+            if len(this_month_times) > 0:
+                valid_time = [t for t in this_month_times if t <= now]
+                valid_time.sort(reverse = True)
+                last_date.extend(valid_time)
+            elif this_month.start.year < 1900:
+                break
+
+            this_month = this_month - 1
+            
+        if len(last_date) == 0:
+            return None
+        if n == 1:
+            return last_date[0]
         else:
-            raise None
+            return last_date
 
-    def get_last_date(self) -> dt.datetime:
-        all_times = self.available_tags['time']
-        if len(all_times) == 0:
-            return None
-        return max(all_times)
+    def get_last_ts(self, **kwargs) -> TimeStep:
 
-    def get_last_ts(self) -> TimeStep:
-        last_date = self.get_last_date()
-        if last_date is None:
+        last_dates = self.get_last_date(n = 15, **kwargs)
+        if last_dates is None:
             return None
-        timestep = self.estimate_timestep()
+        
+        timestep = estimate_timestep(last_dates)
         if timestep is None:
             return None
 
         if self.time_signature == 'end+1':
-            return timestep.from_date(last_date) -1
+            return timestep.from_date(max(last_dates)) -1
         else:
-            return timestep.from_date(last_date)
+            return timestep.from_date(max(last_dates))
+
+    def estimate_timestep(self) -> TimeStep:
+        last_dates = self.get_last_date(n = 15)
+        timestep = estimate_timestep(last_dates)
+        return timestep
+
+    def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        if start is None:
+            start = dt.datetime(1900, 1, 1)
+
+        end = self.get_last_date(**kwargs)
+        if end is None:
+            return None
+        
+        start_month = Month(start.year, start.month)
+        end_month   = Month(end.year, end.month)
+
+        # first look for a suitable time to start the search
+        while True:
+            midpoint = start_month.start + (end_month.end - start_month.start) / 2
+            mid_month = Month(midpoint.year, midpoint.month)
+            mid_month_times = self.get_times(mid_month, **kwargs)
+            # if we do actually find some times in the month
+            if len(mid_month_times) > 0:
+
+                    # end goes to midpoint
+                    end_month = mid_month
+            # if we didn't find any times in the month 
+            else:
+                # we start from the midpoint this time
+                start_month = mid_month
+
+            if start_month + 1 == end_month:
+                break
+        
+        first_date = []
+        while len(first_date) < n and start_month.end <= end:
+            this_month_times = self.get_times(start_month, **kwargs)
+            valid_time = [t for t in this_month_times if t >= start]
+            valid_time.sort()
+            first_date.extend(valid_time)
+
+            start_month = start_month + 1
+
+        if len(first_date) == 0:
+            return None
+        if n == 1:
+            return first_date[0]
+        else:
+            return first_date
+
+    def get_first_ts(self, **kwargs) -> TimeStep:
+
+        first_dates = self.get_first_date(n = 15, **kwargs)
+        if first_dates is None:
+            return None
+        
+        timestep = estimate_timestep(first_dates)
+        if timestep is None:
+            return None
+
+        if self.time_signature == 'end+1':
+            return timestep.from_date(min(first_dates)) -1
+        else:
+            return timestep.from_date(min(first_dates))
+
+    def get_start(self, **kwargs) -> dt.datetime:
+        """
+        Get the start of the available data.
+        """
+        first_ts = self.get_first_ts(**kwargs)
+        if first_ts is not None:
+            return first_ts.start
+        else:
+            return self.get_first_date(**kwargs)
 
     def is_subdataset(self, other: 'Dataset') -> bool:
-        ds1_keys = self.available_keys
-        ds2_keys = other.available_keys
-        return set(ds1_keys).issubset(set(ds2_keys))
+        key = self.get_key(time = dt.datetime(1900,1,1))
+        try:
+            extract_date_and_tags(key, other.key_pattern)
+            return True
+        except ValueError:
+            return False
 
     ## TIME-SIGNATURE MANAGEMENT
     @property
@@ -405,7 +509,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if not self.format == 'csv':
                 raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
         elif isinstance(data, str):
-            if not self.format == 'txt':
+            if self.format =='txt' or self.format == 'file':
+                pass
+            else:
                 raise ValueError(f'Cannot write a string to a {self.format} file.')
         elif isinstance(data, dict):
             if not self.format == 'json':
@@ -432,8 +538,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._write_data(data, output_file, append = append)
             return
         
+        if self.format == 'file':
+            self._write_data(data, output_file)
+            return
+        
         # if data is a numpy array, ensure there is a template available
-        template_dict = self.get_template_dict(**kwargs)
+        try:
+            template_dict = self.get_template_dict(**kwargs)
+        except PermissionError:
+            template_dict = None
+
         if template_dict is None:
             if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
                 #templatearray = self.make_templatearray_from_data(data)
@@ -453,19 +567,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             parents = {}
 
-        timestamp = self.get_time_signature(time)
-        if hasattr(self, 'thumb_opts'):
+        if hasattr(self, 'thumb_opts') and self.thumb_opts is not None:
             parents[''] = output
             thumb_opts = self.thumb_opts.copy()
-            if 'destination' in thumb_opts:
-                destination = thumb_opts.pop('destination')
-                destination = timestamp.strftime(substitute_string(destination, kwargs))
-            else:
-                destination = output_file
-            thumbnail_file = self.make_thumbnail(data = parents,
-                                                 options = thumb_opts,
-                                                 destination = destination,
-                                                 **kwargs)
+
+            destination = thumb_opts.pop('destination')
+            thumbnail = self.make_thumbnail(data = parents,
+                                            options = thumb_opts,
+                                            destination = destination,
+                                            time = time, **kwargs)
+            thumbnail_file = thumbnail.thumbnail_file
         else:
             thumbnail_file = None
 
@@ -487,8 +598,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if hasattr(self, 'log_opts'):
             log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
             log_opts = self.log_opts.copy()
-            log_output_ds = log_opts.pop('output')
-            log_output = log_output_ds.update(time, **kwargs)
+            log_output = log_opts.pop('output')
             self.write_log(log_dict, log_output, time, **kwargs)
         
         if hasattr(self, 'notif_opts'):
@@ -534,7 +644,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        all_times = self.update(**kwargs).available_tags.get('time', [])
+        all_times = self.get_available_tags(time_range, **kwargs)['time']
         all_times.sort()
         for time in all_times:
             if time_range.contains(time):
@@ -604,15 +714,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def _check_data(self, data_key) -> bool:
         raise NotImplementedError
 
-    def get_start(self, **kwargs) -> dt.datetime:
-        """
-        Get the start of the available data.
-        """
-        time_start = dt.datetime(1900, 1, 1)
-        time_end = dt.datetime.now()
-        for time in self._get_times(TimeRange(time_start, time_end), **kwargs):
-            return time
-
     ## METHODS TO MANIPULATE THE DATASET
     def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
         
@@ -639,9 +740,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            start_time = self.get_start(tile = tile, **kwargs)
-            if start_time is not None:
-                start_data = self.get_data(time = start_time, tile = tile, as_is=True, **kwargs)
+            first_date = self.get_first_date(tile = tile, **kwargs)
+            if first_date is not None:
+                start_data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
                 start_data = straighten_data(start_data)
                 #templatearray = self.make_templatearray_from_data(start_data)
                 self.set_template(start_data, tile = tile)
@@ -653,11 +754,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
         tile = kwargs.get('tile', '__tile__')
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
-        crs = templatearray.attrs.get('crs')
+        crs = templatearray.attrs.get('crs', templatearray.rio.crs)
+
         if crs is not None:
             crs_wkt = crs.to_wkt()
-        else:
+        elif hasattr(templatearray, 'spatial_ref'):
             crs_wkt = templatearray.spatial_ref.crs_wkt
+        elif hasattr(templatearray, 'crs'):
+            crs_wkt = templatearray.crs.crs_wkt
 
         self._template[tile] = {'crs': crs_wkt,
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
@@ -751,38 +855,65 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return data
 
+    def parse_as_ds(self, value) -> 'Dataset':
+        if isinstance(value, str):
+            return Dataset.from_options({"key_pattern":value}, defaults = self._creation_kwargs.copy())
+        else:
+            return value
+
     ## THUMBNAIL METHODS
+
+    def parse_thumbnail_options(self, thumbnail_options: dict) -> dict:
+        if 'colors' not in thumbnail_options or 'destination' not in thumbnail_options:
+            #TODO add a warning
+            return None
+        else:
+            colors = thumbnail_options.get('colors')
+            destination = thumbnail_options.get('destination')
+
+        if isinstance(colors, dict):
+            thumbnail_options['colors'] = {key: self.parse_as_ds(colors[key]) for key in colors}
+        else:
+            thumbnail_options['colors'] = self.parse_as_ds(colors)
+
+        thumbnail_options['destination'] = self.parse_as_ds(destination)
+
+        if 'overlay' in thumbnail_options:
+            thumbnail_options['overlay'] = self.parse_as_ds(thumbnail_options['overlay'])
+        
+        return thumbnail_options
+
     @staticmethod
-    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray], options: dict, destination: str, **kwargs):
+    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray], options: dict, destination: 'Dataset', **kwargs):
         try:
             from ..thumbnails import Thumbnail, ThumbnailCollection
         except ImportError:
             from thumbnails import Thumbnail, ThumbnailCollection
 
-        if 'colors' in options:
-            colors = options.pop('colors')
+        colors = options.pop('colors')
+        if isinstance(colors, dict):
+            col_defs       = [v.update(**kwargs) for v in colors.values()]
+            data           = list(data[k] for k in colors.keys())
+            this_thumbnail = ThumbnailCollection(data, col_defs)
         else:
-            return
-
-        if isinstance(colors, str|Dataset):
-            col_def = substitute_string(colors, kwargs) if isinstance(colors, str) else colors.update(**kwargs)
+            col_def = colors.update(**kwargs)
             if isinstance(data, dict):
                 data = data['']
             this_thumbnail = Thumbnail(data, col_def)
-            destination = destination.replace('.tif', '.png')
-
-        elif isinstance(colors, dict):
-            keys = list(colors.keys())
-            col_defs = []
-            for key in keys:
-                col_def = substitute_string(colors[key], kwargs) if isinstance(colors[key], str) else colors[key].update(**kwargs)
-                col_defs.append(col_def)
-            data      = list(data[key] for key in keys)
-            this_thumbnail = ThumbnailCollection(data, col_defs)
-            destination = destination.replace('.tif', '.pdf')
-            
-        this_thumbnail.save(destination, **options)
-        return destination
+        
+        destination_path = destination.get_key(**kwargs)
+        if hasattr(destination, 'tmp_dir'):
+            if destination_path.startswith('/'):
+                _path = destination_path[1:]
+            else:
+                _path = destination_path
+            tmp_destination = os.path.join(destination.tmp_dir, _path)
+            this_thumbnail.save(tmp_destination, **options)
+            destination.write_data(tmp_destination, **kwargs)
+        else:
+            this_thumbnail.save(destination_path, **options)
+        
+        return this_thumbnail
 
     ## NOTIFICATION METHODS
     def notify(self):
@@ -834,7 +965,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             attach_str += 'Due to the size of the attachments, some thumbnails are not attached but are available for download.'
         footer = '\n\nBest regards,\nYour friendly data provider.'
 
-        body = header + main + footer
+        body = header + main + attach_str + footer
 
         import json
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -849,6 +980,25 @@ class Dataset(ABC, metaclass=DatasetMeta):
             notification.send(recipients, subject, body = body)
 
     ## LOGGING METHODS
+    def parse_log_options(self, value) -> dict:
+        # if value is a Dataset already it will have a "key_pattern" attribute
+        if hasattr(value, 'key_pattern'):
+            log_output= value.update(now = dt.datetime.now())
+            log_opts = {'output' : log_output}
+        # if it is a string, we use that as the key_pattern and the default from the creation kwargs of this dataset
+        elif isinstance(value, str):
+            log_output_file = substitute_string(value, {'now': dt.datetime.now()})
+            log_output = Dataset.from_options({"key_pattern":log_output_file},
+                                                defaults = self._creation_kwargs.copy())
+            log_opts = {'output' : log_output}
+        # if it is a dictionary, we use the "file" key as the "key_pattern" and the rest are options for the log
+        elif isinstance(value, dict):
+            log_output_file = substitute_string(value.pop('file'), {'now': dt.datetime.now()})
+            log_output = Dataset.from_options({'key_pattern' : log_output_file},
+                                                defaults = self._creation_kwargs.copy())
+            log_opts['output'] = log_output
+        return log_opts
+
     def get_log(self, data: xr.DataArray, options = None, **kwargs) -> dict:
         log_dict = {}
 
@@ -887,8 +1037,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @staticmethod
     def write_log(log_dict, log_ds, time, **kwargs):
-        if isinstance(log_ds, str):
-            log_ds = Dataset.from_options({'type': 'local', 'key_pattern': log_ds})
         
         if log_ds.format == 'txt':
             # convert the log_dict to a string
