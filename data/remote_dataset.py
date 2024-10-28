@@ -163,11 +163,11 @@ class S3Dataset(RemoteDataset):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
-        try:
-            S3Dataset.s3_client.head_object(Bucket = self.bucket_name, Key = data_path)
-            return True
-        except:
-            return False
+        paginator = S3Dataset.s3_client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=self.bucket_name, Prefix=data_path):
+            if 'Contents' in page and page['Contents']:
+                return True
+        return False
 
     def _walk(self, prefix):
         paginator = S3Dataset.s3_client.get_paginator('list_objects_v2')
