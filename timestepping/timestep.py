@@ -56,4 +56,4 @@ def estimate_timestep(sample) -> TimeStep:
         elif 365 <= step_length <= 366:
             return Year
         else:
-            raise None
+            return None
