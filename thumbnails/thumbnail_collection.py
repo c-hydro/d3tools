@@ -88,6 +88,7 @@ class ThumbnailCollection:
             new_im.save(file_out)
 
     def save(self, file:str, grid = None, **kwargs):
+        self.thumbnail_file = file
         with tempfile.TemporaryDirectory() as temp_dir:
             for i, thumbnail in enumerate(self.thumbnails):
                 thumbnail.save(f'{temp_dir}/thumbnail_{i}.png', **kwargs)

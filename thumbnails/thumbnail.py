@@ -168,9 +168,10 @@ class Thumbnail:
         self.fig.legend(handles=patches, **kwargs)
 
     def save(self, destination:str, **kwargs):
+        self.thumbnail_file = destination
         #breakpoint()
         if self.allnan:
-            return
+           return
 
         if not hasattr(self, 'fig'):
             size = kwargs.get('size', None)
@@ -221,5 +222,3 @@ class Thumbnail:
         self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
 
         plt.close(self.fig)
-
-        self.thumbnail_file = destination
