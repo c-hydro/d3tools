@@ -32,6 +32,8 @@ class ThumbnailCollection:
             with open(file_out, "wb") as f:
                 pdf_bytes = []
                 for thumbnail in list_of_thumbnails:
+                    if not os.path.exists(thumbnail):
+                        continue
                     if thumbnail.endswith(".png"):
                         # Open the image file and convert it to RGB
                         img = Image.open(thumbnail).convert("RGB")
@@ -50,7 +52,7 @@ class ThumbnailCollection:
                 grid[1] = int(np.ceil(n / grid[0]))
                 grid = tuple(grid)
 
-            images = [Image.open(thumbnail).convert("RGB") for thumbnail in list_of_thumbnails]
+            images = [Image.open(thumbnail).convert("RGB") for thumbnail in list_of_thumbnails if os.path.exists(thumbnail)]
             widths, heights = zip(*(i.size for i in images))
 
             # check that all images have the same height and width (within a tolerance)
