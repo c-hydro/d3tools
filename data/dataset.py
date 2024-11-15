@@ -458,7 +458,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
-            
+        
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
 
@@ -582,6 +582,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
+        if '_FillValue' in attrs: attrs.pop('_FillValue')
         output.attrs.update(attrs)
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
@@ -817,7 +818,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         if isinstance(data, xr.DataArray):
             #data = straighten_data(data)
+            nodata_value = data.attrs.get('_FillValue', None)
             data = Dataset.build_templatearray(template_dict, data.values)
+            if nodata_value is not None: data.attrs['_FillValue'] = nodata_value
         elif isinstance(data, np.ndarray):
             data = Dataset.build_templatearray(template_dict, data)
         elif isinstance(data, xr.Dataset):
