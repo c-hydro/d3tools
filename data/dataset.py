@@ -169,6 +169,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._format = value
 
     @property
+    def has_version(self):
+        return '{file_version}' in self.key_pattern
+
+    @property
     def has_tiles (self):
         return '{tile}' in self.key_pattern
 
@@ -453,6 +457,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## INPUT/OUTPUT METHODS
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
+        # if this is a versioned file, and the version is not specified, get the latest version
+        if self.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions is not None:
+                available_versions.sort()
+                kwargs['file_version'] = available_versions[-1]
+
         full_key = self.get_key(time, **kwargs)
 
         if self.format in ['csv', 'json', 'txt', 'shp']:
