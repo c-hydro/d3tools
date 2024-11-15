@@ -1,4 +1,5 @@
 import pandas as pd
+import geopandas as gpd
 import rioxarray as rxr
 import xarray as xr
 import numpy as np
@@ -51,6 +52,9 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
     elif format == 'json':
         with open(path, 'r') as f:
             data = json.load(f)
+            # understand if the data is actually in a geodataframe format
+            if 'features' in data.keys():
+                data = gpd.GeoDataFrame.from_features(data['features'])
 
     # read the data from a txt file
     elif format == 'txt':
@@ -59,7 +63,6 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
 
     # read the data from a shapefile
     elif format == 'shp':
-        import geopandas as gpd
         data:gpd.GeoDataFrame = gpd.read_file(path)
 
     # read the data from a geotiff
@@ -97,19 +100,28 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
 
     # write the data to a json
     elif format == 'json':
-        for key in data.keys():
-            if isinstance(data[key], np.ndarray):
-                data[key] = data[key].tolist
-            elif isinstance(data[key], dt.datetime):
-                data[key] = data[key].isoformat()
-        if append:
-            with open(path, 'r') as f:
-                old_data = json.load(f)
-            old_data = [old_data] if not isinstance(old_data, list) else old_data
-            old_data.append(data)
-            data = old_data
-        with open(path, 'w') as f:
-            json.dump(data, f, indent = 4)
+        # write a dictionary to a json
+        if isinstance(data, dict):
+            for key in data.keys():
+                if isinstance(data[key], np.ndarray):
+                    data[key] = data[key].tolist
+                elif isinstance(data[key], dt.datetime):
+                    data[key] = data[key].isoformat()
+            if append:
+                with open(path, 'r') as f:
+                    old_data = json.load(f)
+                old_data = [old_data] if not isinstance(old_data, list) else old_data
+                old_data.append(data)
+                data = old_data
+            with open(path, 'w') as f:
+                json.dump(data, f, indent = 4)
+        # write a geodataframe to a json
+        elif isinstance(data, gpd.GeoDataFrame):
+            data.to_file(path, driver = 'GeoJSON')
+
+    # write a geodataframe to a shapefile
+    elif format == 'shp':
+        data.to_file(path)
 
     elif format == 'txt':
         if append:

@@ -3,6 +3,7 @@ import datetime as dt
 import numpy as np
 import xarray as xr
 import pandas as pd
+import geopandas as gpd
 #import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
@@ -469,7 +470,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
-        
+            
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
 
@@ -516,7 +517,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """"
         Ensures that the data is compatible with the format of the dataset.
         """
-        if isinstance(data, pd.DataFrame):
+        # add possibility to write a geopandas dataframe to a geojson or a shapefile
+        if isinstance(data, gpd.GeoDataFrame):
+            if self.format not in ['shp', 'json']:
+                raise ValueError(f'Cannot write a geopandas dataframe to a {self.format} file.')
+            
+        elif isinstance(data, pd.DataFrame):
             if not self.format == 'csv':
                 raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
         elif isinstance(data, str):
@@ -544,7 +550,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         output_file = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt']:
+        if self.format in ['csv', 'json', 'txt', 'shp']:
             append = kwargs.pop('append', False)
             self._write_data(data, output_file, append = append)
             return
@@ -593,7 +599,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
-        if '_FillValue' in attrs: attrs.pop('_FillValue')
         output.attrs.update(attrs)
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
@@ -829,9 +834,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         if isinstance(data, xr.DataArray):
             #data = straighten_data(data)
-            nodata_value = data.attrs.get('_FillValue', None)
             data = Dataset.build_templatearray(template_dict, data.values)
-            if nodata_value is not None: data.attrs['_FillValue'] = nodata_value
         elif isinstance(data, np.ndarray):
             data = Dataset.build_templatearray(template_dict, data)
         elif isinstance(data, xr.Dataset):
