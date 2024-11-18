@@ -757,15 +757,24 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            first_date = self.get_first_date(tile = tile, **kwargs)
-            if first_date is not None:
-                start_data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
-                start_data = straighten_data(start_data)
-                #templatearray = self.make_templatearray_from_data(start_data)
-                self.set_template(start_data, tile = tile)
-                template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
+            if self.is_static:
+                data = self.get_data(as_is = True, **kwargs)
+                self.set_template(data, tile = tile)
+
+            else:
+                first_date = self.get_first_date(tile = tile, **kwargs)
+                if first_date is not None:
+                    data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
+                else:
+                    return None
+            
+            data = straighten_data(data)
+            #templatearray = self.make_templatearray_from_data(start_data)
+            self.set_template(data, tile = tile)
+            template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
         
         return template_dict
+    
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
