@@ -229,7 +229,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         for file in self._walk(prefix):
             try:
                 this_time, _ = extract_date_and_tags(file, key_pattern)
-                if time.contains(this_time):
+                if (time is not None and time.contains(this_time)) or not self.has_time:
                     files.append(file)
             except ValueError:
                 pass
@@ -241,7 +241,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def is_static(self):
-        return not '{' in self.key_pattern and not '%' in self.key_pattern
+        return not '{' in self.key_pattern and not self.has_time
+
+    @property
+    def has_time(self):
+        return '%' in self.key_pattern
 
     @property
     def available_tags(self):
@@ -757,7 +761,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            if self.is_static:
+            if not self.has_time:
                 data = self.get_data(as_is = True, **kwargs)
                 self.set_template(data, tile = tile)
 
