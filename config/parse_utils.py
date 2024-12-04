@@ -171,6 +171,9 @@ def extract_date_and_tags(string: str, string_pattern:str):
     pattern = pattern.replace('%Y', '(?P<year>\\d{4})')
     pattern = pattern.replace('%m', '(?P<month>\\d{2})')
     pattern = pattern.replace('%d', '(?P<day>\\d{2})')
+    pattern = pattern.replace('%H', '(?P<hour>\\d{2})')
+    pattern = pattern.replace('%M', '(?P<minute>\\d{2})')
+    pattern = pattern.replace('%S', '(?P<second>\\d{2})')
 
     # get all the substituted names (i.e. the parts of the pattern that are between < and >)
     substituted_names = re.findall(r'(?<=<)\w+(?=>)', pattern)
@@ -203,10 +206,25 @@ def extract_date_and_tags(string: str, string_pattern:str):
     else:
         day = 1
 
-    date = dt.datetime(year, month, day)
+    if 'hour' in substituted_names:
+        hour = int(match.group('hour'))
+    else:
+        hour = 0
+    
+    if 'minute' in substituted_names:
+        minute = int(match.group('minute'))
+    else:
+        minute = 0
+    
+    if 'second' in substituted_names:
+        second = int(match.group('second'))
+    else:
+        second = 0
+
+    date = dt.datetime(year, month, day, hour, minute, second)
     
     # Extract the other key-value pairs
     all_tags = match.groupdict()
-    tags = {key: value for key, value in all_tags.items() if key in substituted_names and key not in ['year', 'month', 'day']}
+    tags = {key: value for key, value in all_tags.items() if key in substituted_names and key not in ['year', 'month', 'day', 'hour', 'minute', 'second']}
     
     return date, tags
