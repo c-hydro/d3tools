@@ -65,6 +65,15 @@ class RemoteDataset(Dataset):
         local_key = self.get_local_key(output_key)
         write_to_file(output, local_key, self.format, **kwargs)
         self._upload(local_key, output_key)
+
+        # If the format is 'shp', also upload the associated files
+        if self.format == 'shp':
+            base_key = output_key.replace('.shp', '')
+            for ext in ['dbf', 'shx', 'prj']:
+                local_ext = self.get_local_key(f"{base_key}.{ext}")
+                if os.path.exists(local_ext):
+                    self._upload(local_ext, f"{base_key}.{ext}")
+
         if self.available_keys_are_cached:
             if output_key not in self.available_keys:
                 self.available_keys.append(output_key)
@@ -83,10 +92,10 @@ class RemoteDataset(Dataset):
 
     def _upload(self, local_key, output_key):
         raise NotImplementedError
-    
+
     def _delete(self, key):
         raise NotImplementedError
-    
+
     def get_tile_names_from_file(self, filename: str) -> list[str]:
         local_file = self.get_local_key(filename)
         os.makedirs(os.path.dirname(local_file), exist_ok = True)
@@ -104,13 +113,13 @@ class RemoteDataset(Dataset):
         if key.startswith('/'):
             key = key[1:]
         return os.path.join(self.tmp_dir, key)
-    
+
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
         if self.available_keys_are_cached:
             new_self.available_keys = []
             for key in self.available_keys:
-                try: 
+                try:
                     extract_date_and_tags(key, new_self.key_pattern)
                     new_self.available_keys.append(key)
                 except ValueError:
@@ -123,7 +132,7 @@ class RemoteDataset(Dataset):
             return self
         else:
             return new_self
-    
+
     @cached_property
     def available_keys(self):
         self.available_keys_are_cached = True
@@ -139,7 +148,7 @@ class S3Dataset(RemoteDataset):
                  bucket_name: str,
                  tmp_dir: Optional[str] = None,
                  **kwargs):
-        
+
         self.key_pattern = key_pattern
         self.bucket_name = bucket_name
 
@@ -157,7 +166,7 @@ class S3Dataset(RemoteDataset):
 
     def _upload(self, local_key, output_key):
         S3Dataset.s3_client.upload_file(local_key, self.bucket_name, output_key)
-    
+
     def _delete(self, key):
         S3Dataset.s3_client.delete_object(Bucket = self.bucket_name, Key = key)
 
@@ -185,7 +194,7 @@ class S3Dataset(RemoteDataset):
             return self
         else:
             return new_self
-        
+
 class SFTPDataset(RemoteDataset):
     type = 'sftp'
     sftp_clients = {}  # Class-level attribute to store the SFTP clients
@@ -197,7 +206,7 @@ class SFTPDataset(RemoteDataset):
                        port = 22,
                        tmp_dir: Optional[str] = None,
                        **kwargs):
-        
+
         self.key_pattern = key_pattern
 
         self.hostname = host
@@ -215,11 +224,11 @@ class SFTPDataset(RemoteDataset):
         self._creation_kwargs = {'type': self.type, 'host': self.hostname, 'username': self.username,
                                  'password': self.password, 'private_key': self.private_key,
                                  'port': self.port}
-        
+
         super().__init__(tmp_dir, **kwargs)
 
     def _connect(self):
-        
+
         try:
             if self.password is None:
                 if self.private_key is not None:
@@ -232,7 +241,7 @@ class SFTPDataset(RemoteDataset):
                 else:
                     # get the list of files in '~/.ssh'
                     ssh_files = os.listdir(os.path.expanduser('~/.ssh'))
-                    keys = [file for file in ssh_files if 'rsa' in file or 'ed25519' in file and not file.endswith('.pub')] 
+                    keys = [file for file in ssh_files if 'rsa' in file or 'ed25519' in file and not file.endswith('.pub')]
                     possible_files = [f'~/.ssh/{key}' for key in keys]
                     for file in possible_files:
                         try:
@@ -302,7 +311,7 @@ class SFTPDataset(RemoteDataset):
             return self
         else:
             return new_self
-        
+
     def _check_data(self, data_key) -> bool:
         try:
             self.sftp_client.stat(data_key)
@@ -314,7 +323,24 @@ class SFTPDataset(RemoteDataset):
         for root, dirs, filenames in sftp_walk(self.sftp_client, prefix):
             for file in filenames:
                 yield os.path.join(root, file)
-    
+
+    def _write_data(self, output: xr.DataArray | pd.DataFrame, output_key: str, **kwargs):
+        local_key = self.get_local_key(output_key)
+        write_to_file(output, local_key, self.format, **kwargs)
+        self._upload(local_key, output_key)
+
+        # If the format is 'shp', also upload the associated files
+        if self.format == 'shp':
+            base_key = output_key.replace('.shp', '')
+            for ext in ['dbf', 'shx', 'prj']:
+                local_ext = self.get_local_key(f"{base_key}.{ext}")
+                if os.path.exists(local_ext):
+                    self._upload(local_ext, f"{base_key}.{ext}")
+
+        if self.available_keys_are_cached:
+            if output_key not in self.available_keys:
+                self.available_keys.append(output_key)
+
 import stat
 import posixpath
 
