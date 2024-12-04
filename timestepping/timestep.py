@@ -38,13 +38,19 @@ def estimate_timestep(sample) -> TimeStep:
         from scipy.stats import mode
 
         from .fixed_num_timestep import Year, Month, Dekad
-        from .fixed_len_timestep import Day
+        from .fixed_len_timestep import Day, Hour
         from .fixed_doy_timestep import ViirsModisTimeStep
 
         sample.sort()
         all_diff = [(sample[i+1] - sample[i]).days for i in range(len(sample)-1)]
         step_length = mode(all_diff).mode
-        
+        if np.isclose(step_length, 0):
+            all_diff_seconds = [(sample[i+1] - sample[i]).seconds for i in range(len(sample)-1)]
+            step_length = mode(all_diff_seconds).mode
+            if np.isclose(step_length, 3600):
+                return Hour
+            else:
+                return None
         if np.isclose(step_length, 1):
             return Day
         elif np.isclose(step_length, 8):

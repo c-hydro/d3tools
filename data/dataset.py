@@ -3,6 +3,7 @@ import datetime as dt
 import numpy as np
 import xarray as xr
 import pandas as pd
+import geopandas as gpd
 #import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
@@ -169,6 +170,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self._format = value
 
     @property
+    def has_version(self):
+        return '{file_version}' in self.key_pattern
+
+    @property
     def has_tiles (self):
         return '{tile}' in self.key_pattern
 
@@ -224,7 +229,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         for file in self._walk(prefix):
             try:
                 this_time, _ = extract_date_and_tags(file, key_pattern)
-                if time.contains(this_time):
+                if (time is not None and time.contains(this_time)) or not self.has_time:
                     files.append(file)
             except ValueError:
                 pass
@@ -236,7 +241,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     @property
     def is_static(self):
-        return not '{' in self.key_pattern and not '%' in self.key_pattern
+        return not '{' in self.key_pattern and not self.has_time
+
+    @property
+    def has_time(self):
+        return '%' in self.key_pattern
 
     @property
     def available_tags(self):
@@ -453,12 +462,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## INPUT/OUTPUT METHODS
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
+        # if this is a versioned file, and the version is not specified, get the latest version
+        if self.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions is not None:
+                available_versions.sort()
+                kwargs['file_version'] = available_versions[-1]
+
         full_key = self.get_key(time, **kwargs)
 
         if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
-        
+            
         if self.check_data(time, **kwargs):
             data = self._read_data(full_key)
 
@@ -505,7 +521,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """"
         Ensures that the data is compatible with the format of the dataset.
         """
-        if isinstance(data, pd.DataFrame):
+        # add possibility to write a geopandas dataframe to a geojson or a shapefile
+        if isinstance(data, gpd.GeoDataFrame):
+            if self.format not in ['shp', 'json']:
+                raise ValueError(f'Cannot write a geopandas dataframe to a {self.format} file.')
+            
+        elif isinstance(data, pd.DataFrame):
             if not self.format == 'csv':
                 raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
         elif isinstance(data, str):
@@ -533,7 +554,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         output_file = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt']:
+        if self.format in ['csv', 'json', 'txt', 'shp']:
             append = kwargs.pop('append', False)
             self._write_data(data, output_file, append = append)
             return
@@ -582,7 +603,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         # add the metadata
         attrs = data.attrs if hasattr(data, 'attrs') else {}
-        if '_FillValue' in attrs: attrs.pop('_FillValue')
         output.attrs.update(attrs)
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
@@ -741,15 +761,24 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         template_dict = self._template.get(tile, None)
         if template_dict is None and make_it:
-            first_date = self.get_first_date(tile = tile, **kwargs)
-            if first_date is not None:
-                start_data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
-                start_data = straighten_data(start_data)
-                #templatearray = self.make_templatearray_from_data(start_data)
-                self.set_template(start_data, tile = tile)
-                template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
+            if not self.has_time:
+                data = self.get_data(as_is = True, **kwargs)
+                self.set_template(data, tile = tile)
+
+            else:
+                first_date = self.get_first_date(tile = tile, **kwargs)
+                if first_date is not None:
+                    data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
+                else:
+                    return None
+            
+            data = straighten_data(data)
+            #templatearray = self.make_templatearray_from_data(start_data)
+            self.set_template(data, tile = tile)
+            template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
         
         return template_dict
+    
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
@@ -818,9 +847,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         if isinstance(data, xr.DataArray):
             #data = straighten_data(data)
-            nodata_value = data.attrs.get('_FillValue', None)
             data = Dataset.build_templatearray(template_dict, data.values)
-            if nodata_value is not None: data.attrs['_FillValue'] = nodata_value
         elif isinstance(data, np.ndarray):
             data = Dataset.build_templatearray(template_dict, data)
         elif isinstance(data, xr.Dataset):
