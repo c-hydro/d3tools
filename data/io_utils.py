@@ -87,7 +87,9 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
     if format is None:
         format = get_format_from_path(path)
 
-    os.makedirs(os.path.dirname(path), exist_ok = True)
+    dir = os.path.dirname(path)
+    if len(dir) > 0:
+        os.makedirs(os.path.dirname(path), exist_ok = True)
     if not os.path.exists(path):
         append = False
 
