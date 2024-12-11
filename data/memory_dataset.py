@@ -32,7 +32,7 @@ class MemoryDataset(Dataset):
         else:
             return self.data_dict.pop(input_key)
     
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str):
+    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
         self.data_dict[output_key] = output
 
     def _rm_data(self, key):
@@ -40,7 +40,11 @@ class MemoryDataset(Dataset):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _check_data(self, data_path) -> bool:
-        return data_path in self.data_dict
+        for key in self.data_dict.keys():
+            if key.startswith(data_path):
+                return True
+        else:
+            return False
     
     def _walk(self, prefix):
         for key in self.data_dict.keys():
