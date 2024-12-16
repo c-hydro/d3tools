@@ -1,12 +1,8 @@
 import xarray as xr
 import pandas as pd
 
-try:
-    from .dataset import Dataset
-    from ..config.parse_utils import extract_date_and_tags
-except ImportError:
-    from dataset import Dataset
-    from config.parse_utils import extract_date_and_tags
+from .dataset import Dataset
+from ..config.parse_utils import extract_date_and_tags
 
 class MemoryDataset(Dataset):
     type = 'memory'

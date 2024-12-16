@@ -4,14 +4,12 @@ import xarray as xr
 import os
 from typing import Optional
 
-import matplotlib.pyplot as plt
+import geopandas as gpd
 
-try:
-    from . import colors as col
-    from ..data import Dataset
-except ImportError:
-    import colors as col
-    from data import Dataset
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
+from ..data import Dataset
 
 #TODO TEST
 class Thumbnail:
@@ -102,7 +100,6 @@ class Thumbnail:
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
 
         if isinstance(shp_file, str):
-            import geopandas as gpd
             shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
         else:
             shapes = shp_file.get_data()
@@ -161,7 +158,6 @@ class Thumbnail:
         if 'borderaxespad' not in kwargs:
             kwargs['borderaxespad'] = 0
 
-        import matplotlib.patches as mpatches
         colors_normalized = [np.array(color, dtype=int) / 255. for color in self.colors]
         patches = [mpatches.Patch(color=color, label=label) for color, label in zip(colors_normalized, self.labels)]
 

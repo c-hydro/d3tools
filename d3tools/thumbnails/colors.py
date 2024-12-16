@@ -1,13 +1,9 @@
 import numpy as np
 from matplotlib.colors import ListedColormap
 
-from typing import Optional
 from copy import deepcopy
 
-try:
-    from ..data import Dataset
-except ImportError:
-    from data import Dataset
+from ..data import Dataset
 
 def parse_colors(colors_definition: str|Dataset) -> tuple:
     '''

@@ -12,17 +12,10 @@ import re
 
 import tempfile
 
-try:
-    from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
-    from ..config.parse_utils import substitute_string, extract_date_and_tags
-    from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
-    from ..exit import register_first
-except ImportError:
-    from timestepping import TimeRange, Month, estimate_timestep, TimeStep
-    from timestepping.timestep import TimeStep
-    from config.parse_utils import substitute_string, extract_date_and_tags
-    from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
-    from exit import register_first
+from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
+from ..config.parse_utils import substitute_string, extract_date_and_tags
+from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
+from ..exit import register_first
 
 def withcases(func):
     def wrapper(*args, **kwargs):

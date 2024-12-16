@@ -1,6 +1,12 @@
 from typing import Optional
 import os
 
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
+
 #TODO TEST
 class EmailNotification:
     def __init__(self,
@@ -8,9 +14,6 @@ class EmailNotification:
                  email_client: Optional[str] = None,
                  email_login_env: Optional[str] = None,
                  email_pwd_env: Optional[str] = None):
-        
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
         
         email_client = email_client or f'mail.{from_address.split("@")[1]}'
         email_login_env = email_login_env or 'EMAIL_LOGIN'
@@ -31,8 +34,6 @@ class EmailNotification:
         self.msg = msg
     
     def attach(self, file: str):
-        from email.mime.base import MIMEBase
-        from email import encoders
 
         attachment = open(file, "rb")
         pr = MIMEBase('application', 'octet-stream')
@@ -42,8 +43,6 @@ class EmailNotification:
         self.msg.attach(pr)
 
     def send(self, recipients: str|list[str], subject: str, body: Optional[str] = None):
-
-        from email.mime.text import MIMEText
 
         self.msg['To'] = ', '.join(recipients) if isinstance(recipients, list) else recipients
         self.msg['Subject'] = subject

@@ -2,18 +2,10 @@ import os
 import rioxarray
 import xarray as xr
 import pandas as pd
-import datetime as dt
 
-try:
-    from .dataset import Dataset
-    from ..timestepping.timestep import TimeStep, TimeRange
-    from ..config.parse_utils import extract_date_and_tags
-    from .io_utils import write_to_file, read_from_file, rm_file
-except ImportError:
-    from dataset import Dataset
-    from timestepping.timestep import TimeStep, TimeRange
-    from config.parse_utils import extract_date_and_tags
-    from io_utils import write_to_file, read_from_file, rm_file
+from .dataset import Dataset
+from ..timestepping.timestep import TimeStep
+from .io_utils import write_to_file, read_from_file, rm_file
 
 from typing import Optional
 
