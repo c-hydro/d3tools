@@ -25,7 +25,7 @@ def get_format_from_path(path: str) -> str:
     elif extension == 'nc':
         return 'netcdf'
     
-    elif extension == 'json':
+    elif extension in ['json', 'geojson']:
         return 'json'
     
     elif extension == 'txt':
@@ -54,7 +54,7 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
             data = json.load(f)
             # understand if the data is actually in a geodataframe format
             if 'features' in data.keys():
-                data = gpd.GeoDataFrame.from_features(data['features'])
+                data = gpd.read_file(path)
 
     # read the data from a txt file
     elif format == 'txt':
