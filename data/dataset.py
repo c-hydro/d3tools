@@ -710,7 +710,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Find the times for which data is available.
         """
         all_ids = list(range(len(times)))
-        ids = [i for i in all_ids if self.check_data(times[i], **kwargs)] or []
+        if hasattr(times[0].start):
+            tr = TimeRange(min(times).start, max(times).end)
+        else:
+            tr = TimeRange(min(times), max(times))
+
+        all_times = self.get_available_tags(tr, **kwargs).get('time', [])
+
+        ids = [i for i in all_ids if times[i] in all_times] or []
         if rev:
             ids = [i for i in all_ids if i not in ids] or []
 
@@ -720,14 +727,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return [times[i] for i in ids]
 
     @withcases
-    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False,**kwargs) -> list[str]:
+    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False, **kwargs) -> list[str]:
         """
         Find the tiles for which data is available.
         """
         all_tiles = self.tile_names
-        available_tiles = [tile for tile in all_tiles if self.check_data(time, tile = tile, **kwargs)]
+        available_tiles = self.get_available_tags(time, **kwargs).get('tile', [])
+        
         if not rev:
-            return available_tiles
+            return [tile for tile in all_tiles if tile in available_tiles]
         else:
             return [tile for tile in all_tiles if tile not in available_tiles]
 
