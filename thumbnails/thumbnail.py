@@ -185,21 +185,22 @@ class Thumbnail:
                 self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None:
                 pass
-
+        
         if 'annotation' in kwargs:
             if isinstance(kwargs['annotation'], dict):
                 annotation_opts = kwargs.pop('annotation')
                 if 'text' not in annotation_opts:
                     if 'source_key' in self.src.attrs:
-                        annotation_opts['text'] = os.path.basename(self.src.attrs['source_key'])
+                        text = os.path.basename(self.src.attrs['source_key'])
                     elif hasattr(self, 'raster_file'):
-                        annotation_opts['text'] = os.path.basename(self.raster_file)
-                self.add_annotation(**annotation_opts)
+                        text = os.path.basename(self.raster_file)
+                else:
+                    text = annotation_opts.pop('text')
+                self.add_annotation(text, **annotation_opts)
             elif isinstance(kwargs['annotation'], str):
                 self.add_annotation(kwargs['annotation'])
             elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
                 pass
-    
         elif 'source_key' in self.src.attrs:
             annotation_txt = os.path.basename(self.src.attrs['source_key'])
             self.add_annotation(annotation_txt)
@@ -220,5 +221,4 @@ class Thumbnail:
     
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
-
         plt.close(self.fig)
