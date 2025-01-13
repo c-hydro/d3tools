@@ -7,19 +7,15 @@ import boto3
 import os
 from functools import cached_property
 import shutil
-#import atexit
 import paramiko
 
-try:
-    from .dataset import Dataset
-    from .io_utils import write_to_file, read_from_file
-    from ..config.parse_utils import extract_date_and_tags
-    from ..exit import register
-except ImportError:
-    from dataset import Dataset
-    from io_utils import write_to_file, read_from_file
-    from config.parse_utils import extract_date_and_tags
-    from exit import register
+import stat
+import posixpath
+
+from .dataset import Dataset
+from .io_utils import write_to_file, read_from_file
+from ..config.parse_utils import extract_date_and_tags
+from ..exit import register
 
 class RemoteDataset(Dataset):
     type = 'remote'
@@ -340,9 +336,6 @@ class SFTPDataset(RemoteDataset):
         if self.available_keys_are_cached:
             if output_key not in self.available_keys:
                 self.available_keys.append(output_key)
-
-import stat
-import posixpath
 
 def sftp_walk(sftp, remote_path, rev = False):
     """

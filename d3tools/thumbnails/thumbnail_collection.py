@@ -6,10 +6,7 @@ from typing import Optional
 import numpy as np
 import os
 
-try:
-    from .thumbnail import Thumbnail
-except ImportError:
-    from thumbnail import Thumbnail
+from .thumbnail import Thumbnail
 
 class ThumbnailCollection:
     def __init__(self, raster_files: list[str], color_definition_files: list[str]|str):
