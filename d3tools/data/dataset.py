@@ -595,8 +595,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
             thumbnail_file = None
 
         # add the metadata
-        attrs = data.attrs if hasattr(data, 'attrs') else {}
-        output.attrs.update(attrs)
+        old_attrs = data.attrs if hasattr(data, 'attrs') else {}
+        new_attrs = output.attrs
+        old_attrs.update(new_attrs)
+        output.attrs = old_attrs
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
