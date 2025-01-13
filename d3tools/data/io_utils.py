@@ -53,7 +53,7 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
         with open(path, 'r') as f:
             data = json.load(f)
             # understand if the data is actually in a geodataframe format
-            if 'features' in data.keys():
+            if isinstance(data, dict) and 'features' in data.keys():
                 data = gpd.read_file(path)
 
     # read the data from a txt file
