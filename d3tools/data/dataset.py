@@ -2,8 +2,6 @@ from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
 import xarray as xr
-import pandas as pd
-import geopandas as gpd
 #import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
@@ -509,41 +507,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @abstractmethod
     def _read_data(self, input_key:str):
         raise NotImplementedError
-    
-    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame|str|dict):
-        """"
-        Ensures that the data is compatible with the format of the dataset.
-        """
-        # add possibility to write a geopandas dataframe to a geojson or a shapefile
-        if isinstance(data, gpd.GeoDataFrame):
-            if self.format not in ['shp', 'json']:
-                raise ValueError(f'Cannot write a geopandas dataframe to a {self.format} file.')
-            
-        elif isinstance(data, pd.DataFrame):
-            if not self.format == 'csv':
-                raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
-        elif isinstance(data, str):
-            if self.format =='txt' or self.format == 'file':
-                pass
-            else:
-                raise ValueError(f'Cannot write a string to a {self.format} file.')
-        elif isinstance(data, dict):
-            if not self.format == 'json':
-                raise ValueError(f'Cannot write a dictionary to a {self.format} file.')
-        elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-            if self.format == 'csv':
-                raise ValueError(f'Cannot write matrix data to a csv file.')
-        
-        if self.format == 'geotiff' and isinstance(data, xr.Dataset):
-            raise ValueError(f'Cannot write a dataset to a geotiff file.')
 
-    def write_data(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame,
+    def write_data(self, data,
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
                    metadata = {},
                    **kwargs):
         
-        self.check_data_for_writing(data)
+        check_data_format(data, self.format)
 
         output_file = self.get_key(time, **kwargs)
 
@@ -595,10 +566,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             thumbnail_file = None
 
         # add the metadata
-        old_attrs = data.attrs if hasattr(data, 'attrs') else {}
-        new_attrs = output.attrs
-        old_attrs.update(new_attrs)
-        output.attrs = old_attrs
+        attrs = data.attrs if hasattr(data, 'attrs') else {}
+        output.attrs.update(attrs)
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
