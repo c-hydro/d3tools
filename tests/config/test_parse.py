@@ -2,7 +2,7 @@ import pytest
 from unittest import mock
 import datetime
 
-from d3tools.config.parse_utils import substitute_values, substitute_string, flatten_dict, parse_options
+from d3tools.parse import substitute_values, substitute_string, flatten_dict, parse_options
 
 def test_substitute_values():
     structure = {

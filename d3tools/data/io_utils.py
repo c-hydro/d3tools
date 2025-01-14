@@ -1,5 +1,4 @@
-import pandas as pd
-import geopandas as gpd
+
 import rioxarray as rxr
 import xarray as xr
 import numpy as np
@@ -7,7 +6,41 @@ import os
 import json
 import datetime as dt
 
+try:
+    import pandas as pd
+    import geopandas as gpd
+except ImportError:
+    pass
+
 from typing import Optional
+
+def check_data_format(data, format: str) -> None:
+    """"
+    Ensures that the data is compatible with the format of the dataset.
+    """
+    # add possibility to write a geopandas dataframe to a geojson or a shapefile
+    if isinstance(data, gpd.GeoDataFrame):
+        if format not in ['shp', 'json']:
+            raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
+        
+    elif isinstance(data, pd.DataFrame):
+        if not format == 'csv':
+            raise ValueError(f'Cannot write pandas dataframe to a {format} file.')
+    elif isinstance(data, str):
+        if format =='txt' or format == 'file':
+            pass
+        else:
+            raise ValueError(f'Cannot write a string to a {format} file.')
+    elif isinstance(data, dict):
+        if not format == 'json':
+            raise ValueError(f'Cannot write a dictionary to a {format} file.')
+        
+    elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
+        if format == 'csv':
+            raise ValueError(f'Cannot write matrix data to a csv file.')
+    
+    if format == 'geotiff' and isinstance(data, xr.Dataset):
+        raise ValueError(f'Cannot write a dataset to a geotiff file.')
 
 def get_format_from_path(path: str) -> str:
     # get the file extension
@@ -53,7 +86,7 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
         with open(path, 'r') as f:
             data = json.load(f)
             # understand if the data is actually in a geodataframe format
-            if isinstance(data, dict) and 'features' in data.keys():
+            if 'features' in data.keys():
                 data = gpd.read_file(path)
 
     # read the data from a txt file

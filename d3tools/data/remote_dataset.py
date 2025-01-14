@@ -14,7 +14,7 @@ import posixpath
 
 from .dataset import Dataset
 from .io_utils import write_to_file, read_from_file
-from ..config.parse_utils import extract_date_and_tags
+from ..parse import extract_date_and_tags
 from ..exit import register
 
 class RemoteDataset(Dataset):

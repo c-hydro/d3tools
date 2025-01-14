@@ -2,7 +2,7 @@ import xarray as xr
 import pandas as pd
 
 from .dataset import Dataset
-from ..config.parse_utils import extract_date_and_tags
+from ..parse import extract_date_and_tags
 
 class MemoryDataset(Dataset):
     type = 'memory'

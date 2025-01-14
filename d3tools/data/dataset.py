@@ -13,8 +13,8 @@ import re
 import tempfile
 
 from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
-from ..config.parse_utils import substitute_string, extract_date_and_tags
-from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
+from ..parse import substitute_string, extract_date_and_tags
+from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type, check_data_format
 from ..exit import register_first
 
 def withcases(func):
