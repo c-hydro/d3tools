@@ -243,7 +243,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return self.get_available_tags()
 
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        if not hasattr(time, 'start'):
+        if not isinstance(time, TimeRange):
             prefix = self.get_key(time = time, **kwargs)
         else:
             start = time.start
@@ -984,7 +984,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## LOGGING METHODS
     def parse_log_options(self, value) -> dict:
         # if value is a Dataset already it will have a "key_pattern" attribute
-        if hasattr(value, 'key_pattern'):
+        if isinstance(value, Dataset):
             log_output= value.update(now = dt.datetime.now())
             log_opts = {'output' : log_output}
         # if it is a string, we use that as the key_pattern and the default from the creation kwargs of this dataset

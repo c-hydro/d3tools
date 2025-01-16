@@ -177,7 +177,7 @@ class Thumbnail:
         if 'overlay' in kwargs:
             if isinstance(kwargs['overlay'], dict):
                 self.add_overlay(**kwargs.pop('overlay'))
-            elif hasattr(kwargs['overlay'], 'key_pattern') or isinstance(kwargs['overlay'], str):
+            elif isinstance(kwargs['overlay'], Dataset) or isinstance(kwargs['overlay'], str):
                 self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None:
                 pass
