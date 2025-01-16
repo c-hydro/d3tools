@@ -450,6 +450,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if length is not None and length > 1:
                 time = time.replace(day = 28)
         
+        # progressively remove the non-used tags from the time
+        if '%s' not in key_without_tags:
+            time = time.replace(second = 0)
+            if '%M' not in key_without_tags:
+                time = time.replace(minute = 0)
+                if '%H' not in key_without_tags:
+                    time = time.replace(hour = 0)
+                    if '%d' not in key_without_tags:
+                        time = time.replace(day = 1)
+                        if '%m' not in key_without_tags:
+                            time = time.replace(month = 1)
+
         return time
 
     ## INPUT/OUTPUT METHODS
