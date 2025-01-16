@@ -256,6 +256,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                     if start.day == end.day:
                         prefix = prefix.replace('%d', f'{start.day:02d}')
 
+        prefix = os.path.dirname(prefix)
         while '%' in prefix or '{' in prefix:
             prefix = os.path.dirname(prefix)
         
