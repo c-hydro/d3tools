@@ -19,28 +19,32 @@ def check_data_format(data, format: str) -> None:
     Ensures that the data is compatible with the format of the dataset.
     """
     # add possibility to write a geopandas dataframe to a geojson or a shapefile
-    if isinstance(data, gpd.GeoDataFrame):
-        if format not in ['shp', 'json']:
-            raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
+    if isinstance(data, np.ndarray) or isinstance(data, xr.DataArray):
+        if not format in ['geotiff', 'netcdf']:
+            raise ValueError(f'Cannot write matrix data to a {format} file.')
+
+    elif isinstance(data, xr.Dataset):
+        if format not in ['netcdf']:
+            raise ValueError(f'Cannot write a dataset to a {format} file.')
         
-    elif isinstance(data, pd.DataFrame):
-        if not format == 'csv':
-            raise ValueError(f'Cannot write pandas dataframe to a {format} file.')
     elif isinstance(data, str):
-        if format =='txt' or format == 'file':
-            pass
-        else:
+        if format not in ['txt', 'file']:
             raise ValueError(f'Cannot write a string to a {format} file.')
+        
     elif isinstance(data, dict):
-        if not format == 'json':
+        if format not in ['json']:
             raise ValueError(f'Cannot write a dictionary to a {format} file.')
         
-    elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-        if format == 'csv':
-            raise ValueError(f'Cannot write matrix data to a csv file.')
+    elif 'pd' in globals() and isinstance(data, pd.DataFrame):
+        if format not in ['csv']:
+            raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
+        
+    elif 'gpd' in globals() and isinstance(data, gpd.GeoDataFrame):
+        if format not in ['shp', 'json']:
+            raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
     
-    if format == 'geotiff' and isinstance(data, xr.Dataset):
-        raise ValueError(f'Cannot write a dataset to a geotiff file.')
+    elif format not in 'file':
+        raise ValueError(f'Cannot write a {type(data)} to a {format} file.')
 
 def get_format_from_path(path: str) -> str:
     # get the file extension
