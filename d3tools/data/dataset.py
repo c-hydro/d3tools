@@ -687,14 +687,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Find the times for which data is available.
         """
         all_ids = list(range(len(times)))
-        if hasattr(times[0].start):
-            tr = TimeRange(min(times).start, max(times).end)
-        else:
-            tr = TimeRange(min(times), max(times))
+
+        time_signatures = [self.get_time_signature(t) for t in times]
+        tr = TimeRange(min(time_signatures), max(time_signatures))
 
         all_times = self.get_available_tags(tr, **kwargs).get('time', [])
 
-        ids = [i for i in all_ids if times[i] in all_times] or []
+        ids = [i for i in all_ids if time_signatures[i] in all_times] or []
         if rev:
             ids = [i for i in all_ids if i not in ids] or []
 
