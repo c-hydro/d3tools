@@ -220,7 +220,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         for file in self._walk(prefix):
             try:
                 this_time, _ = extract_date_and_tags(file, key_pattern)
-                if (time is not None and time.contains(this_time)) or not self.has_time:
+                if time is None or (time is not None and time.contains(this_time)) or not self.has_time:
                     files.append(file)
             except ValueError:
                 pass
