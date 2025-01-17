@@ -35,13 +35,13 @@ def check_data_format(data, format: str) -> None:
         if format not in ['json']:
             raise ValueError(f'Cannot write a dictionary to a {format} file.')
         
-    elif 'pd' in globals() and isinstance(data, pd.DataFrame):
-        if format not in ['csv']:
-            raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
-        
     elif 'gpd' in globals() and isinstance(data, gpd.GeoDataFrame):
         if format not in ['shp', 'json']:
             raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
+                
+    elif 'pd' in globals() and isinstance(data, pd.DataFrame):
+        if format not in ['csv']:
+            raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
     
     elif format not in 'file':
         raise ValueError(f'Cannot write a {type(data)} to a {format} file.')
