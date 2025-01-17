@@ -2,9 +2,6 @@ from pyproj import CRS
 import xarray as xr
 from typing import Sequence
 
-from .bounding_box import BoundingBox
-
-
 def get_crs(datum: str|int|CRS) -> CRS:
     """
     Get the CRS object from the datum
@@ -20,7 +17,7 @@ def get_crs(datum: str|int|CRS) -> CRS:
         raise ValueError(f'Unknown datum type: {datum}, please provide an EPSG code ("EPSG:#####") or a WKT string.')
 
 def crop_to_bb(src: str|xr.DataArray|xr.Dataset,
-               BBox: BoundingBox) -> xr.DataArray:
+               BBox: 'BoundingBox') -> xr.DataArray:
     """
     Cut a geotiff to a bounding box.
     """
