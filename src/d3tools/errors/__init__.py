@@ -1,0 +1,1 @@
+from gdal_import import GDAL_ImportError
