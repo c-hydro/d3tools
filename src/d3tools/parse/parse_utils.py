@@ -225,3 +225,14 @@ def extract_date_and_tags(string: str, string_pattern:str):
     tags = {key: value for key, value in all_tags.items() if key in substituted_names and key not in ['year', 'month', 'day', 'hour', 'minute', 'second']}
     
     return date, tags
+
+def format_dict(dict):
+    str_list = []
+    for key, value in dict.items():
+        if type(value) == float:
+            str_list.append(f'{key}={value:.2f}')
+        elif type(value) == dt.datetime:
+            str_list.append(f'{key}={value:%Y-%m-%d}')
+        else:
+            str_list.append(f'{key}={value}')
+    return ', '.join(str_list)
