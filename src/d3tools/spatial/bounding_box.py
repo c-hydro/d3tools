@@ -70,11 +70,11 @@ class BoundingBox():
         data = rxr.open_rasterio(grid_file)
         return BoundingBox.from_xarray(data, buffer)
 
-    def buffer(self, buffer: int) -> None:
+    def add_buffer(self, buffer: int) -> None:
         """
         Buffer the bounding box, the buffer is in units of coordinates
         """
-        self.add_buffer = buffer
+        self.buffer = buffer
         self.bbox = buffer_bbox(self.bbox, buffer)
 
     def transform(self, new_datum: str, inplace = False) -> None:

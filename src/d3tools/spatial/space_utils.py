@@ -22,10 +22,8 @@ def crop_to_bb(src: str|xr.DataArray|xr.Dataset,
     Cut a geotiff to a bounding box.
     """
     if isinstance(src, str):
-        if src.endswith(".nc"):
-            src_ds = xr.load_dataset(src, engine="netcdf4")
-        elif src.endswith(".grib"):
-            src_ds = xr.load_dataset(src, engine="cfgrib")
+        from ..data.io_utils import read_from_file
+        src_ds = read_from_file(src)
     elif isinstance(src, xr.DataArray) or isinstance(src, xr.Dataset):
         src_ds = src
 
@@ -46,7 +44,7 @@ def crop_to_bb(src: str|xr.DataArray|xr.Dataset,
     #TODO: eventually fix this...
 
     # Crop the raster
-    cropped = clip_xarray(src_ds, transformed_BBox)
+    cropped = clip_xarray(src_ds, transformed_BBox.bbox)
 
     return cropped
 
