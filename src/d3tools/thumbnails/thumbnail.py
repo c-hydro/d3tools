@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from ..data import Dataset
+from .colors import parse_colors, keep_used_colors, create_colormap
 
 #TODO TEST
 class Thumbnail:
@@ -36,16 +37,16 @@ class Thumbnail:
                         self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
             self.txt_file = color_definition_file
-            all_breaks, all_colors, all_labels = col.parse_colors(color_definition_file)
+            all_breaks, all_colors, all_labels = parse_colors(color_definition_file)
 
             self.digital_img = self.discretize_raster(all_breaks)
             self.breaks = np.unique(self.digital_img)
-            self.colors = col.keep_used_colors(self.breaks, all_colors)
+            self.colors = keep_used_colors(self.breaks, all_colors)
             
             all_labels.append('nan')
             self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
 
-            self.colormap = col.create_colormap(self.colors)
+            self.colormap = create_colormap(self.colors)
 
     def discretize_raster(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
