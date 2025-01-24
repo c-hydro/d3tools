@@ -1,1 +1,1 @@
-from gdal_import import GDAL_ImportError
+from .gdal_import import GDAL_ImportError
