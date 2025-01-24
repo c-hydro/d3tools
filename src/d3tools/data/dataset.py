@@ -12,7 +12,7 @@ import tempfile
 
 from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
 from ..parse import substitute_string, extract_date_and_tags
-from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type, check_data_format
+from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
 from ..exit import register_first
 
 def withcases(func):
@@ -76,6 +76,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
+
+        if 'nan_value' in kwargs:
+            self.nan_value = kwargs.pop('nan_value')
+        else:
+            self.nan_value = None
 
         self._template = {}
         self.options = kwargs
@@ -489,7 +494,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = straighten_data(data)
 
             # make sure the nodata value is set to np.nan for floats and to the max int for integers
-            data = reset_nan(data)
+            data = set_type(data, self.nan_value)
 
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
@@ -497,7 +502,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if as_is:
                 return data
             data = straighten_data(data)
-            data = reset_nan(data)
+            data = set_type(data, self.nan_value)
 
         else:
             raise ValueError(f'Could not resolve data from {full_key}.')
@@ -553,9 +558,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-
+        
         output = self.set_data_to_template(data, template_dict)
-        output = set_type(output)
+        output = set_type(output, self.nan_value)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
 
@@ -579,8 +584,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             thumbnail_file = None
 
         # add the metadata
-        attrs = data.attrs if hasattr(data, 'attrs') else {}
-        output.attrs.update(attrs)
+        old_attrs = data.attrs if hasattr(data, 'attrs') else {}
+        new_attrs = output.attrs
+        old_attrs.update(new_attrs)
+        output.attrs = old_attrs
+        
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)

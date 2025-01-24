@@ -217,13 +217,17 @@ def straighten_data(data: xr.DataArray) -> xr.DataArray:
     return data
 
 @withxrds
-def reset_nan(data: xr.DataArray) -> xr.DataArray:
+def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     """
     Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
     """
-    data_type = data.dtype
-    new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
+
     fill_value = data.attrs.get('_FillValue', None)
+    if nan_value is None:
+        data_type = data.dtype
+        new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
+    else:
+        new_fill_value = nan_value
 
     if fill_value is None:
         data.attrs['_FillValue'] = new_fill_value
@@ -234,7 +238,7 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
     return data
 
 @withxrds
-def set_type(data: xr.DataArray) -> xr.DataArray:
+def set_type(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     """
     Make sure that the data is the smallest possible.
     """
@@ -249,6 +253,7 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
         else:
             data = data.astype(np.float64)
     elif np.issubdtype(data.dtype, np.integer):
+        
         if min_value >= 0:
             if max_value <= 255:
                 data = data.astype(np.uint8)
@@ -258,6 +263,9 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
                 data = data.astype(np.uint32)
             else:
                 data = data.astype(np.uint64)
+                
+            if nan_value is not None and not np.issubdtype(data.dtype, np.unsignedinteger):
+                nan_value = None
         else:
             if max_value <= 127 and min_value >= -128:
                 data = data.astype(np.int8)
@@ -268,4 +276,7 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
             else:
                 data = data.astype(np.int64)
 
-    return reset_nan(data)
+            if nan_value is not None and not np.issubdtype(data.dtype, np.integer):
+                nan_value = None
+
+    return reset_nan(data, nan_value)
