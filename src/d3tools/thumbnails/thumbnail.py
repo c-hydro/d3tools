@@ -4,14 +4,13 @@ import xarray as xr
 import os
 from typing import Optional
 
-import matplotlib.pyplot as plt
+import geopandas as gpd
 
-try:
-    from . import colors as col
-    from ..data import Dataset
-except ImportError:
-    import colors as col
-    from data import Dataset
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
+from ..data import Dataset
+from .colors import parse_colors, keep_used_colors, create_colormap
 
 #TODO TEST
 class Thumbnail:
@@ -38,16 +37,16 @@ class Thumbnail:
                         self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
             self.txt_file = color_definition_file
-            all_breaks, all_colors, all_labels = col.parse_colors(color_definition_file)
+            all_breaks, all_colors, all_labels = parse_colors(color_definition_file)
 
             self.digital_img = self.discretize_raster(all_breaks)
             self.breaks = np.unique(self.digital_img)
-            self.colors = col.keep_used_colors(self.breaks, all_colors)
+            self.colors = keep_used_colors(self.breaks, all_colors)
             
             all_labels.append('nan')
             self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
 
-            self.colormap = col.create_colormap(self.colors)
+            self.colormap = create_colormap(self.colors)
 
     def discretize_raster(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
@@ -102,7 +101,6 @@ class Thumbnail:
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
 
         if isinstance(shp_file, str):
-            import geopandas as gpd
             shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
         else:
             shapes = shp_file.get_data()
@@ -161,7 +159,6 @@ class Thumbnail:
         if 'borderaxespad' not in kwargs:
             kwargs['borderaxespad'] = 0
 
-        import matplotlib.patches as mpatches
         colors_normalized = [np.array(color, dtype=int) / 255. for color in self.colors]
         patches = [mpatches.Patch(color=color, label=label) for color, label in zip(colors_normalized, self.labels)]
 
@@ -181,7 +178,7 @@ class Thumbnail:
         if 'overlay' in kwargs:
             if isinstance(kwargs['overlay'], dict):
                 self.add_overlay(**kwargs.pop('overlay'))
-            elif hasattr(kwargs['overlay'], 'key_pattern') or isinstance(kwargs['overlay'], str):
+            elif isinstance(kwargs['overlay'], Dataset) or isinstance(kwargs['overlay'], str):
                 self.add_overlay(kwargs['overlay'])
             elif kwargs['overlay'] == False or kwargs['overlay'] is None:
                 pass

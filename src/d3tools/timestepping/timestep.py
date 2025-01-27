@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import datetime as dt
 
 from .timerange import TimeRange, TimePeriod
 
@@ -35,18 +34,19 @@ class TimeStep(TimeRange, ABC):
     
 def estimate_timestep(sample) -> TimeStep:
         import numpy as np
-        from scipy.stats import mode
 
         from .fixed_num_timestep import Year, Month, Dekad
         from .fixed_len_timestep import Day, Hour
         from .fixed_doy_timestep import ViirsModisTimeStep
 
+        def mode(arr: list): return max(set(arr), key = arr.count)
+
         sample.sort()
         all_diff = [(sample[i+1] - sample[i]).days for i in range(len(sample)-1)]
-        step_length = mode(all_diff).mode
+        step_length = mode(all_diff)
         if np.isclose(step_length, 0):
             all_diff_seconds = [(sample[i+1] - sample[i]).seconds for i in range(len(sample)-1)]
-            step_length = mode(all_diff_seconds).mode
+            step_length = mode(all_diff_seconds)
             if np.isclose(step_length, 3600):
                 return Hour
             else:

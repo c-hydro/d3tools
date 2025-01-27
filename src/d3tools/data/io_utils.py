@@ -1,5 +1,4 @@
-import pandas as pd
-import geopandas as gpd
+
 import rioxarray as rxr
 import xarray as xr
 import numpy as np
@@ -7,7 +6,45 @@ import os
 import json
 import datetime as dt
 
+try:
+    import pandas as pd
+    import geopandas as gpd
+except ImportError:
+    pass
+
 from typing import Optional
+
+def check_data_format(data, format: str) -> None:
+    """"
+    Ensures that the data is compatible with the format of the dataset.
+    """
+    # add possibility to write a geopandas dataframe to a geojson or a shapefile
+    if isinstance(data, np.ndarray) or isinstance(data, xr.DataArray):
+        if not format in ['geotiff', 'netcdf']:
+            raise ValueError(f'Cannot write matrix data to a {format} file.')
+
+    elif isinstance(data, xr.Dataset):
+        if format not in ['netcdf']:
+            raise ValueError(f'Cannot write a dataset to a {format} file.')
+        
+    elif isinstance(data, str):
+        if format not in ['txt', 'file']:
+            raise ValueError(f'Cannot write a string to a {format} file.')
+        
+    elif isinstance(data, dict):
+        if format not in ['json']:
+            raise ValueError(f'Cannot write a dictionary to a {format} file.')
+        
+    elif 'gpd' in globals() and isinstance(data, gpd.GeoDataFrame):
+        if format not in ['shp', 'json']:
+            raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
+                
+    elif 'pd' in globals() and isinstance(data, pd.DataFrame):
+        if format not in ['csv']:
+            raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
+    
+    elif format not in 'file':
+        raise ValueError(f'Cannot write a {type(data)} to a {format} file.')
 
 def get_format_from_path(path: str) -> str:
     # get the file extension
@@ -53,7 +90,7 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
         with open(path, 'r') as f:
             data = json.load(f)
             # understand if the data is actually in a geodataframe format
-            if 'features' in data.keys():
+            if isinstance(data, dict) and 'features' in data.keys():
                 data = gpd.read_file(path)
 
     # read the data from a txt file
@@ -180,13 +217,17 @@ def straighten_data(data: xr.DataArray) -> xr.DataArray:
     return data
 
 @withxrds
-def reset_nan(data: xr.DataArray) -> xr.DataArray:
+def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     """
     Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
     """
-    data_type = data.dtype
-    new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
+
     fill_value = data.attrs.get('_FillValue', None)
+    if nan_value is None:
+        data_type = data.dtype
+        new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
+    else:
+        new_fill_value = nan_value
 
     if fill_value is None:
         data.attrs['_FillValue'] = new_fill_value
@@ -197,7 +238,7 @@ def reset_nan(data: xr.DataArray) -> xr.DataArray:
     return data
 
 @withxrds
-def set_type(data: xr.DataArray) -> xr.DataArray:
+def set_type(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     """
     Make sure that the data is the smallest possible.
     """
@@ -212,6 +253,7 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
         else:
             data = data.astype(np.float64)
     elif np.issubdtype(data.dtype, np.integer):
+        
         if min_value >= 0:
             if max_value <= 255:
                 data = data.astype(np.uint8)
@@ -221,6 +263,9 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
                 data = data.astype(np.uint32)
             else:
                 data = data.astype(np.uint64)
+                
+            if nan_value is not None and not np.issubdtype(data.dtype, np.unsignedinteger):
+                nan_value = None
         else:
             if max_value <= 127 and min_value >= -128:
                 data = data.astype(np.int8)
@@ -231,4 +276,7 @@ def set_type(data: xr.DataArray) -> xr.DataArray:
             else:
                 data = data.astype(np.int64)
 
-    return reset_nan(data)
+            if nan_value is not None and not np.issubdtype(data.dtype, np.integer):
+                nan_value = None
+
+    return reset_nan(data, nan_value)
