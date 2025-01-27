@@ -2,8 +2,6 @@ from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
 import xarray as xr
-import pandas as pd
-import geopandas as gpd
 #import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
@@ -12,17 +10,10 @@ import re
 
 import tempfile
 
-try:
-    from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
-    from ..config.parse_utils import substitute_string, extract_date_and_tags
-    from .io_utils import get_format_from_path, straighten_data, reset_nan, set_type
-    from ..exit import register_first
-except ImportError:
-    from timestepping import TimeRange, Month, estimate_timestep, TimeStep
-    from timestepping.timestep import TimeStep
-    from config.parse_utils import substitute_string, extract_date_and_tags
-    from io_utils import get_format_from_path, straighten_data, reset_nan, set_type
-    from exit import register_first
+from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
+from ..parse import substitute_string, extract_date_and_tags
+from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
+from ..exit import register_first
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -85,6 +76,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
+
+        if 'nan_value' in kwargs:
+            self.nan_value = kwargs.pop('nan_value')
+        else:
+            self.nan_value = None
 
         self._template = {}
         self.options = kwargs
@@ -229,7 +225,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         for file in self._walk(prefix):
             try:
                 this_time, _ = extract_date_and_tags(file, key_pattern)
-                if (time is not None and time.contains(this_time)) or not self.has_time:
+                if time is None or (time is not None and time.contains(this_time)) or not self.has_time:
                     files.append(file)
             except ValueError:
                 pass
@@ -252,7 +248,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return self.get_available_tags()
 
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        if not hasattr(time, 'start'):
+        if not isinstance(time, TimeRange):
             prefix = self.get_key(time = time, **kwargs)
         else:
             start = time.start
@@ -265,6 +261,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                     if start.day == end.day:
                         prefix = prefix.replace('%d', f'{start.day:02d}')
 
+        prefix = os.path.dirname(prefix)
         while '%' in prefix or '{' in prefix:
             prefix = os.path.dirname(prefix)
         
@@ -458,6 +455,18 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if length is not None and length > 1:
                 time = time.replace(day = 28)
         
+        # progressively remove the non-used tags from the time
+        if '%s' not in key_without_tags:
+            time = time.replace(second = 0)
+            if '%M' not in key_without_tags:
+                time = time.replace(minute = 0)
+                if '%H' not in key_without_tags:
+                    time = time.replace(hour = 0)
+                    if '%d' not in key_without_tags:
+                        time = time.replace(day = 1)
+                        if '%m' not in key_without_tags:
+                            time = time.replace(month = 1)
+
         return time
 
     ## INPUT/OUTPUT METHODS
@@ -485,7 +494,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = straighten_data(data)
 
             # make sure the nodata value is set to np.nan for floats and to the max int for integers
-            data = reset_nan(data)
+            data = set_type(data, self.nan_value)
 
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
@@ -493,7 +502,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if as_is:
                 return data
             data = straighten_data(data)
-            data = reset_nan(data)
+            data = set_type(data, self.nan_value)
 
         else:
             raise ValueError(f'Could not resolve data from {full_key}.')
@@ -516,41 +525,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @abstractmethod
     def _read_data(self, input_key:str):
         raise NotImplementedError
-    
-    def check_data_for_writing(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame|str|dict):
-        """"
-        Ensures that the data is compatible with the format of the dataset.
-        """
-        # add possibility to write a geopandas dataframe to a geojson or a shapefile
-        if isinstance(data, gpd.GeoDataFrame):
-            if self.format not in ['shp', 'json']:
-                raise ValueError(f'Cannot write a geopandas dataframe to a {self.format} file.')
-            
-        elif isinstance(data, pd.DataFrame):
-            if not self.format == 'csv':
-                raise ValueError(f'Cannot write pandas dataframe to a {self.format} file.')
-        elif isinstance(data, str):
-            if self.format =='txt' or self.format == 'file':
-                pass
-            else:
-                raise ValueError(f'Cannot write a string to a {self.format} file.')
-        elif isinstance(data, dict):
-            if not self.format == 'json':
-                raise ValueError(f'Cannot write a dictionary to a {self.format} file.')
-        elif isinstance(data, np.ndarray) or isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-            if self.format == 'csv':
-                raise ValueError(f'Cannot write matrix data to a csv file.')
-        
-        if self.format == 'geotiff' and isinstance(data, xr.Dataset):
-            raise ValueError(f'Cannot write a dataset to a geotiff file.')
 
-    def write_data(self, data: xr.DataArray|xr.Dataset|np.ndarray|pd.DataFrame,
+    def write_data(self, data,
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
                    metadata = {},
                    **kwargs):
         
-        self.check_data_for_writing(data)
+        check_data_format(data, self.format)
 
         output_file = self.get_key(time, **kwargs)
 
@@ -576,9 +558,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-
+        
         output = self.set_data_to_template(data, template_dict)
-        output = set_type(output)
+        output = set_type(output, self.nan_value)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
 
@@ -602,8 +584,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             thumbnail_file = None
 
         # add the metadata
-        attrs = data.attrs if hasattr(data, 'attrs') else {}
-        output.attrs.update(attrs)
+        old_attrs = data.attrs if hasattr(data, 'attrs') else {}
+        new_attrs = output.attrs
+        old_attrs.update(new_attrs)
+        output.attrs = old_attrs
+        
         name = substitute_string(self.name, kwargs)
         metadata['name'] = name
         output = self.set_metadata(output, time, time_format, **metadata)
@@ -710,14 +695,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Find the times for which data is available.
         """
         all_ids = list(range(len(times)))
-        if hasattr(times[0].start):
-            tr = TimeRange(min(times).start, max(times).end)
-        else:
-            tr = TimeRange(min(times), max(times))
+
+        time_signatures = [self.get_time_signature(t) for t in times]
+        tr = TimeRange(min(time_signatures), max(time_signatures))
 
         all_times = self.get_available_tags(tr, **kwargs).get('time', [])
 
-        ids = [i for i in all_ids if times[i] in all_times] or []
+        ids = [i for i in all_ids if time_signatures[i] in all_times] or []
         if rev:
             ids = [i for i in all_ids if i not in ids] or []
 
@@ -1020,7 +1004,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## LOGGING METHODS
     def parse_log_options(self, value) -> dict:
         # if value is a Dataset already it will have a "key_pattern" attribute
-        if hasattr(value, 'key_pattern'):
+        if isinstance(value, Dataset):
             log_output= value.update(now = dt.datetime.now())
             log_opts = {'output' : log_output}
         # if it is a string, we use that as the key_pattern and the default from the creation kwargs of this dataset
