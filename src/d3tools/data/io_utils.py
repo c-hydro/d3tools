@@ -223,8 +223,8 @@ def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     """
 
     fill_value = data.attrs.get('_FillValue', None)
+    data_type = data.dtype
     if nan_value is None:
-        data_type = data.dtype
         new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
     else:
         new_fill_value = nan_value
@@ -235,7 +235,7 @@ def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
         data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
         data.attrs['_FillValue'] = new_fill_value
 
-    return data
+    return data.astype(data_type)
 
 @withxrds
 def set_type(data: xr.DataArray, nan_value = None) -> xr.DataArray:
