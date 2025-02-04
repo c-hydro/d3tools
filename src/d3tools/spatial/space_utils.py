@@ -2,17 +2,19 @@ from pyproj import CRS
 import xarray as xr
 from typing import Sequence
 
-def get_crs(datum: str|int|CRS) -> CRS:
+def get_crs(datum: str|int|CRS|rioCRS) -> CRS:
     """
     Get the CRS object from the datum
     """
-
+   
     if isinstance(datum, str):
         return CRS.from_string(datum)
     elif isinstance(datum, int):
         return CRS.from_epsg(datum)
     elif isinstance(datum, CRS):
         return datum
+    elif hasattr(CRS, 'to_wkt'):
+        return CRS.from_string(datum.to_wkt())
     else:
         raise ValueError(f'Unknown datum type: {datum}, please provide an EPSG code ("EPSG:#####") or a WKT string.')
 
