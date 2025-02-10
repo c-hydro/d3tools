@@ -153,3 +153,20 @@ class TimeWindow():
     
     def __sub__(self,  other: 'TimeWindow'):
         return self + TimeWindow(-other.size, other.unit)
+    
+    def is_multiple(self, other: 'TimeWindow'):
+        if self.unit == other.unit:
+            return self.size % other.size == 0
+        elif other.unit in self.conversions[self.unit]:
+            # find the integer conversion factor
+            if self.conversions[self.unit][other.unit] == int(self.conversions[self.unit][other.unit]):
+                factor = self.conversions[self.unit][other.unit]
+                return self.size % (other.size * factor) == 0
+            elif self.conversions[other.unit][self.unit] == int(self.conversions[other.unit][self.unit]):
+                factor = self.conversions[other.unit][self.unit]
+                return (self.size * factor) % other.size == 0
+            else:
+                return False
+        else:
+            return False
+    
