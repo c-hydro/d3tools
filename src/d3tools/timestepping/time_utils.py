@@ -88,10 +88,13 @@ def find_unit_of_time(unit: str) -> str:
     'w' for weeks.
     """
 
+    # remove all non-alphanumeric characters
+    unit = ''.join([c for c in unit if c.isalnum()])
+
     if unit in ['d', 'days', 'day', 'daily']:
         return 'd'
 
-    elif unit in ['t', 'dekads', 'dekad', 'dekadly'] or ('10' in unit and 'day' in unit):
+    elif unit in ['t', 'dekads', 'dekad', 'dekadly'] or (unit.startswith('10') and find_unit_of_time(unit[2:]) == 'd'):
         return 't'
 
     elif unit in ['m', 'months', 'month', 'monthly']:
@@ -100,7 +103,7 @@ def find_unit_of_time(unit: str) -> str:
     elif unit in ['y', 'years', 'year', 'yearly', 'a', 'annual', 'annually']:
         return 'y'
 
-    elif unit in ['v', 'viirs', 'modis'] or ('8' in unit and 'day' in unit):
+    elif unit in ['v', 'viirs', 'modis'] or (unit.startswith('8') and find_unit_of_time(unit[1:]) == 'd'):
         return 'v'
 
     elif unit in ['h', 'hours', 'hour', 'hourly']:

@@ -1,17 +1,17 @@
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import datetime
 from typing import Optional
 
-from .timestep import TimeStep
+from .timestep import TimeStep, TimeStepMeta
 from .time_utils import get_date_from_str
 
-class FixedLenTimeStepMeta(ABCMeta):
+class FixedLenTimeStepMeta(TimeStepMeta):
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
-        if not hasattr(cls, 'subclasses'):
-            cls.subclasses = {}
+        if not hasattr(cls, 'fixed_l_subclasses'):
+            cls.fixed_l_subclasses = {}
         elif 'length' in attrs:
-            cls.subclasses[attrs['length']] = cls
+            cls.fixed_l_subclasses[attrs['length']] = cls
 
 class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
     """
@@ -30,7 +30,7 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
 
     @classmethod
     def get_subclass(cls, length: float):
-        Subclass: 'FixedLenTimeStep'|None = cls.subclasses.get(length)
+        Subclass: 'FixedLenTimeStep'|None = cls.fixed_l_subclasses.get(length)
         if Subclass is None:
             raise ValueError(f"Invalid step length: {length}")
         return Subclass

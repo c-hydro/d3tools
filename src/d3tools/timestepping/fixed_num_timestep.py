@@ -1,17 +1,17 @@
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import datetime
 from typing import Optional
 
-from .timestep import TimeStep
+from .timestep import TimeStep, TimeStepMeta
 from .time_utils import get_date_from_str
 
-class FixedNTimeStepMeta(ABCMeta):
+class FixedNTimeStepMeta(TimeStepMeta):
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
-        if not hasattr(cls, 'subclasses'):
-            cls.subclasses = {}
+        if not hasattr(cls, 'fixed_n_subclasses'):
+            cls.fixed_n_subclasses = {}
         elif 'n_steps' in attrs:
-            cls.subclasses[attrs['n_steps']] = cls
+            cls.fixed_n_subclasses[attrs['n_steps']] = cls
 
 class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
     """
@@ -30,7 +30,7 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
 
     @classmethod
     def get_subclass(cls, n_steps: int):
-        Subclass: 'FixedNTimeStep'|None = cls.subclasses.get(n_steps)
+        Subclass: 'FixedNTimeStep'|None = cls.fixed_n_subclasses.get(n_steps)
         if Subclass is None:
             raise ValueError(f"Invalid number of steps: {n_steps}")
         return Subclass

@@ -8,10 +8,10 @@ from .time_utils import get_date_from_str
 class FixedDOYTimeStepStepMeta(FixedNTimeStepMeta):
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
-        if not hasattr(cls, 'subclasses'):
-            cls.subclasses = {}
+        if not hasattr(cls, 'fixed_doy_subclasses'):
+            cls.fixed_doy_subclasses = {}
         elif 'start_doys' in attrs:
-            cls.subclasses[attrs['start_doys']] = cls
+            cls.fixed_doy_subclasses[attrs['start_doys']] = cls
 
 #TODO: make this not an ABC (need to implement get_start and get_end)
 class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
@@ -35,7 +35,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
     def from_date(cls, date: datetime.datetime|str, start_doys: Optional[Iterable[int]] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
         start_doys = cls.get_start_doys(start_doys)
-        Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
+        Subclass: 'FixedDOYTimeStep'|None= cls.fixed_doy_subclasses.get(tuple(start_doys))
         if Subclass:
             return Subclass(date.year, Subclass.get_step_from_date(date))
         else:
@@ -44,7 +44,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
     @classmethod
     def from_step(cls, year: int, step: int, start_doys: Optional[Iterable[int]] = None):
         start_doys = cls.get_start_doys(start_doys)
-        Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
+        Subclass: 'FixedDOYTimeStep'|None= cls.fixed_doy_subclasses.get(tuple(start_doys))
         if Subclass:
             return Subclass(year, step)
         else:

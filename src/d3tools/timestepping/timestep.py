@@ -1,13 +1,33 @@
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 
 from .timerange import TimeRange, TimePeriod
 from .time_utils import get_window, get_window_from_str, find_unit_of_time
 
-class TimeStep(TimeRange, ABC):
+class TimeStepMeta(ABCMeta):
+    def __init__(cls, name, bases, attrs):
+        super().__init__(name, bases, attrs)
+        if not hasattr(cls, 'subclasses'):
+            cls.subclasses = {}
+        elif 'unit' in attrs:
+            cls.subclasses[attrs['unit']] = cls
+
+class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
     """
     A timestep is a TimePeriod that supports addition and subtraction of integers.
     (i.e. there is previous and next timesteps)
     """
+
+    @classmethod
+    def from_unit(cls, unit: str):
+        return cls.get_subclass(unit)
+
+    @classmethod
+    def get_subclass(cls, unit: str):
+        unit = find_unit_of_time(unit)
+        Subclass: 'TimeStep' = cls.subclasses.get(unit)
+        if Subclass is None:
+            raise ValueError(f"Invalid unit of time: {type}")
+        return Subclass
 
     @property
     def agg_window(self):
