@@ -2,7 +2,7 @@ from pyproj import CRS
 import xarray as xr
 from typing import Sequence
 
-def get_crs(datum: str|int|CRS|rioCRS) -> CRS:
+def get_crs(datum: str|int|CRS) -> CRS:
     """
     Get the CRS object from the datum
     """
