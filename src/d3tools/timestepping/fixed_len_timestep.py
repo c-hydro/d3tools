@@ -61,7 +61,10 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
     def __add__(self, n: int):
         delta_days = n*self.length
         new_start = self.start + datetime.timedelta(days=delta_days)
-        return self.from_date(new_start, self.length)
+
+        other = self.from_date(new_start, self.length)
+        other.agg_window = self.agg_window
+        return other
     
     @staticmethod
     @abstractmethod
@@ -82,6 +85,7 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
 class Day(FixedLenTimeStep):
 
     length: float = 1
+    unit = 'd'
 
     def __init__(self, year: int, step: int):
         super().__init__(year, step, Day.length)
@@ -122,6 +126,7 @@ class Day(FixedLenTimeStep):
 class Hour(FixedLenTimeStep):
 
     length: float = 1/24
+    unit = 'h'
 
     def __init__(self, year: int, step: int):
         super().__init__(year, step, Hour.length)

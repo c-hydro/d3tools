@@ -68,7 +68,9 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
             step += self.n_steps
             year -= 1
         
-        return self.from_step(year, step, self.n_steps)
+        other = self.from_step(year, step, self.n_steps)
+        other.agg_window = self.agg_window
+        return other
 
     @staticmethod
     @abstractmethod
@@ -90,6 +92,7 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
 class Dekad(FixedNTimeStep):
 
     n_steps:int = 36
+    unit = 't'
 
     def __init__(self, year: int, dekad_of_year: int):
         super().__init__(year, dekad_of_year, Dekad.n_steps)
@@ -144,6 +147,7 @@ class Dekad(FixedNTimeStep):
 class Month(FixedNTimeStep):
 
     n_steps:int = 12
+    unit = 'm'
 
     def __init__(self, year: int, month_of_year: int):
         super().__init__(year, month_of_year, Month.n_steps)
@@ -174,6 +178,7 @@ class Month(FixedNTimeStep):
 class Year(FixedNTimeStep):
     
         n_steps:int = 1
+        unit = 'y'
     
         def __init__(self, year: int, dummy: int = 1):
             super().__init__(year, 1, Year.n_steps)

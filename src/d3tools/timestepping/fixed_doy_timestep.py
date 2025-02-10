@@ -3,6 +3,7 @@ from abc import ABC
 from typing import Iterable, Optional
 
 from .fixed_num_timestep import FixedNTimeStep, FixedNTimeStepMeta
+from .time_utils import get_date_from_str
 
 class FixedDOYTimeStepStepMeta(FixedNTimeStepMeta):
     def __init__(cls, name, bases, attrs):
@@ -31,7 +32,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
             raise TypeError('Could not find "start_doys"')
 
     @classmethod
-    def from_date(cls, date: datetime.datetime, start_doys: Optional[Iterable[int]] = None):
+    def from_date(cls, date: datetime.datetime|str, start_doys: Optional[Iterable[int]] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
         start_doys = cls.get_start_doys(start_doys)
         Subclass: 'FixedDOYTimeStep'|None= cls.subclasses.get(tuple(start_doys))
@@ -84,7 +85,9 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
             step += self.n_steps
             year -= 1
         
-        return self.from_step(year, step, self.start_doys)
+        other = self.from_step(year, step, self.start_doys)
+        other.agg_window = self.agg_window
+        return other
 
     @property
     def step_of_year(self):
@@ -97,6 +100,7 @@ class ViirsModisTimeStep(FixedDOYTimeStep):
     """
 
     start_doys = tuple(range(1, 366, 8))
+    unit = 'v'
 
     def __init__(self, year: int, step_of_year: int):
         super().__init__(year, step_of_year, ViirsModisTimeStep.start_doys)

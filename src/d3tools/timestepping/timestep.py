@@ -1,13 +1,51 @@
 from abc import ABC, abstractmethod
 
 from .timerange import TimeRange, TimePeriod
+from .time_utils import get_window, get_window_from_str, find_unit_of_time
 
 class TimeStep(TimeRange, ABC):
     """
     A timestep is a TimePeriod that supports addition and subtraction of integers.
     (i.e. there is previous and next timesteps)
     """
+
+    @property
+    def agg_window(self):
+        if hasattr(self, '_agg_window'):
+            return self._agg_window
+        return None
     
+    @agg_window.setter
+    def agg_window(self, value: str|tuple|None):
+        
+        if value is None:
+            return
+
+        if isinstance(value, tuple):
+            size, unit = value
+            size = int(size)
+            unit = find_unit_of_time(unit)
+        elif isinstance(value, str):
+            size, unit = get_window_from_str(value)
+        else:
+            raise ValueError(f'Invalid aggregation window: {value}')
+
+        self._agg_window = (size, unit)
+
+    @property
+    def agg_range(self):
+        if not hasattr(self, 'start') or not hasattr(self, 'end'):
+            return None
+        
+        if self.agg_window is None:
+            return TimeRange(self.start, self.end)
+        
+        return get_window(self.end, *self._agg_window)
+    
+    @agg_range.setter
+    def agg_range(self, value: str):
+        self.agg_window = value
+
     @abstractmethod
     def __add__(self, n: int):
         raise NotImplementedError

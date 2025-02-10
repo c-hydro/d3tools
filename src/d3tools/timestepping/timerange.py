@@ -2,6 +2,7 @@ import datetime
 from typing import Generator, Iterable, TYPE_CHECKING
 
 from .timeperiod import TimePeriod
+from .time_utils import find_unit_of_time
 if TYPE_CHECKING:
     from .fixed_num_timestep import Year, Month, Dekad, FixedNTimeStep
     from .fixed_len_timestep import Day, Hour, FixedLenTimeStep
@@ -36,28 +37,33 @@ class TimeRange(TimePeriod):
     def viirstimes(self) -> list:
         return self.get_timesteps_from_DOY(range(1, 366, 8))
     
-    def get_timesteps(self, freq: str|int) -> list:
+    def get_timesteps(self, freq: str|int, agg: str|tuple|None = None) -> list:
 
         if isinstance(freq, int):
-            return self.get_timesteps_from_tsnumber(freq)
+            tss = self.get_timesteps_from_tsnumber(freq)
 
-        freq = self.freq.lower()
-        if freq in ['d', 'days', 'day', 'daily']:
-            return self.days
-        elif freq in ['t', 'dekads', 'dekad', 'dekadly', '10-day', '10-days']:
-            return self.dekads
-        elif freq in ['m', 'months', 'month', 'monthly']:
-            return self.months
-        elif freq in ['y', 'years', 'year', 'yearly', 'a', 'annual']:
-            return self.years
-        elif freq in ['8-days', '8day', '8dayly', '8-day', 'viirs']:
-            return self.viirstimes
-        elif freq in ['h', 'hours', 'hour', 'hourly']:
-            return self.hours
+        freq = find_unit_of_time(freq.lower())
+        if freq == 'd': tss = self.days
+        elif freq == 't': tss = self.dekads
+        elif freq == 'm': tss = self.months
+        elif freq == 'y': tss = self.years
+        elif freq == 'v': tss = self.viirstimes
+        elif freq == 'h': tss = self.hours
         else:
             raise ValueError(f'Frequency {freq} not supported')
+        
+        if agg is not None:
+            for ts in tss:
+                ts.agg_window = agg
+        
+        return tss
 
-    def gen_timesteps_from_tsnumber(self, timesteps_per_year: int) -> Generator['FixedNTimeStep|FixedLenTimeStep', None, None]:
+    def get_timesteps_like(self, timestep: 'TimeStep') -> list['TimeStep']:
+        return self.get_timesteps(timestep.unit, timestep.agg_window)
+
+    def gen_timesteps_from_tsnumber(self,
+                                    timesteps_per_year: int,
+                                    agg: str = None) -> Generator['FixedNTimeStep|FixedLenTimeStep', None, None]:
         """
         This will yield the timesteps on a regular frequency by the number of timesteps per year.
         timesteps_per_year is expressed as an integer indicating the number of times per year
@@ -74,14 +80,15 @@ class TimeRange(TimePeriod):
         else:
             ts:FixedNTimeStep = FixedNTimeStep.from_date(self.start, timesteps_per_year)
 
+        if agg is not None: ts.agg_window = agg
         while ts.start <= self.end:
             yield ts
             ts = ts + 1
 
-    def get_timesteps_from_tsnumber(self, timesteps_per_year: int) -> list['FixedNTimeStep']:
-        return list(self.gen_timesteps_from_tsnumber(timesteps_per_year))
+    def get_timesteps_from_tsnumber(self, timesteps_per_year: int, agg: str = None) -> list['FixedNTimeStep']:
+        return list(self.gen_timesteps_from_tsnumber(timesteps_per_year, agg))
     
-    def gen_timesteps_from_DOY(self, doy_list: Iterable[int]) -> Generator['FixedDOYTimeStep', None, None]:
+    def gen_timesteps_from_DOY(self, doy_list: Iterable[int], agg: str = None) -> Generator['FixedDOYTimeStep', None, None]:
         """
         This will yield the timesteps based on a given list of days of the year.
         This is useful for MODIS and VIIRS data that are available at preset DOYs.
@@ -89,12 +96,13 @@ class TimeRange(TimePeriod):
         from .fixed_doy_timestep import FixedDOYTimeStep
 
         ts:FixedDOYTimeStep = FixedDOYTimeStep.from_date(self.start, doy_list)
+        if agg is not None: ts.agg_window = agg
         while ts.start <= self.end:
             yield ts
             ts = ts + 1
 
-    def get_timesteps_from_DOY(self, doy_list: list[int]) -> list['FixedLenTimeStep']:
-        return list(self.gen_timesteps_from_DOY(doy_list))
+    def get_timesteps_from_DOY(self, doy_list: list[int], agg: str = None) -> list['FixedLenTimeStep']:
+        return list(self.gen_timesteps_from_DOY(doy_list, agg))
 
     def gen_timesteps_from_issue_hour(self, issue_hours: list[int]) -> Generator['FixedLenTimeStep', None, None]:
         """
