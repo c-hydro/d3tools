@@ -52,7 +52,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         elif isinstance(agg_window, str):
             AggTimeStep._agg_window = TimeWindow.from_str(agg_window)
         elif isinstance(agg_window, TimeWindow):
-            AggTimeStep._AggTimeStepagg_window = agg_window
+            AggTimeStep._agg_window = agg_window
         else:
             raise ValueError(f"Invalid value for agg_window: {agg_window}")
 
