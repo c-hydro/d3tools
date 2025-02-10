@@ -127,6 +127,9 @@ def estimate_timestep(sample) -> TimeStep:
 
         def mode(arr: list): return max(set(arr), key = arr.count)
 
+        if len(sample) < 2:
+            return None
+
         sample.sort()
         all_diff = [(sample[i+1] - sample[i]).days for i in range(len(sample)-1)]
         step_length = mode(all_diff)
@@ -140,8 +143,11 @@ def estimate_timestep(sample) -> TimeStep:
         if np.isclose(step_length, 1):
             return Day
         elif np.isclose(step_length, 8):
-            return ViirsModisTimeStep
-        elif np.isclose(step_length, 10):
+            if sample[-1].month == 2 and sample[-1].day == 28:
+                return Dekad
+            else:
+                return ViirsModisTimeStep
+        elif 9 <= step_length <= 11:
             return Dekad
         elif 30 <= step_length <= 31:
             return Month

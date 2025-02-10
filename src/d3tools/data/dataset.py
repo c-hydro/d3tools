@@ -64,10 +64,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
 
+        if 'aggregation' in kwargs:
+            self.agg = TimeWindow.from_str(kwargs.pop('aggregation'))
+
         if 'timestep' in kwargs:
             self.timestep = TimeStep.from_unit(kwargs.pop('timestep'))
-            if 'aggregation' in kwargs:
-                self.agg = TimeWindow.from_str(kwargs.pop('agg'))
+            if hasattr(self, 'agg'):
                 self.timestep = self.timestep.with_agg(self.agg)
 
         if 'notification' in kwargs:
@@ -114,8 +116,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 new_dataset._tile_names = self._tile_names
 
             new_dataset.time_signature = self.time_signature
-            if hasattr(self, 'timestep'):
+            if hasattr(self, 'timestep') and self.timestep is not None:
                 new_dataset.timestep = self.timestep
+            if hasattr(self, 'agg'):
+                new_dataset.agg = self.agg
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
@@ -303,7 +307,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         while len(last_date) < n:
             this_month_times = self.get_times(this_month, **kwargs)
             if len(this_month_times) > 0:
-                valid_time = [t for t in this_month_times if t <= now]
+                valid_time = [t for t in this_month_times if t < now]
                 valid_time.sort(reverse = True)
                 last_date.extend(valid_time)
             elif this_month.start.year < 1900:
@@ -324,7 +328,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if last_date is None:
             return None
         
-        if hasattr(self, 'timestep'):
+        if hasattr(self, 'timestep') and self.timestep is not None:
             timestep = self.timestep
         else:
             other_dates = self.get_last_date(now = last_date, n = 8, **kwargs)
@@ -338,13 +342,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return timestep.from_date(last_date)
 
     def estimate_timestep(self, date_sample = None, **kwargs) -> TimeStep:
-        if hasattr(self, 'timestep'):
+        if hasattr(self, 'timestep') and self.timestep is not None:
             return self.timestep
         
-        if date_sample is None:
+        if date_sample is None or len(date_sample) == 0:
             date_sample = self.get_last_date(n = 8, **kwargs)
         elif len(date_sample) < 5:
-            other_dates = self.get_last_date(n = 8 - len(date_sample), now = min(date_sample), **kwargs)
+            other_dates = self.get_last_date(n = 8 - len(date_sample), now = min(date_sample), **kwargs)  or []
             date_sample = other_dates + date_sample
 
         timestep = estimate_timestep(date_sample)
@@ -405,7 +409,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if first_date is None:
             return None
         
-        if hasattr(self, 'timestep'):
+        if hasattr(self, 'timestep') and self.timestep is not None:
             timestep = self.timestep
         else:
             other_dates = self.get_first_date(start = first_date, n = 8, **kwargs)
@@ -457,7 +461,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             time = timestep
             # calculating the length in this way is not perfect,
             # but should work given that timesteps are always requested in order
-            if hasattr(self, 'timestep'): 
+            if hasattr(self, 'timestep') and self.timestep is not None: 
                 length = self.timestep.from_date(time).get_length()
             elif hasattr(self, 'previous_requested_time'):
                 length = (time - self.previous_requested_time).days
