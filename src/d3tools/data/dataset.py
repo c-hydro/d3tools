@@ -114,6 +114,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 new_dataset._tile_names = self._tile_names
 
             new_dataset.time_signature = self.time_signature
+            new_dataset.timestep = self.timestep
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
