@@ -11,6 +11,28 @@ class TimeStepMeta(ABCMeta):
         elif 'unit' in attrs:
             cls.subclasses[attrs['unit']] = cls
 
+    @property
+    def agg_window(cls):
+        if hasattr(cls, '_agg_window'):
+            return cls._agg_window
+        return None
+
+    @agg_window.setter
+    def agg_window(cls, value: str|tuple|None):
+        if value is None:
+            return
+
+        if isinstance(value, tuple):
+            size, unit = value
+            size = int(size)
+            unit = find_unit_of_time(unit)
+        elif isinstance(value, str):
+            size, unit = get_window_from_str(value)
+        else:
+            raise ValueError(f"Invalid value for agg_window: {value}")
+
+        cls._agg_window = (size, unit)
+
 class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
     """
     A timestep is a TimePeriod that supports addition and subtraction of integers.
@@ -34,10 +56,9 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         if hasattr(self, '_agg_window'):
             return self._agg_window
         return None
-    
+
     @agg_window.setter
     def agg_window(self, value: str|tuple|None):
-        
         if value is None:
             return
 
@@ -48,7 +69,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         elif isinstance(value, str):
             size, unit = get_window_from_str(value)
         else:
-            raise ValueError(f'Invalid aggregation window: {value}')
+            raise ValueError(f"Invalid value for agg_window: {value}")
 
         self._agg_window = (size, unit)
 
@@ -57,7 +78,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         if not hasattr(self, 'start') or not hasattr(self, 'end'):
             return None
         
-        if self.agg_window is None:
+        if not hasattr(self, '_agg_window') or self._agg_window is None:
             return TimeRange(self.start, self.end)
         
         return get_window(self.end, *self._agg_window)
