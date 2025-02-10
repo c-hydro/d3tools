@@ -1,7 +1,8 @@
 from abc import ABC, ABCMeta, abstractmethod
 
 from .timerange import TimeRange, TimePeriod
-from .time_utils import get_window, get_window_from_str, find_unit_of_time
+from .time_utils import find_unit_of_time
+from .timewindow import TimeWindow
 
 class TimeStepMeta(ABCMeta):
     def __init__(cls, name, bases, attrs):
@@ -18,20 +19,18 @@ class TimeStepMeta(ABCMeta):
         return None
 
     @agg_window.setter
-    def agg_window(cls, value: str|tuple|None):
+    def agg_window(cls, value: str|tuple|None|TimeWindow):
         if value is None:
             return
 
         if isinstance(value, tuple):
-            size, unit = value
-            size = int(size)
-            unit = find_unit_of_time(unit)
+            cls._agg_window = TimeWindow(value)
         elif isinstance(value, str):
-            size, unit = get_window_from_str(value)
+            cls._agg_window = TimeWindow.from_str(value)
+        elif isinstance(value, TimeWindow):
+            cls._agg_window = value
         else:
             raise ValueError(f"Invalid value for agg_window: {value}")
-
-        cls._agg_window = (size, unit)
 
 class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
     """
@@ -58,20 +57,18 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         return None
 
     @agg_window.setter
-    def agg_window(self, value: str|tuple|None):
+    def agg_window(self, value: str|tuple|None|TimeWindow):
         if value is None:
             return
 
         if isinstance(value, tuple):
-            size, unit = value
-            size = int(size)
-            unit = find_unit_of_time(unit)
+            self._agg_window = TimeWindow(value)
         elif isinstance(value, str):
-            size, unit = get_window_from_str(value)
+            self._agg_window = TimeWindow.from_str(value)
+        elif isinstance(value, TimeWindow):
+            self._agg_window = value
         else:
             raise ValueError(f"Invalid value for agg_window: {value}")
-
-        self._agg_window = (size, unit)
 
     @property
     def agg_range(self):
@@ -81,7 +78,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         if not hasattr(self, '_agg_window') or self._agg_window is None:
             return TimeRange(self.start, self.end)
         
-        return get_window(self.end, *self._agg_window)
+        return self.agg_window.apply(self.end)
     
     @agg_range.setter
     def agg_range(self, value: str):

@@ -114,26 +114,3 @@ def find_unit_of_time(unit: str) -> str:
     
     else:
         raise ValueError(f'Unit {unit} not recognized')
-    
-def get_window_from_str(window: str) -> tuple[int, str]:
-    """
-    Returns a tuple with the size and unit of the window.
-    split the string into size and unit
-    allow for any separator, including no separator at all
-    (e.g. '3days', '3 days', '3 days', '3 d', '3 d', '3d', '3.d', '3-d')
-    if you use 10day or 8day (or 18day for example), you need to use a separator because the function cannot distinguish between 10 days and 1 dekad
-    """
-    import re
-
-    list_of_separators = [' ', '.', '-']
-    if any([sep in window for sep in list_of_separators]):
-        size_str, unit = re.split(f'[{"".join(list_of_separators)}]', window)
-        unit = find_unit_of_time(unit)
-    else:
-        size_str = re.sub(r'[^0-9]', '', window)
-        unit     = find_unit_of_time(re.sub(r'[0-9]' , '', window))
-        if unit == 'd' and (size_str.endswith('10') or size_str.endswith('8')):
-            raise ValueError('Cannot figure out window size, use a separator between size and unit')
-    
-    size = int(size_str)
-    return size, unit

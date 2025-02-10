@@ -10,8 +10,7 @@ import re
 
 import tempfile
 
-from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep
-from ..timestepping.time_utils import get_window_from_str
+from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
 from ..exit import register_first
@@ -68,7 +67,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if 'timestep' in kwargs:
             self.timestep = TimeStep.from_unit(kwargs.pop('timestep'))
             if 'aggregation' in kwargs:
-                self.agg = get_window_from_str(kwargs.pop('agg'))
+                self.agg = TimeWindow.from_str(kwargs.pop('agg'))
                 self.timestep.agg_window = self.agg # this affects the class of the TimeStep
 
         if 'notification' in kwargs:
@@ -341,7 +340,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
             return self.timestep
         
         if date_sample is None:
-            date_sample = self.get_last_date(n = 15, **kwargs)
+            date_sample = self.get_last_date(n = 8, **kwargs)
+        elif len(date_sample) < 5:
+            other_dates = self.get_last_date(n = 8 - len(date_sample), now = min(date_sample), **kwargs)
+            date_sample = other_dates + date_sample
 
         timestep = estimate_timestep(date_sample)
         if timestep is not None and hasattr(self, 'agg'):
