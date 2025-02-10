@@ -456,7 +456,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             # calculating the length in this way is not perfect,
             # but should work given that timesteps are always requested in order
             if hasattr(self, 'timestep'): 
-                length = self.timestep.get_length()
+                length = self.timestep.from_date(time).get_length()
             elif hasattr(self, 'previous_requested_time'):
                 length = (time - self.previous_requested_time).days
             else:
