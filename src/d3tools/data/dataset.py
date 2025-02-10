@@ -10,7 +10,8 @@ import re
 
 import tempfile
 
-from ..timestepping import TimeRange, Month, estimate_timestep, TimeStep
+from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep
+from ..timestepping.time_utils import get_window_from_str
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
 from ..exit import register_first
@@ -63,6 +64,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
+
+        if 'timestep' in kwargs:
+            self.timestep = TimeStep.from_unit(kwargs.pop('timestep'))
+            if 'aggregation' in kwargs:
+                self.agg = get_window_from_str(kwargs.pop('agg'))
+                self.timestep.agg_window = self.agg # this affects the class of the TimeStep
 
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
@@ -312,22 +319,35 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def get_last_ts(self, **kwargs) -> TimeStep:
 
-        last_dates = self.get_last_date(n = 15, **kwargs)
-        if last_dates is None:
+        last_date = self.get_last_date(**kwargs)
+        if last_date is None:
             return None
         
-        timestep = estimate_timestep(last_dates)
-        if timestep is None:
-            return None
+        if hasattr(self, 'timestep'):
+            timestep = self.timestep
+        else:
+            other_dates = self.get_last_date(now = last_date, n = 8, **kwargs)
+            timestep = estimate_timestep(other_dates)
+            if timestep is None:
+                return None
 
         if self.time_signature == 'end+1':
-            return timestep.from_date(max(last_dates)) -1
+            return timestep.from_date(last_date) -1
         else:
-            return timestep.from_date(max(last_dates))
+            return timestep.from_date(last_date)
 
-    def estimate_timestep(self) -> TimeStep:
-        last_dates = self.get_last_date(n = 15)
-        timestep = estimate_timestep(last_dates)
+    def estimate_timestep(self, date_sample = None, **kwargs) -> TimeStep:
+        if hasattr(self, 'timestep'):
+            return self.timestep
+        
+        if date_sample is None:
+            date_sample = self.get_last_date(n = 15, **kwargs)
+
+        timestep = estimate_timestep(date_sample)
+        if timestep is not None and hasattr(self, 'agg'):
+            timestep.agg_window = self.agg
+        
+        self.timestep = timestep
         return timestep
 
     def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
@@ -377,18 +397,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def get_first_ts(self, **kwargs) -> TimeStep:
 
-        first_dates = self.get_first_date(n = 15, **kwargs)
-        if first_dates is None:
+        first_date = self.get_first_date(**kwargs)
+        if first_date is None:
             return None
         
-        timestep = estimate_timestep(first_dates)
-        if timestep is None:
-            return None
+        if hasattr(self, 'timestep'):
+            timestep = self.timestep
+        else:
+            other_dates = self.get_first_date(start = first_date, n = 8, **kwargs)
+            timestep = estimate_timestep(other_dates)
+            if timestep is None:
+                return None
 
         if self.time_signature == 'end+1':
-            return timestep.from_date(min(first_dates)) -1
+            return timestep.from_date(first_date) -1
         else:
-            return timestep.from_date(min(first_dates))
+            return timestep.from_date(first_date)
 
     def get_start(self, **kwargs) -> dt.datetime:
         """
@@ -429,7 +453,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             time = timestep
             # calculating the length in this way is not perfect,
             # but should work given that timesteps are always requested in order
-            if hasattr(self, 'previous_requested_time'):
+            if hasattr(self, 'timestep'): 
+                length = self.timestep.get_length()
+            elif hasattr(self, 'previous_requested_time'):
                 length = (time - self.previous_requested_time).days
             else:
                 length = None
