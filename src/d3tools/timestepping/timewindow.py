@@ -8,6 +8,17 @@ class TimeWindow():
     """
     A class to represent a time window.
     """
+
+    conversions = {
+        'h' : {'d': 24,   'w': 168, 'v' : 192},
+        'd' : {'h': 1/24, 'w': 7, 'v' : 8},
+        'w' : {'h': 1/168,'d': 1/7},
+        'v' : {'h': 1/192,'d': 1/8},
+        't' : {'m': 3, 'y' : 36},
+        'm' : {'t': 1/3, 'y': 12},
+        'y' : {'t': 1/36, 'm': 1/12}
+    }
+
     def __init__(self, size: int, unit: str):
         self.size = int(size)
         self.unit = find_unit_of_time(unit)
@@ -122,3 +133,23 @@ class TimeWindow():
     
     def __ge__(self, other: 'TimeWindow'):
         return self > other or self == other
+    
+    def __add__(self,  other: 'TimeWindow'):
+        if self.unit == other.unit:
+            return TimeWindow(self.size + other.size, self.unit)
+        elif other.unit in self.conversions[self.unit]:
+            # find the integer conversion factor
+            if self.conversions[self.unit][other.unit] == int(self.conversions[self.unit][other.unit]):
+                factor = self.conversions[self.unit][other.unit]
+                return TimeWindow(self.size + (other.size * factor), self.unit)
+            elif self.conversions[other.unit][self.unit] == int(self.conversions[other.unit][self.unit]):
+                factor = self.conversions[other.unit][self.unit]
+                return TimeWindow((self.size * factor) + other.size, other.unit)
+            else:
+                raise ValueError(f'Cannot add these two time windows together {self} and {other}')
+
+        else:
+            raise ValueError(f'Cannot add these two time windows together {self} and {other}')
+    
+    def __sub__(self,  other: 'TimeWindow'):
+        return self + TimeWindow(-other.size, other.unit)
