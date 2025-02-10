@@ -31,6 +31,8 @@ class TimePeriod(ABC):
         return self.start <= time <= self.end
 
     def __repr__(self):
+        if hasattr(self, 'agg_window'):
+            return f'{self.__class__.__name__} ({self.start:%Y%m%d} - {self.end:%Y%m%d}) agg = {self.agg_window}'
         return f'{self.__class__.__name__} ({self.start:%Y%m%d} - {self.end:%Y%m%d})'
     
     def __eq__(self, other: 'TimePeriod'):

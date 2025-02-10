@@ -29,7 +29,8 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
         super().__init__(start, end)
 
     @classmethod
-    def get_subclass(cls, length: float):
+    def get_subclass(cls, length: float|None):
+        if length is None: return cls
         Subclass: 'FixedLenTimeStep'|None = cls.fixed_l_subclasses.get(length)
         if Subclass is None:
             raise ValueError(f"Invalid step length: {length}")
@@ -46,14 +47,12 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
 
     @classmethod
     def from_step(cls, year:int, step:int, length:Optional[int] = None):
-        length = cls.get_length(length)
         Subclass: 'FixedLenTimeStep' = cls.get_subclass(length)
         return Subclass(year, step)
 
     @classmethod
     def from_date(cls, date: datetime.datetime|str, length:Optional[int] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
-        length = cls.get_length(length)
         Subclass: 'FixedLenTimeStep' = cls.get_subclass(length)
         return Subclass(date.year, Subclass.get_step_from_date(date))
 
@@ -63,7 +62,6 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
         new_start = self.start + datetime.timedelta(days=delta_days)
 
         other = self.from_date(new_start, self.length)
-        other.agg_window = self.agg_window
         return other
     
     @staticmethod

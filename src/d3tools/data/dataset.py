@@ -68,7 +68,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self.timestep = TimeStep.from_unit(kwargs.pop('timestep'))
             if 'aggregation' in kwargs:
                 self.agg = TimeWindow.from_str(kwargs.pop('agg'))
-                self.timestep.agg_window = self.agg # this affects the class of the TimeStep
+                self.timestep = self.timestep.with_agg(self.agg)
 
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
@@ -348,7 +348,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         timestep = estimate_timestep(date_sample)
         if timestep is not None and hasattr(self, 'agg'):
-            timestep.agg_window = self.agg
+            timestep = timestep.with_agg(self.agg)
         
         self.timestep = timestep
         return timestep

@@ -1,6 +1,6 @@
 import datetime
 from abc import ABC
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 
 from .fixed_num_timestep import FixedNTimeStep, FixedNTimeStepMeta
 from .time_utils import get_date_from_str
@@ -23,6 +23,13 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
         super().__init__(year, step, len(start_doys))
 
     @classmethod
+    def get_subclass(cls, start_doys: Sequence|None):
+        if start_doys is None: return cls
+        start_doys = tuple(start_doys)
+        Subclass: 'FixedDOYTimeStep'|None = cls.fixed_doy_subclasses.get(start_doys)
+        return Subclass
+
+    @classmethod
     def get_start_doys(cls, start_doys: Optional[Iterable[int]] = None):
         if start_doys is not None:
             return start_doys
@@ -34,8 +41,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
     @classmethod
     def from_date(cls, date: datetime.datetime|str, start_doys: Optional[Iterable[int]] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
-        start_doys = cls.get_start_doys(start_doys)
-        Subclass: 'FixedDOYTimeStep'|None= cls.fixed_doy_subclasses.get(tuple(start_doys))
+        Subclass: 'FixedDOYTimeStep'|None = cls.get_subclass(start_doys)
         if Subclass:
             return Subclass(date.year, Subclass.get_step_from_date(date))
         else:
@@ -43,8 +49,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
     
     @classmethod
     def from_step(cls, year: int, step: int, start_doys: Optional[Iterable[int]] = None):
-        start_doys = cls.get_start_doys(start_doys)
-        Subclass: 'FixedDOYTimeStep'|None= cls.fixed_doy_subclasses.get(tuple(start_doys))
+        Subclass: 'FixedDOYTimeStep'|None = cls.get_subclass(start_doys)
         if Subclass:
             return Subclass(year, step)
         else:
@@ -86,7 +91,6 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
             year -= 1
         
         other = self.from_step(year, step, self.start_doys)
-        other.agg_window = self.agg_window
         return other
 
     @property

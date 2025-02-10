@@ -12,26 +12,6 @@ class TimeStepMeta(ABCMeta):
         elif 'unit' in attrs:
             cls.subclasses[attrs['unit']] = cls
 
-    @property
-    def agg_window(cls):
-        if hasattr(cls, '_agg_window'):
-            return cls._agg_window
-        return None
-
-    @agg_window.setter
-    def agg_window(cls, value: str|tuple|None|TimeWindow):
-        if value is None:
-            return
-
-        if isinstance(value, tuple):
-            cls._agg_window = TimeWindow(value)
-        elif isinstance(value, str):
-            cls._agg_window = TimeWindow.from_str(value)
-        elif isinstance(value, TimeWindow):
-            cls._agg_window = value
-        else:
-            raise ValueError(f"Invalid value for agg_window: {value}")
-
 class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
     """
     A timestep is a TimePeriod that supports addition and subtraction of integers.
@@ -49,6 +29,36 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         if Subclass is None:
             raise ValueError(f"Invalid unit of time: {type}")
         return Subclass
+
+    @classmethod
+    def with_agg(cls, agg_window: str|tuple|None|TimeWindow):
+        
+        class AggTimeStep(cls):
+
+            super_name = cls.__name__
+
+            def __repr__(self):
+                return f"{self.super_name} ({self.start:%Y%m%d} - {self.end:%Y%m%d}) agg = {self.agg_window}"
+
+            def __add__(self, other):
+                super_add = super().__add__(other)
+                super_add.agg_window = self.agg_window
+                return super_add
+
+            pass
+
+        if isinstance(agg_window, tuple):
+            AggTimeStep._agg_window = TimeWindow(agg_window)
+        elif isinstance(agg_window, str):
+            AggTimeStep._agg_window = TimeWindow.from_str(agg_window)
+        elif isinstance(agg_window, TimeWindow):
+            AggTimeStep._AggTimeStepagg_window = agg_window
+        else:
+            raise ValueError(f"Invalid value for agg_window: {agg_window}")
+
+        AggTimeStep.agg_window = AggTimeStep._agg_window
+
+        return AggTimeStep
 
     @property
     def agg_window(self):

@@ -29,7 +29,8 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
         super().__init__(start, end)
 
     @classmethod
-    def get_subclass(cls, n_steps: int):
+    def get_subclass(cls, n_steps: int|None):
+        if n_steps is None: return cls
         Subclass: 'FixedNTimeStep'|None = cls.fixed_n_subclasses.get(n_steps)
         if Subclass is None:
             raise ValueError(f"Invalid number of steps: {n_steps}")
@@ -46,14 +47,12 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
 
     @classmethod
     def from_step(cls, year:int, step:int, n_steps: Optional[int] = None):
-        n_steps = cls.get_n_steps(n_steps)
         Subclass: 'FixedNTimeStep' = cls.get_subclass(n_steps)
         return Subclass(year, step)
 
     @classmethod
     def from_date(cls, date: datetime.datetime|str, n_steps: Optional[int] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
-        n_steps = cls.get_n_steps(n_steps)
         Subclass: 'FixedNTimeStep' = cls.get_subclass(n_steps)
         return Subclass(date.year, Subclass.get_step_from_date(date))
 
@@ -69,7 +68,6 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
             year -= 1
         
         other = self.from_step(year, step, self.n_steps)
-        other.agg_window = self.agg_window
         return other
 
     @staticmethod
