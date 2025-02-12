@@ -75,7 +75,7 @@ def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime.da
     else:
         return [datetime.datetime(year, month, day) for year in years]
     
-def find_unit_of_time(unit: str) -> str:
+def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = None) -> str:
     """
     Tries to interpret the string given as a unit of time.
     It will return one of the following:
@@ -88,6 +88,14 @@ def find_unit_of_time(unit: str) -> str:
     'w' for weeks.
     """
 
+    ts_unit_map = {365:'d', 36: 't', 12: 'm', 1: 'y'}
+
+    if unit is None:
+        if timesteps_per_year is not None:
+            return ts_unit_map[timesteps_per_year]
+        else:
+            raise ValueError('Either unit or timesteps_per_year must be given')
+    
     # remove all non-alphanumeric characters
     unit = ''.join([c for c in unit if c.isalnum()])
 
