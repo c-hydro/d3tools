@@ -36,7 +36,7 @@ class TimeRange(TimePeriod):
     @property
     def viirstimes(self) -> list:
         return self.get_timesteps_from_DOY(range(1, 366, 8))
-    
+
     def get_timesteps(self, freq: str|int, agg: str|tuple|None = None) -> list:
 
         if isinstance(freq, int):

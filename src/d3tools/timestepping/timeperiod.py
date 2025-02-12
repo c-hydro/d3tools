@@ -1,5 +1,6 @@
 from abc import ABC
 import datetime
+from typing import Sequence
 
 from .time_utils import get_date_from_str
 
@@ -8,6 +9,23 @@ class TimePeriod(ABC):
     """
     A TimePeriod is just defined by its start and end dates.
     """
+
+    @classmethod
+    def from_any(cls, value: 'TimePeriod'|Sequence[datetime.datetime|str]|None, name = "") -> 'TimePeriod':
+
+        if hasattr(value, 'start') and hasattr(value, 'end'):
+            return cls(value.start, value.end)
+        elif isinstance(value, Sequence):
+            if len(value) == 2:
+                return cls(value[0], value[1])
+        elif value is None:
+            return None
+
+        if len(name) > 0:
+            str = f'{name} must be a {cls.__name__} or a sequence of two datetimes.'
+        else:
+            str = f'Expecting a {cls.__name__} or a sequence of two datetimes.'
+        raise ValueError(str)
 
     def __init__(self, start: datetime.datetime|str, end: datetime.datetime|str):
         self.start = start if isinstance(start, datetime.datetime) else get_date_from_str(start)
