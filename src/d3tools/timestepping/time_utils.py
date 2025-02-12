@@ -3,6 +3,16 @@ from dateutil.relativedelta import relativedelta
 import warnings
 from typing import Iterable
 
+UNIT_CONVERSIONS = {
+    'h' : {'d': 24,   'w': 168, 'v' : 192},
+    'd' : {'h': 1/24, 'w': 7, 'v' : 8},
+    'w' : {'h': 1/168,'d': 1/7},
+    'v' : {'h': 1/192,'d': 1/8},
+    't' : {'m': 3, 'y' : 36},
+    'm' : {'t': 1/3, 'y': 12},
+    'y' : {'t': 1/36, 'm': 1/12}
+}
+
 def get_date_from_str(str: str, format: None|str = None, end = False) -> datetime.datetime:
     """
     Returns a datetime object from a string.
@@ -122,3 +132,20 @@ def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = N
     
     else:
         raise ValueError(f'Unit {unit} not recognized')
+
+def unit_is_multiple(unit1: str, unit2: str) -> bool:
+    """
+    Returns True if unit1 is a multiple of unit2, False otherwise.
+    """
+    # if the units are the same, they are multiples of each other
+    if unit1 == unit2:
+        return True
+    # if their conversion factor is an integer, they are multiples of each other
+    elif unit1 in UNIT_CONVERSIONS[unit2]:
+        return  UNIT_CONVERSIONS[unit2][unit1] == int(UNIT_CONVERSIONS[unit2][unit1])
+    # months and years are multiples of days (and hours) even if the conversion factor is not an integer
+    elif unit1 in ['d', 'h']:
+        return unit2 in ['m', 'y']
+    # in all other cases, they are not multiples of each other
+    else:
+        return False
