@@ -3,6 +3,7 @@ import datetime
 from typing import Sequence
 
 from .time_utils import get_date_from_str
+from .timewindow import TimeWindow
 
 class TimePeriod(ABC):
     
@@ -39,7 +40,18 @@ class TimePeriod(ABC):
             return days * 24
         else:
             raise ValueError(f'Unknown unit "{unit}", must be "days" or "hours"')
-            
+
+
+    def extend(self, window: TimeWindow, before = False):
+        if before:
+            new_start = window.apply(self.start - datetime.timedelta(1)).start
+            new_end = self.end
+        else:
+            new_start = self.start
+            new_end = window.apply(self.end + datetime.timedelta(1), start = True).end
+
+        return self.__class__(new_start, new_end)
+
     #TODO remove this method eventually, it conflicts with the .length property of FixedLenTimeStep
     def length(self, **kwargs):
         return self.get_length(**kwargs)

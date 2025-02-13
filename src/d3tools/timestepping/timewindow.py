@@ -50,6 +50,8 @@ class TimeWindow():
 
         unit = self.unit
         size = self.size
+
+        if unit == 'v': unit = 'd'; size = size * 8
         
         if unit in ['m', 'y', 'd', 'w']:
             reldelta_unitmap = {'d': 'days', 'm': 'months', 'y': 'years', 'w': 'weeks'}
