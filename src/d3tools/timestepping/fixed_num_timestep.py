@@ -1,17 +1,17 @@
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import datetime
 from typing import Optional
 
-from .timestep import TimeStep
+from .timestep import TimeStep, TimeStepMeta
 from .time_utils import get_date_from_str
 
-class FixedNTimeStepMeta(ABCMeta):
+class FixedNTimeStepMeta(TimeStepMeta):
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
-        if not hasattr(cls, 'subclasses'):
-            cls.subclasses = {}
+        if not hasattr(cls, 'fixed_n_subclasses'):
+            cls.fixed_n_subclasses = {}
         elif 'n_steps' in attrs:
-            cls.subclasses[attrs['n_steps']] = cls
+            cls.fixed_n_subclasses[attrs['n_steps']] = cls
 
 class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
     """
@@ -29,8 +29,9 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
         super().__init__(start, end)
 
     @classmethod
-    def get_subclass(cls, n_steps: int):
-        Subclass: 'FixedNTimeStep'|None = cls.subclasses.get(n_steps)
+    def get_subclass(cls, n_steps: int|None):
+        if n_steps is None: return cls
+        Subclass: 'FixedNTimeStep'|None = cls.fixed_n_subclasses.get(n_steps)
         if Subclass is None:
             raise ValueError(f"Invalid number of steps: {n_steps}")
         return Subclass
@@ -46,14 +47,12 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
 
     @classmethod
     def from_step(cls, year:int, step:int, n_steps: Optional[int] = None):
-        n_steps = cls.get_n_steps(n_steps)
         Subclass: 'FixedNTimeStep' = cls.get_subclass(n_steps)
         return Subclass(year, step)
 
     @classmethod
     def from_date(cls, date: datetime.datetime|str, n_steps: Optional[int] = None):
         date = date if isinstance(date, datetime.datetime) else get_date_from_str(date)
-        n_steps = cls.get_n_steps(n_steps)
         Subclass: 'FixedNTimeStep' = cls.get_subclass(n_steps)
         return Subclass(date.year, Subclass.get_step_from_date(date))
 
@@ -68,7 +67,8 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
             step += self.n_steps
             year -= 1
         
-        return self.from_step(year, step, self.n_steps)
+        other = self.from_step(year, step, self.n_steps)
+        return other
 
     @staticmethod
     @abstractmethod
@@ -90,6 +90,7 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
 class Dekad(FixedNTimeStep):
 
     n_steps:int = 36
+    unit = 't'
 
     def __init__(self, year: int, dekad_of_year: int):
         super().__init__(year, dekad_of_year, Dekad.n_steps)
@@ -144,6 +145,7 @@ class Dekad(FixedNTimeStep):
 class Month(FixedNTimeStep):
 
     n_steps:int = 12
+    unit = 'm'
 
     def __init__(self, year: int, month_of_year: int):
         super().__init__(year, month_of_year, Month.n_steps)
@@ -174,6 +176,7 @@ class Month(FixedNTimeStep):
 class Year(FixedNTimeStep):
     
         n_steps:int = 1
+        unit = 'y'
     
         def __init__(self, year: int, dummy: int = 1):
             super().__init__(year, 1, Year.n_steps)
