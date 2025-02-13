@@ -684,6 +684,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO CHECK DATA AVAILABILITY
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
+
         all_times = self.get_available_tags(time_range, **kwargs)['time']
         all_times.sort()
         for time in all_times:
@@ -704,7 +705,25 @@ class Dataset(ABC, metaclass=DatasetMeta):
         Get a list of times between two dates.
         """
         return list(self._get_times(time_range, **kwargs))
+
+    def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
+
+        timestep = self.estimate_timestep()
+        window = TimeWindow(1, timestep.unit)
+
+        if self.time_signature == 'start':
+            time_range = time_range.extend(window, before = True)
+        elif self.time_signature.startswith('end'):
+            time_range = time_range.extend(window, before = False)
+            if self.time_signature == 'end+1':
+                time_range = time_range.extend(TimeWindow(1, 'd'), before = False)
+
+        times = self.get_times(time_range, **kwargs)
+        if self.time_signature == 'end+1':
+            times = [t - dt.timedelta(days = 1) for t in times]
         
+        return [timestep.from_date(t) for t in times]
+
     @withcases
     def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
         """
