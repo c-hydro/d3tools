@@ -20,6 +20,7 @@ class CaseManager():
         ids   = self.get_ids(cases)
 
         self._cases    = [dict(zip(ids, cases))]
+        self.options  = [options.copy()]
         self._lyrmap   = {l0_name: 0}
 
         self._parsed_options = options.keys()
@@ -71,6 +72,7 @@ class CaseManager():
                 these_cases[_new_id] = _new_case
         
         self._cases.append(these_cases)
+        self.options.append(new_options.copy() | self.options[-1])
 
         if name is None: name = 'layer' + str(self.nlayers)
         self._lyrmap[name] = self.nlayers
@@ -112,9 +114,11 @@ if __name__ == '__main__':
 
     cm = CaseManager(options)
 
-    cm.add_layer({'b': {'b1': 3, 'b2': 4}})
+    cm.add_layer({'b': {'b1': 3, 'b2': 4}, 'c': {'c1':5, 'c2': 6}})
 
     cm.add_layer({'c': {'c1':5, 'c2': 6}})
+
+    breakpoint()
     
     first_id = list(cm.id_map.values())[0]
     for case, layer in cm.iterate_subtree(first_id, 3, layer = True):
