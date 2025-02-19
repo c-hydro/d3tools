@@ -7,6 +7,7 @@ class Case():
 
     def __init__(self, options: dict, tags: dict):
         self.options = options.copy()
+        self.alltags = tags.copy()
         self.tags = {}
 
         for key in self.options:
@@ -23,7 +24,7 @@ class Case():
     
     def __add__(self, other):
         new_options = {**self.options, **other.options}
-        new_tags    = {**self.tags, **other.tags}
+        new_tags    = {**self.alltags, **other.alltags}
         return Case(new_options, new_tags)
     
     def __eq__(self, other):
