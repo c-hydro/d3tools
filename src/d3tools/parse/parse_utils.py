@@ -26,7 +26,7 @@ def substitute_string(string, tag_dict, rec=False):
     if not isinstance(string, str):
         return string
 
-    pattern = r'{([\w.]+)(?::(.*?))?}'
+    pattern = r'{([\w#-].+)(?::(.*?))?}'
 
     def replace_match(match, tag_dict):
         key = match.group(1)
