@@ -712,17 +712,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
         window = TimeWindow(1, timestep.unit)
 
         if self.time_signature == 'start':
-            time_range = time_range.extend(window, before = True)
+            _time_range = time_range.extend(window, before = True)
         elif self.time_signature.startswith('end'):
-            time_range = time_range.extend(window, before = False)
+            _time_range = time_range.extend(window, before = False)
             if self.time_signature == 'end+1':
-                time_range = time_range.extend(TimeWindow(1, 'd'), before = False)
+                _time_range = time_range.extend(TimeWindow(1, 'd'), before = False)
 
-        times = self.get_times(time_range, **kwargs)
+        times = self.get_times(_time_range, **kwargs)
         if self.time_signature == 'end+1':
             times = [t - dt.timedelta(days = 1) for t in times]
         
-        return [timestep.from_date(t) for t in times]
+        timesteps = [timestep.from_date(t) for t in times]
+        for ts in timesteps:
+            if ts.start > time_range.end or ts.end < time_range.start:
+                timesteps.remove(ts)
+                
+        return timesteps
 
     @withcases
     def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
