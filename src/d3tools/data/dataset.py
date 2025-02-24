@@ -224,6 +224,26 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def available_keys(self):
         return self.get_available_keys()
     
+    @property
+    def agg(self):
+        return self._agg
+
+    @agg.setter
+    def agg(self, value):
+        self._agg = value
+        if hasattr(self, 'timestep') and self.timestep is not None:
+            self.timestep = self.timestep.with_agg(value)
+
+    @property
+    def timestep(self):
+        return self._timestep
+    
+    @timestep.setter
+    def timestep(self, value):
+        self._timestep = value
+        if hasattr(self, 'agg'):
+            self._timestep = self._timestep.with_agg(self.agg)
+
     def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
         
         prefix = self.get_prefix(time, **kwargs)
@@ -712,17 +732,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
         window = TimeWindow(1, timestep.unit)
 
         if self.time_signature == 'start':
-            time_range = time_range.extend(window, before = True)
+            _time_range = time_range.extend(window, before = True)
         elif self.time_signature.startswith('end'):
-            time_range = time_range.extend(window, before = False)
+            _time_range = time_range.extend(window, before = False)
             if self.time_signature == 'end+1':
-                time_range = time_range.extend(TimeWindow(1, 'd'), before = False)
+                _time_range = time_range.extend(TimeWindow(1, 'd'), before = False)
 
-        times = self.get_times(time_range, **kwargs)
+        times = self.get_times(_time_range, **kwargs)
         if self.time_signature == 'end+1':
             times = [t - dt.timedelta(days = 1) for t in times]
         
-        return [timestep.from_date(t) for t in times]
+        timesteps = [timestep.from_date(t) for t in times]
+        for ts in timesteps:
+            if ts.start > time_range.end or ts.end < time_range.start:
+                timesteps.remove(ts)
+
+        return timesteps
 
     @withcases
     def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:

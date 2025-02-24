@@ -26,7 +26,7 @@ def substitute_string(string, tag_dict, rec=False):
     if not isinstance(string, str):
         return string
 
-    pattern = r'{([\w.]+)(?::(.*?))?}'
+    pattern = r'{([\w#-\.]+)(?::(.*?))?}'
 
     def replace_match(match, tag_dict):
         key = match.group(1)
@@ -82,17 +82,17 @@ def set_dataset(structure, obj_dict):
     elif isinstance(structure, list):
         return [set_dataset(value, obj_dict) for value in structure]
     elif isinstance(structure, str):
-        pattern = r'{([\w.]+)(?:\s*,\s*([\w.]+\s*=\s*\'.*?\')+)?}'
+        pattern = r'{([\w#-\.]+)(?:\s*,\s*([\w#-]+\s*=\s*\'.*?\')+)?}'
         match = re.match(pattern, structure)
         if match:
-            key   = match.group(1)
+            key= match.group(1)
             ds = obj_dict.get(key, structure)
 
             if len(match.groups()) > 1:
                 tag_values = match.group(2)
                 if tag_values:
                     tags = {}
-                    tag_values_pattern = r'([\w.]+)\s*=\s*\'(.*?)\''
+                    tag_values_pattern = r'([\w#-\.]+)\s*=\s*\'(.*?)\''
                     for tag_values_match in re.finditer(tag_values_pattern, tag_values):
                         tags[tag_values_match.group(1)] = tag_values_match.group(2)
 
@@ -162,9 +162,9 @@ def get_unique_values(values):
         unique_values.add(make_hashable(value))
     return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
 
-def extract_date_and_tags(string: str, string_pattern:str):
+def extract_date_and_tags(string: str, string_pattern: str):
     pattern = string_pattern
-    pattern = re.sub(r'\{(\w+)\}', r'(?P<\1>[^/]+)', pattern)
+    pattern = re.sub(r'\{([\w#-\.]+)\}', r'(?P<\1>[^/]+)', pattern)
     pattern = pattern.replace('%Y', '(?P<year>\\d{4})')
     pattern = pattern.replace('%m', '(?P<month>\\d{2})')
     pattern = pattern.replace('%d', '(?P<day>\\d{2})')
@@ -173,57 +173,45 @@ def extract_date_and_tags(string: str, string_pattern:str):
     pattern = pattern.replace('%S', '(?P<second>\\d{2})')
 
     # get all the substituted names (i.e. the parts of the pattern that are between < and >)
-    substituted_names = re.findall(r'(?<=<)\w+(?=>)', pattern)
+    substituted_names = re.findall(r'(?<=<)[\w#-.]+(?=>)', pattern)
+    names_map = {}
 
-    # if there are duplicate names, change them to avoid conflicts
+    # if there are duplicate names or there are symbols in the names, change them to avoid conflicts
+    for name in set(substituted_names):
+        if any(s in name for s in ['.', '-', '#']):
+            new_name = name.replace('.', '_').replace('-', '_').replace('#', '_')
+            pattern = pattern.replace(f'(?P<{name}>', f'(?P<{new_name}>')
+            names_map[new_name] = name
+    
+    substituted_names = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
     for name in set(substituted_names):
         count = substituted_names.count(name)
         if count > 1:
-            for i in range(count-1):
+            for i in range(count - 1):
                 pattern = pattern.replace(f'(?P<{name}>', f'(?P<{name}{i}>', 1)
 
     # Match the string with the pattern
     match = re.match(pattern, string)
+    
     if not match:
         raise ValueError("The string does not match the pattern")
-    
-    # Extract the date components
-    if 'year' in substituted_names:
-        year = int(match.group('year'))
-    else:
-        year = 1900
-    
-    if 'month' in substituted_names:
-        month = int(match.group('month'))
-    else:
-        month = 1
-    
-    if 'day' in substituted_names:
-        day = int(match.group('day'))
-    else:
-        day = 1
 
-    if 'hour' in substituted_names:
-        hour = int(match.group('hour'))
-    else:
-        hour = 0
-    
-    if 'minute' in substituted_names:
-        minute = int(match.group('minute'))
-    else:
-        minute = 0
-    
-    if 'second' in substituted_names:
-        second = int(match.group('second'))
-    else:
-        second = 0
-
-    date = dt.datetime(year, month, day, hour, minute, second)
-    
-    # Extract the other key-value pairs
     all_tags = match.groupdict()
-    tags = {key: value for key, value in all_tags.items() if key in substituted_names and key not in ['year', 'month', 'day', 'hour', 'minute', 'second']}
-    
+    # Extract the date components
+    year   = int(all_tags.pop('year',   1900))
+    month  = int(all_tags.pop('month',  1))
+    day    = int(all_tags.pop('day',    1))
+    hour   = int(all_tags.pop('hour',   0))
+    minute = int(all_tags.pop('minute', 0))
+    second = int(all_tags.pop('second', 0))
+    date   = dt.datetime(year, month, day, hour, minute, second)
+
+    # Extract the other key-value pairs
+    tags = {key: value for key, value in all_tags.items()}
+    for key, value in names_map.items():
+        if value in tags:
+            tags[key] = tags.pop(value)
+
     return date, tags
 
 def format_dict(dict):
