@@ -237,7 +237,7 @@ class SFTPDataset(RemoteDataset):
                 else:
                     # get the list of files in '~/.ssh'
                     ssh_files = os.listdir(os.path.expanduser('~/.ssh'))
-                    keys = [file for file in ssh_files if 'rsa' in file or 'ed25519' in file and not file.endswith('.pub')]
+                    keys = [file for file in ssh_files if ('rsa' in file or 'ed25519' in file) and not file.endswith('.pub')]
                     possible_files = [f'~/.ssh/{key}' for key in keys]
                     for file in possible_files:
                         try:
