@@ -92,7 +92,7 @@ def set_dataset(structure, obj_dict):
                 tag_values = match.group(2)
                 if tag_values:
                     tags = {}
-                    tag_values_pattern = r'([\w#-\.])\s*=\s*\'(.*?)\''
+                    tag_values_pattern = r'([\w#-\.]+)\s*=\s*\'(.*?)\''
                     for tag_values_match in re.finditer(tag_values_pattern, tag_values):
                         tags[tag_values_match.group(1)] = tag_values_match.group(2)
 
