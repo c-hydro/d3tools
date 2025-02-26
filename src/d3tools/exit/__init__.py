@@ -1,1 +1,1 @@
-from .exit_handler import register, register_first
+from .exit_handler import run_at_exit, run_at_exit_first, rm_at_exit
