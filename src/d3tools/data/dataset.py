@@ -442,13 +442,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             return timestep.from_date(first_date)
 
-    def get_start(self, **kwargs) -> dt.datetime:
+    def get_start(self, agg=True, **kwargs) -> dt.datetime:
         """
         Get the start of the available data.
         """
         first_ts = self.get_first_ts(**kwargs)
         if first_ts is not None:
-            return first_ts.start
+            if agg:
+                return first_ts.agg_range.start
+            else:
+                return first_ts.start
         else:
             return self.get_first_date(**kwargs)
 
