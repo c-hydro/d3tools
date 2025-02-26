@@ -19,10 +19,18 @@ exit_handler = ExitHandler()
 atexit.register(exit_handler.run)
 
 # Function to register your desired function first
-def register_first(func, *args, **kwargs):
+def run_at_exit_first(func, *args, **kwargs):
     # Insert the function at the beginning of the list
     exit_handler.functions.insert(0, (func, args, kwargs))
 
 # Function to register other functions
-def register(func, *args, **kwargs):
+def run_at_exit(func, *args, **kwargs):
     exit_handler.register(func, *args, **kwargs)
+
+# Function to force remove a path at the exit
+def rm_at_exit(path, force = True):
+    import subprocess
+    if force:
+        run_at_exit_first(subprocess.run, ['rm', '-rf', path])
+    else:
+        run_at_exit(subprocess.run, ['rm', '-r', path])

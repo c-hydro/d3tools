@@ -34,7 +34,8 @@ def rand_str(l = 4, n = 0, skip = None):
             for s in skip:
                 if s in lst:
                     lst.remove(s)
-            lst = lst + rand_str(l, n - len(lst))
+            new = rand_str(l, n - len(lst))
+            lst = lst + [new] if isinstance(new, str) else lst + new
 
     if n == 0:
         return lst[0]
