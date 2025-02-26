@@ -7,6 +7,7 @@ import numpy as np
 import os
 
 from .thumbnail import Thumbnail
+from ..exit import rm_at_exit
 
 class ThumbnailCollection:
     def __init__(self, raster_files: list[str], color_definition_files: list[str]|str):
@@ -88,8 +89,9 @@ class ThumbnailCollection:
 
     def save(self, file:str, grid = None, **kwargs):
         self.thumbnail_file = file
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             for i, thumbnail in enumerate(self.thumbnails):
                 thumbnail.save(f'{temp_dir}/thumbnail_{i}.png', **kwargs)
 
             self.combine_thumbnail_files(file, grid = grid)
+            rm_at_exit(temp_dir)

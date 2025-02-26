@@ -13,7 +13,7 @@ import tempfile
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
-from ..exit import register_first
+from ..exit import run_at_exit_first, rm_at_exit
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -74,7 +74,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if 'notification' in kwargs:
             self.notif_opts = kwargs.pop('notification')
-            register_first(self.notify)
+            run_at_exit_first(self.notify)
 
         if 'thumbnail' in kwargs:
             self.thumb_opts = self.parse_thumbnail_options(kwargs.pop('thumbnail'))
@@ -1071,7 +1071,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         body = header + main + attach_str + footer
 
         import json
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdirname:
             now = dt.datetime.now()
             log_file = os.path.join(tmpdirname, f'{self.name}_{now:%Y%m%d_%H%M%S}.json')
             with open(log_file, 'w') as f:
@@ -1081,6 +1081,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             recipients = notification_options.pop('to')
             subject = notification_options.pop('subject', f'[AUTOMATIC NOTIFICATION] {self.name} : new data available')
             notification.send(recipients, subject, body = body)
+
+            rm_at_exit(tmpdirname)
 
     ## LOGGING METHODS
     def parse_log_options(self, value) -> dict:
