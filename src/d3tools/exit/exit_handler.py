@@ -31,6 +31,6 @@ def run_at_exit(func, *args, **kwargs):
 def rm_at_exit(path, force = True):
     import subprocess
     if force:
-        run_at_exit_first(subprocess.run, ['rm', '-rf', path])
+        run_at_exit(subprocess.run, ['rm', '-rf', path])
     else:
         run_at_exit(subprocess.run, ['rm', '-r', path])
