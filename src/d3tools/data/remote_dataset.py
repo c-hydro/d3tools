@@ -15,7 +15,7 @@ import posixpath
 from .dataset import Dataset
 from .io_utils import write_to_file, read_from_file
 from ..parse import extract_date_and_tags
-from ..exit import register
+from ..exit import rm_at_exit
 
 class RemoteDataset(Dataset):
     type = 'remote'
@@ -31,7 +31,7 @@ class RemoteDataset(Dataset):
         self._creation_kwargs.update({'tmp_dir': self.tmp_dir})
 
         super().__init__(**kwargs)
-        register(self.cleanup)
+        rm_at_exit(self.tmp_dir)
 
         self.available_keys_are_cached = False
 
@@ -97,13 +97,6 @@ class RemoteDataset(Dataset):
         os.makedirs(os.path.dirname(local_file), exist_ok = True)
         self._download(filename, local_file)
         return super().get_tile_names_from_file(local_file)
-
-    def cleanup(self):
-        if os.path.exists(self.tmp_dir):
-            try:
-                shutil.rmtree(self.tmp_dir)
-            except:
-                print(f"Failed to remove temporary directory: {self.tmp_dir}")
 
     def get_local_key(self, key):
         if key.startswith('/'):
