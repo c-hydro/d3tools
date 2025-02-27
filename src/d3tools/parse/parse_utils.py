@@ -82,7 +82,7 @@ def set_dataset(structure, obj_dict):
     elif isinstance(structure, list):
         return [set_dataset(value, obj_dict) for value in structure]
     elif isinstance(structure, str):
-        pattern = r'{([\w#-\.]+)(?:\s*,\s*([\w#-]+\s*=\s*\'.*?\')+)?}'
+        pattern = r'{([\w#-\.]+)(?:\s*,\s*([\w#-\.]+\s*=\s*\'.*?\')+)?}'
         match = re.match(pattern, structure)
         if match:
             key= match.group(1)
@@ -173,13 +173,13 @@ def extract_date_and_tags(string: str, string_pattern: str):
     pattern = pattern.replace('%S', '(?P<second>\\d{2})')
 
     # get all the substituted names (i.e. the parts of the pattern that are between < and >)
-    substituted_names = re.findall(r'(?<=<)[\w#-.]+(?=>)', pattern)
+    substituted_names = re.findall(r'(?<=<)[\w#-\.]+(?=>)', pattern)
     names_map = {}
 
     # if there are duplicate names or there are symbols in the names, change them to avoid conflicts
     for name in set(substituted_names):
         if any(s in name for s in ['.', '-', '#']):
-            new_name = name.replace('.', '_').replace('-', '_').replace('#', '_')
+            new_name = name.replace('.', '_p_').replace('-', '_d_').replace('#', '_h_')
             pattern = pattern.replace(f'(?P<{name}>', f'(?P<{new_name}>')
             names_map[new_name] = name
     
