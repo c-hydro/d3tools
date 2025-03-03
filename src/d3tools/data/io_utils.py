@@ -235,6 +235,10 @@ def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
         data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
         data.attrs['_FillValue'] = new_fill_value
 
+    # Explicitly handle the case where nan_value is -9999 for floating-point data types
+    if np.issubdtype(data_type, np.floating) and nan_value == -9999:
+        data = data.where(data != -9999, np.nan)
+
     return data.astype(data_type)
 
 @withxrds
