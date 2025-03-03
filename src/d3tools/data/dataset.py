@@ -124,6 +124,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
             new_dataset.tags = new_tags
+            new_dataset.nan_value = self.nan_value
             return new_dataset
 
     def copy(self, template = False):
@@ -317,7 +318,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return all_tags
 
-    def get_last_date(self, now = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+    def get_last_date(self, now = None, n = 1, lim = dt.datetime(1900,1,1), **kwargs) -> dt.datetime|list[dt.datetime]|None:
         if now is None:
             now = dt.datetime.now()
         
@@ -330,7 +331,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 valid_time = [t for t in this_month_times if t < now]
                 valid_time.sort(reverse = True)
                 last_date.extend(valid_time)
-            elif this_month.start.year < 1900:
+            elif this_month.start < lim:
                 break
 
             this_month = this_month - 1
@@ -551,7 +552,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = straighten_data(data)
 
             # make sure the nodata value is set to np.nan for floats and to the max int for integers
-            data = set_type(data, self.nan_value)
+            data = set_type(data, self.nan_value, read = True)
 
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
@@ -559,7 +560,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if as_is:
                 return data
             data = straighten_data(data)
-            data = set_type(data, self.nan_value)
+            data = set_type(data, self.nan_value, read = True)
 
         else:
             raise ValueError(f'Could not resolve data from {full_key}.')
@@ -617,7 +618,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 raise ValueError('Cannot write numpy array without a template.')
         
         output = self.set_data_to_template(data, template_dict)
-        output = set_type(output, self.nan_value)
+        output = set_type(output, self.nan_value, read = False)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
 
@@ -747,7 +748,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         timesteps = [timestep.from_date(t) for t in times]
         for ts in timesteps:
-            if ts.start > time_range.end or ts.end < time_range.start:
+            if ts.start > time_range.end + dt.timedelta(minutes=1439) or ts.end < time_range.start:
                 timesteps.remove(ts)
 
         return timesteps
