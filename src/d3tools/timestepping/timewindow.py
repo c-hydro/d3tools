@@ -76,6 +76,13 @@ class TimeWindow():
                     warnings.warn('The given time does not correspond to the end of a dekad. The window will end at the end of the dekad.')
             time_start:datetime.datetime = start_dekad.start
             time_end:datetime.datetime = end_dekad.end
+        elif unit == 'h':
+            if start:
+                time_start:datetime.datetime = time
+                time_end:datetime.datetime = time + datetime.timedelta(hours=size)
+            else:
+                time_start:datetime.datetime = time - datetime.timedelta(hours=size)
+                time_end:datetime.datetime = time
         else:
             raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
         return TimeRange(time_start, time_end)
@@ -161,4 +168,4 @@ class TimeWindow():
                 return False
         else:
             return False
-    
+

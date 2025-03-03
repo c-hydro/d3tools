@@ -124,6 +124,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
             new_dataset.tags = new_tags
+            new_dataset.nan_value = self.nan_value
             return new_dataset
 
     def copy(self, template = False):
@@ -747,7 +748,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         timesteps = [timestep.from_date(t) for t in times]
         for ts in timesteps:
-            if ts.start > time_range.end or ts.end < time_range.start:
+            if ts.start > time_range.end + dt.timedelta(minutes=1439) or ts.end < time_range.start:
                 timesteps.remove(ts)
 
         return timesteps
