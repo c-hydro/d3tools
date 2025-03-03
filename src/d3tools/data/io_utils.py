@@ -222,27 +222,44 @@ def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
     """
 
-    fill_value = data.attrs.get('_FillValue', None)
+    fill_value = nan_value or data.attrs.get('_FillValue', None)
     data_type = data.dtype
-    if nan_value is None:
-        new_fill_value = np.nan if np.issubdtype(data_type, np.floating) else np.iinfo(data_type).max
-    else:
-        new_fill_value = nan_value
 
-    if fill_value is None:
-        data.attrs['_FillValue'] = new_fill_value
-    elif not np.isclose(fill_value, new_fill_value, equal_nan = True):
-        data = data.where(~np.isclose(data, fill_value, equal_nan = True), new_fill_value)
-        data.attrs['_FillValue'] = new_fill_value
+    if np.issubdtype(data_type, np.floating):
+        new_fill_value = np.nan
+    elif np.issubdtype(data_type, np.unsignedinteger):
+        new_fill_value = np.iinfo(data_type).max
+    elif np.issubdtype(data_type, np.integer):
+        new_fill_value = np.iinfo(data_type).min
 
-    # Explicitly handle the case where nan_value is -9999 for floating-point data types
-    if np.issubdtype(data_type, np.floating) and nan_value == -9999:
-        data = data.where(data != -9999, np.nan)
+    data = change_nan(data, new_fill_value, fill_value)
 
     return data.astype(data_type)
 
 @withxrds
-def set_type(data: xr.DataArray, nan_value = None) -> xr.DataArray:
+def set_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
+    """
+    Makes sure the nodata value is set to the nan_value provided (if available).
+    """
+
+    fill_value = data.attrs.get('_FillValue') # this should never be None based on how the rest of the code is written
+    data_type = data.dtype
+    new_fill_value = nan_value or fill_value
+
+    data = change_nan(data, new_fill_value, fill_value)
+
+    return data.astype(data_type)
+
+@withxrds
+def change_nan(data: xr.DataArray, new_nan, current_nan = None) -> xr.DataArray:
+    if current_nan is not None and not np.isclose(current_nan, new_nan, equal_nan = True):
+        data = data.where(~np.isclose(data, current_nan, equal_nan = True), new_nan)
+
+    data.attrs['_FillValue'] = new_nan
+    return data
+
+@withxrds
+def set_type(data: xr.DataArray, nan_value = None, read = True) -> xr.DataArray:
     """
     Make sure that the data is the smallest possible.
     """
@@ -259,11 +276,11 @@ def set_type(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     elif np.issubdtype(data.dtype, np.integer):
         
         if min_value >= 0:
-            if max_value <= 255:
+            if max_value < 255:
                 data = data.astype(np.uint8)
-            elif max_value <= 65535:
+            elif max_value < 65535:
                 data = data.astype(np.uint16)
-            elif max_value < 2**31:
+            elif max_value < (2**32)-1:
                 data = data.astype(np.uint32)
             else:
                 data = data.astype(np.uint64)
@@ -271,16 +288,19 @@ def set_type(data: xr.DataArray, nan_value = None) -> xr.DataArray:
             if nan_value is not None and not np.issubdtype(data.dtype, np.unsignedinteger):
                 nan_value = None
         else:
-            if max_value <= 127 and min_value >= -128:
+            if max_value <= 127 and min_value > -128:
                 data = data.astype(np.int8)
-            elif max_value <= 32767 and min_value >= -32768:
+            elif max_value <= 32767 and min_value > -32768:
                 data = data.astype(np.int16)
-            elif max_value < 2**31 and min_value > -2**31:
+            elif max_value < (2**31)/2-1 and min_value > (-2**31)/2:
                 data = data.astype(np.int32)
             else:
                 data = data.astype(np.int64)
 
             if nan_value is not None and not np.issubdtype(data.dtype, np.integer):
                 nan_value = None
-
-    return reset_nan(data, nan_value)
+    
+    if read:
+        return reset_nan(data, nan_value)
+    else:
+        return set_nan(data, nan_value)

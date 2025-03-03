@@ -552,7 +552,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data = straighten_data(data)
 
             # make sure the nodata value is set to np.nan for floats and to the max int for integers
-            data = set_type(data, self.nan_value)
+            data = set_type(data, self.nan_value, read = True)
 
         # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
@@ -560,7 +560,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if as_is:
                 return data
             data = straighten_data(data)
-            data = set_type(data, self.nan_value)
+            data = set_type(data, self.nan_value, read = True)
 
         else:
             raise ValueError(f'Could not resolve data from {full_key}.')
@@ -618,7 +618,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 raise ValueError('Cannot write numpy array without a template.')
         
         output = self.set_data_to_template(data, template_dict)
-        output = set_type(output, self.nan_value)
+        output = set_type(output, self.nan_value, read = False)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
 
