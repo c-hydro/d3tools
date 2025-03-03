@@ -41,14 +41,20 @@ class TimePeriod(ABC):
         else:
             raise ValueError(f'Unknown unit "{unit}", must be "days" or "hours"')
 
-
     def extend(self, window: TimeWindow, before = False):
         if before:
-            new_start = window.apply(self.start - datetime.timedelta(1)).start
-            new_end = self.end
+            if window.unit == 'h':
+                new_start = self.start - datetime.timedelta(hours=window.size)
+                new_end = self.end + datetime.timedelta(1) - datetime.timedelta(minutes = 1)
+            else:
+                new_start = window.apply(self.start - datetime.timedelta(1)).start
+                new_end = self.end
         else:
             new_start = self.start
-            new_end = window.apply(self.end + datetime.timedelta(1), start = True).end
+            if window.unit == 'h':
+                new_end = self.end + datetime.timedelta(1) - datetime.timedelta(minutes = 1) + datetime.timedelta(hours=window.size)
+            else:
+                new_end = window.apply(self.end + datetime.timedelta(1), start = True).end
 
         return self.__class__(new_start, new_end)
 
