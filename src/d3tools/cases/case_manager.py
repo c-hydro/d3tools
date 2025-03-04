@@ -24,7 +24,7 @@ class CaseManager():
         self.options  = [options.copy()]
         self._lyrmap   = {l0_name: 0}
 
-        self._parsed_options = options.keys()
+        self._parsed_options = {k:[v for v in options[k].keys()] for k in options.keys() if isinstance(options[k], dict)}
     
     @property
     def layers(self):
@@ -60,12 +60,18 @@ class CaseManager():
 
     def add_layer(self, options: dict, name: str|None = None, merge: str|None = None):
 
-        new_options = {k:v for k,v in options.items() if k not in self._parsed_options}
+        new_options = {}
+        for k,v in options.items():
+            if k not in self._parsed_options:
+                new_options[k] = v
+            elif isinstance(options[k], dict) and not any([v in self._parsed_options[k] for v in options[k].keys()]):
+                new_options[k] = v
+
         new_cases = get_cases(new_options)
         new_ids = self.get_ids(new_cases)
 
         these_cases = {}
-        prev_layer = copy.deepcopy(self._cases[-1])
+        prev_layer = self._cases[-1].copy()
 
         if merge is not None:
             merge_ids = [v for k,v in self.id_map.items() if k.split('=')[0] == merge]
@@ -91,7 +97,12 @@ class CaseManager():
 
         if name is None: name = 'layer' + str(self.nlayers)
         self._lyrmap[name] = self.nlayers
-        self._parsed_options = self._parsed_options | options.keys()
+        newly_parsed = {k:[v for v in new_options[k].keys()] for k in new_options.keys() if isinstance(new_options[k], dict)}
+        for k in newly_parsed:
+            if k in self._parsed_options:
+                self._parsed_options[k].extend(newly_parsed[k])
+            else:
+                self._parsed_options[k] = newly_parsed[k]
 
     def find_case(self, id: str, get_layer = False) -> Optional[Case|tuple[Case]]:
         for lyr_id, lyr_cases in enumerate(self._cases):
