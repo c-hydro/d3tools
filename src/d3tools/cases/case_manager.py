@@ -133,6 +133,29 @@ class CaseManager():
             yield from seen_cases
             seen_cases = []
 
+    def get_subtree(self, start_id: str, depth: int = 999):
+            _, start_layer = self.find_case(start_id, layer=True)
+            end_layer = min(start_layer + depth+1, self.nlayers)
+
+            subtree = []
+            for layer_index in range(start_layer+1, end_layer):
+                these_cases = {id: case for id, case in self._cases[layer_index].items() if id.startswith(start_id)}
+                subtree.append(these_cases)
+            
+            return subtree
+    
+    def iterate_subtree(self, start_id: str, depth: int = 999, get_layer = True):
+        children = self.get_subtree(start_id, depth)
+        if len(children) == 0: return
+        for child in children[0]:
+            case, lyr = self.find_case(child, get_layer=True)
+            if layer:
+                yield case, lyr
+            else:
+                yield case
+            yield from self.iterate_subtree(child, depth - 1, get_layer=get_layer)
+
+
 def split_id(id, sep = '/', bracket = ('[', ']')):
     parts = []
     bracket_level = 0
