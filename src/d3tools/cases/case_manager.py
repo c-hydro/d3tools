@@ -113,9 +113,13 @@ class CaseManager():
                 return case if not get_layer else (case, lyr_id)
         return None
     
-    def iterate_tree(self, layer = None, get_layer = True):
-        if layer is None: layer = self.nlayers-1
-        last_row = self._cases[layer]
+    def iterate_tree(self, depth = None, get_layer = True):
+        """
+        Iterates though the entire tree from the root to the layer "layer".
+        Works with diverging and converging branches.
+        """
+        if depth is None: depth = self.nlayers-1
+        last_row = self._cases[depth]
 
         seen_ids = []
         seen_cases = []
@@ -128,7 +132,7 @@ class CaseManager():
                     seen_cases.append(self.find_case(parent, get_layer = get_layer))
 
             seen_ids.append(id)
-            seen_cases.append((case, layer))
+            seen_cases.append((case, depth))
 
             yield from seen_cases
             seen_cases = []
@@ -145,6 +149,10 @@ class CaseManager():
             return subtree
     
     def iterate_subtree(self, start_id: str, depth: int = 999, get_layer = True):
+        """
+        Iterates though the tree from the case "start_id" up to "depth" layers below.
+        Works with diverging branches only.
+        """
         children = self.get_subtree(start_id, depth)
         if len(children) == 0: return
         for child in children[0]:
