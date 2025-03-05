@@ -20,9 +20,10 @@ class CaseManager():
         cases = get_cases(options)
         ids   = self.get_ids(cases)
 
-        self._cases    = [dict(zip(ids, cases))]
+        self._cases   = [dict(zip(ids, cases))]
         self.options  = [options.copy()]
-        self._lyrmap   = {l0_name: 0}
+        self.tags     = [list(cases[0].tags.keys())]
+        self._lyrmap  = {l0_name: 0}
 
         self._parsed_options = {k:[v for v in options[k].keys()] for k in options.keys() if isinstance(options[k], dict)}
     
@@ -94,6 +95,7 @@ class CaseManager():
         
         self._cases.append(these_cases)
         self.options.append(new_options.copy() | self.options[-1])
+        self.tags.append(list(_new_case.tags.keys()))
 
         if name is None: name = 'layer' + str(self.nlayers)
         self._lyrmap[name] = self.nlayers
