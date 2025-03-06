@@ -551,8 +551,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
+            else:
+                raise ValueError(f'Could not resolve data from {full_key}.')
             
-        if self.check_data(time, **kwargs):
+        if self._check_data(full_key):
             data = self._read_data(full_key)
 
             if as_is:
@@ -772,6 +774,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             full_key = self.get_key(time, **kwargs)
             if self._check_data(full_key):
                 return True
+            elif hasattr(self, 'parents') and self.parents is not None:
+                return all([parent.check_data(time, **kwargs) for parent in self.parents.values()])
             else:
                 return False
 
