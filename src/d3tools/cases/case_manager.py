@@ -115,7 +115,7 @@ class CaseManager():
     
     def iterate_tree(self, depth = None, get_layer = True):
         """
-        Iterates though the entire tree from the root to the layer "layer".
+        Iterates though the entire tree from the root to the layer "depth".
         Works with diverging and converging branches.
         """
         if depth is None: depth = self.nlayers-1
@@ -138,7 +138,7 @@ class CaseManager():
             seen_cases = []
 
     def get_subtree(self, start_id: str, depth: int = 999):
-            _, start_layer = self.find_case(start_id, layer=True)
+            _, start_layer = self.find_case(start_id, get_layer=True)
             end_layer = min(start_layer + depth+1, self.nlayers)
 
             subtree = []
@@ -157,7 +157,7 @@ class CaseManager():
         if len(children) == 0: return
         for child in children[0]:
             case, lyr = self.find_case(child, get_layer=True)
-            if layer:
+            if get_layer:
                 yield case, lyr
             else:
                 yield case
