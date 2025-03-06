@@ -105,6 +105,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self.name = new_name
             self.key_pattern = self.get_key(**kwargs)
             self.tags.update(kwargs)
+
+            if hasattr(self, 'parents') and self.parents is not None:
+                new_parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
+                self.parents = new_parents
+
             return self
         else:
             new_options = self.options.copy()
@@ -120,6 +125,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 new_dataset.timestep = self.timestep
             if hasattr(self, 'agg'):
                 new_dataset.agg = self.agg
+
+            if hasattr(self, 'parents') and self.parents is not None:
+                new_dataset.parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
+                new_dataset.fn = self.fn
             
             new_tags = self.tags.copy()
             new_tags.update(kwargs)
@@ -853,7 +862,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
             template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
         
         return template_dict
-    
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
