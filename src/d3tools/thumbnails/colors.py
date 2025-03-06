@@ -89,13 +89,14 @@ def parse_line(line: str) -> tuple:
         
     return position, color, label
 
-def create_colormap(sorted_colors, nan_color: list[float] = [0.5, 0.5, 0.5, 1.0]):
+def create_colormap(sorted_colors, nan_color: list[float] = [0.5, 0.5, 0.5, 1.0], include_nan = True) -> ListedColormap:
 
     # Normalize the colors to the range [0, 1]
     sorted_colors = np.array(sorted_colors, dtype=float) / 255
 
     # add a grey to colors for the nans
-    sorted_colors = np.vstack((sorted_colors, nan_color))
+    if include_nan:
+        sorted_colors = np.vstack((sorted_colors, nan_color))
 
     # Create the colormap
     cmap = ListedColormap(sorted_colors)
