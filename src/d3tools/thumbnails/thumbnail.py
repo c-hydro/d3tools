@@ -37,16 +37,15 @@ class Thumbnail:
                         self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
             self.txt_file = color_definition_file
-            all_breaks, all_colors, all_labels = parse_colors(color_definition_file)
+            all_breaks, self.all_colors, all_labels = parse_colors(color_definition_file)
 
             self.digital_img = self.discretize_raster(all_breaks)
             self.breaks = np.unique(self.digital_img)
-            self.colors = keep_used_colors(self.breaks, all_colors)
-            
+            self.colors = keep_used_colors(self.breaks, self.all_colors)
+            self.all_labels = all_labels
+
             all_labels.append('nan')
             self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
-
-            self.colormap = create_colormap(self.colors)
 
     def discretize_raster(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
@@ -159,8 +158,8 @@ class Thumbnail:
         if 'borderaxespad' not in kwargs:
             kwargs['borderaxespad'] = 0
 
-        colors_normalized = [np.array(color, dtype=int) / 255. for color in self.colors]
-        patches = [mpatches.Patch(color=color, label=label) for color, label in zip(colors_normalized, self.labels)]
+        colors_normalized = [np.array(color, dtype=int) / 255. for color in self.all_colors]
+        patches = [mpatches.Patch(color=color, label=label) for color, label in zip(colors_normalized, self.all_labels)]
 
         self.fig.legend(handles=patches, **kwargs)
 
