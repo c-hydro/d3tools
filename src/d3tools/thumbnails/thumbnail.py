@@ -40,12 +40,17 @@ class Thumbnail:
             all_breaks, self.all_colors, all_labels = parse_colors(color_definition_file)
 
             self.digital_img = self.discretize_raster(all_breaks)
+
             self.breaks = np.unique(self.digital_img)
+            has_nans = max(self.breaks) == len(all_breaks)
+
             self.colors = keep_used_colors(self.breaks, self.all_colors)
-            self.all_labels = all_labels
+            self.all_labels = all_labels.copy()
 
             all_labels.append('nan')
             self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
+
+            self.colormap = create_colormap(self.colors, include_nan = has_nans)
 
     def discretize_raster(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
