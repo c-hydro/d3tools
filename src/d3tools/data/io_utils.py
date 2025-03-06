@@ -276,11 +276,11 @@ def set_type(data: xr.DataArray, nan_value = None, read = True) -> xr.DataArray:
     elif np.issubdtype(data.dtype, np.integer):
         
         if min_value >= 0:
-            if max_value < 255:
+            if max_value <= 255:
                 data = data.astype(np.uint8)
-            elif max_value < 65535:
+            elif max_value <= 65535:
                 data = data.astype(np.uint16)
-            elif max_value < (2**32)-1:
+            elif max_value <= (2**32)-1:
                 data = data.astype(np.uint32)
             else:
                 data = data.astype(np.uint64)
@@ -288,11 +288,11 @@ def set_type(data: xr.DataArray, nan_value = None, read = True) -> xr.DataArray:
             if nan_value is not None and not np.issubdtype(data.dtype, np.unsignedinteger):
                 nan_value = None
         else:
-            if max_value <= 127 and min_value > -128:
+            if max_value <= 127 and min_value >= -128:
                 data = data.astype(np.int8)
-            elif max_value <= 32767 and min_value > -32768:
+            elif max_value <= 32767 and min_value >= -32768:
                 data = data.astype(np.int16)
-            elif max_value < (2**31)/2-1 and min_value > (-2**31)/2:
+            elif max_value <= 2**31-1 and min_value >= -2**31:
                 data = data.astype(np.int32)
             else:
                 data = data.astype(np.int64)
