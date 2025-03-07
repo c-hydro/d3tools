@@ -941,7 +941,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template_dict['variables']]
             data = xr.merge(all_data)
         
-        return data
+        return set_type(data, read = True)
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
