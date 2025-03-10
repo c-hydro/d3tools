@@ -163,6 +163,8 @@ def get_unique_values(values):
     return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
 
 def extract_date_and_tags(string: str, string_pattern: str):
+    import copy
+
     pattern = string_pattern
     pattern = re.sub(r'\{([\w#-\.]+)\}', r'(?P<\1>[^/]+)', pattern)
     pattern = pattern.replace('%Y', '(?P<year>\\d{4})')
@@ -179,16 +181,17 @@ def extract_date_and_tags(string: str, string_pattern: str):
     # if there are duplicate names or there are symbols in the names, change them to avoid conflicts
     for name in set(substituted_names):
         if any(s in name for s in ['.', '-', '#']):
-            new_name = name.replace('.', '_p_').replace('-', '_d_').replace('#', '_h_')
+            new_name = copy.deepcopy(name).replace('.', '_p_').replace('-', '_d_').replace('#', '_h_')
             pattern = pattern.replace(f'(?P<{name}>', f'(?P<{new_name}>')
             names_map[new_name] = name
     
-    substituted_names = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
-    for name in set(substituted_names):
-        count = substituted_names.count(name)
+    substituted_names_2 = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
+    for name in set(substituted_names_2):
+        count = substituted_names_2.count(name)
         if count > 1:
             for i in range(count - 1):
                 pattern = pattern.replace(f'(?P<{name}>', f'(?P<{name}{i}>', 1)
+                names_map[f'{name}{i}'] = name if name not in names_map else names_map[name]
 
     # Match the string with the pattern
     match = re.match(pattern, string)
@@ -207,10 +210,14 @@ def extract_date_and_tags(string: str, string_pattern: str):
     date   = dt.datetime(year, month, day, hour, minute, second)
 
     # Extract the other key-value pairs
-    tags = {key: value for key, value in all_tags.items()}
+    tags = {}
     for key, value in names_map.items():
-        if value in tags:
-            tags[key] = tags.pop(value)
+        if value in ['year', 'month', 'day', 'hour', 'minute', 'second']:
+            continue
+        if value not in tags:
+            tags[value] = all_tags[key]
+        elif tags[value] != all_tags[key]:
+            raise ValueError(f"Duplicate values for tag {value} in the string")
 
     return date, tags
 
