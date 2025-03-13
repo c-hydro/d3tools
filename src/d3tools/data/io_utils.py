@@ -133,9 +133,9 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
     # write the data to a csv
     if format == 'csv':
         if append:
-            data.to_csv(path, mode = 'a', header = False)
+            data.to_csv(path, mode = 'a', header = False, index=False)
         else:
-            data.to_csv(path)
+            data.to_csv(path, index=False)
 
     # write the data to a json
     elif format == 'json':
