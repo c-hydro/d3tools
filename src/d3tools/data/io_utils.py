@@ -43,7 +43,7 @@ def check_data_format(data, format: str) -> None:
         if format not in ['csv']:
             raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
     
-    elif format not in 'file':
+    elif format not in ['file']:
         raise ValueError(f'Cannot write a {type(data)} to a {format} file.')
 
 def get_format_from_path(path: str) -> str:
@@ -71,7 +71,7 @@ def get_format_from_path(path: str) -> str:
     elif extension == 'shp':
         return 'shp'
     
-    elif extension in ['png', 'pdf']:
+    elif extension in ['png', 'pdf', '']:
         return 'file'
 
     raise ValueError(f'File format not supported: {extension}')
