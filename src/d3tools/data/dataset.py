@@ -715,7 +715,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
         data = self.fn(**parent_data)
-        self.write_data(data, time, **kwargs)
+        if self.type != 'memory':
+            self.write_data(data, time, **kwargs)
         return data
 
     ## METHODS TO CHECK DATA AVAILABILITY
