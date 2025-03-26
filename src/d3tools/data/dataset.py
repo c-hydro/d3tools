@@ -920,7 +920,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = template_dict['dims_lengths'][dim]
             template[dim] = np.linspace(start, end, length)
 
-        template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
+        template.attrs = {'crs': template_dict['crs']}#, '_FillValue': template_dict['_FillValue']}
         template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_crs(template_dict['crs']).rio.write_coordinate_system()
 
         if 'variables' in template_dict:
