@@ -628,8 +628,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-        
+
         output = self.set_data_to_template(data, template_dict)
+
         output = set_type(output, self.nan_value, read = False)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
@@ -715,8 +716,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
         data = self.fn(**parent_data)
-        if self.type != 'memory':
-            self.write_data(data, time, **kwargs)
+        self.write_data(data, time, **kwargs)
         return data
 
     ## METHODS TO CHECK DATA AVAILABILITY
@@ -920,7 +920,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = template_dict['dims_lengths'][dim]
             template[dim] = np.linspace(start, end, length)
 
-        template.attrs = {'crs': template_dict['crs']}#, '_FillValue': template_dict['_FillValue']}
+
+        template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
         template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_crs(template_dict['crs']).rio.write_coordinate_system()
 
         if 'variables' in template_dict:
@@ -932,17 +933,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @staticmethod
     def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
                              template_dict: dict) -> xr.DataArray|xr.Dataset:
-        
+
         if isinstance(data, xr.DataArray):
             #data = straighten_data(data)
+            fill_value = data.attrs.get('_FillValue', template_dict['_FillValue'])
             data = Dataset.build_templatearray(template_dict, data.values)
+            data.attrs['_FillValue'] = fill_value
         elif isinstance(data, np.ndarray):
             data = Dataset.build_templatearray(template_dict, data)
         elif isinstance(data, xr.Dataset):
             all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template_dict['variables']]
             data = xr.merge(all_data)
         
-        return set_type(data, read = True)
+        return data
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
