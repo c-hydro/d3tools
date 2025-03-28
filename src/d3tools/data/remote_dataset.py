@@ -136,18 +136,29 @@ class S3Dataset(RemoteDataset):
                  key_pattern: str,
                  bucket_name: str,
                  tmp_dir: Optional[str] = None,
+                 endpoint_url: Optional[str] = None,  # Add endpoint_url parameter
+                 region_name: Optional[str] = None,   # Add region_name parameter
                  **kwargs):
 
         self.key_pattern = key_pattern
         self.bucket_name = bucket_name
+        self.endpoint_url = endpoint_url  # Store the endpoint_url
+        self.region_name = region_name    # Store the region_name
 
         # Initialize the S3 client if it hasn't been initialized yet
         if S3Dataset.s3_client is None:
-            S3Dataset.s3_client = boto3.client('s3')
+            S3Dataset.s3_client = boto3.client('s3',
+                endpoint_url=self.endpoint_url,  # Pass the endpoint_url to the client
+                region_name=self.region_name     # Pass the region_name to the client
+            )
 
-        self._creation_kwargs = {'type': self.type, 'bucket_name': self.bucket_name}
-        super().__init__(tmp_dir,**kwargs)
-
+        self._creation_kwargs = {
+            'type': self.type,
+            'bucket_name': self.bucket_name,
+            'endpoint_url': self.endpoint_url,
+            'region_name': self.region_name
+        }
+        super().__init__(tmp_dir, **kwargs)
 
     ## INPUT/OUTPUT METHODS
     def _download(self, input_key, local_key):
@@ -175,7 +186,7 @@ class S3Dataset(RemoteDataset):
                 yield file['Key']
 
     def update(self, in_place = False, **kwargs):
-        self.options.update({'bucket_name': self.bucket_name, 'tmp_dir': self.tmp_dir})
+        self.options.update({'bucket_name': self.bucket_name, 'tmp_dir': self.tmp_dir, 'endpoint_url': self.endpoint_url, 'region_name': self.region_name})
         new_self = super().update(in_place = in_place, **kwargs)
 
         if in_place:
