@@ -9,6 +9,14 @@ from functools import cached_property
 import shutil
 import paramiko
 
+import datetime as dt
+from urllib.parse import urlparse
+from xml.etree import ElementTree as ET
+from botocore.awsrequest import AWSRequest
+from botocore.auth import SigV4Auth
+from botocore.httpsession import URLLib3Session
+from botocore.credentials import Credentials
+
 import stat
 import posixpath
 
@@ -20,7 +28,7 @@ from ..exit import rm_at_exit
 class RemoteDataset(Dataset):
     type = 'remote'
 
-    def __init__(self, tmp_dir: Optional[str] = None, **kwargs):
+    def __init__(self, *, tmp_dir: Optional[str] = None, **kwargs):
 
         if tmp_dir:
             os.makedirs(tmp_dir, exist_ok = True)
@@ -132,21 +140,29 @@ class S3Dataset(RemoteDataset):
 
     s3_client = None  # Class-level attribute to store the S3 client
 
-    def __init__(self,
+    def __init__(self, *,
                  key_pattern: str,
                  bucket_name: str,
+                 region_name: Optional[str] = None,
                  tmp_dir: Optional[str] = None,
                  **kwargs):
 
         self.key_pattern = key_pattern
         self.bucket_name = bucket_name
+        self.region_name = region_name
 
         # Initialize the S3 client if it hasn't been initialized yet
         if S3Dataset.s3_client is None:
             S3Dataset.s3_client = boto3.client('s3')
 
-        self._creation_kwargs = {'type': self.type, 'bucket_name': self.bucket_name}
-        super().__init__(tmp_dir,**kwargs)
+        if hasattr(self, "_creation_kwargs"):
+            self._creation_kwargs.update({'type': self.type, 'bucket_name': self.bucket_name,
+                                          'region_name': self.region_name})
+        else:
+            self._creation_kwargs = {'type': self.type, 'bucket_name': self.bucket_name,
+                                    'region_name': self.region_name}
+            
+        super().__init__(tmp_dir = tmp_dir, **kwargs)
 
 
     ## INPUT/OUTPUT METHODS
@@ -175,7 +191,7 @@ class S3Dataset(RemoteDataset):
                 yield file['Key']
 
     def update(self, in_place = False, **kwargs):
-        self.options.update({'bucket_name': self.bucket_name, 'tmp_dir': self.tmp_dir})
+        self.options.update({'bucket_name': self.bucket_name, 'region_name': self.region_name, 'tmp_dir': self.tmp_dir})
         new_self = super().update(in_place = in_place, **kwargs)
 
         if in_place:
@@ -184,17 +200,113 @@ class S3Dataset(RemoteDataset):
         else:
             return new_self
 
+class OVHS3Dataset(S3Dataset):
+
+    type = 's3-ovh'
+
+    def __init__(self, *,
+                 endpoint_url : str,
+                 **kwargs):
+        
+        self.endpoint_url = endpoint_url
+
+        self._creation_kwargs = {'endpoint_url': self.endpoint_url}
+
+        super().__init__(**kwargs)
+
+        self.host = urlparse(self.endpoint_url).netloc
+        session = boto3.Session()
+        creds = session.get_credentials().get_frozen_credentials()
+        self.credentials = Credentials(creds.access_key, creds.secret_key)
+        self._http = URLLib3Session()
+
+    def _signed_request(self, method, url, headers=None, data=None, stream=False):
+        headers = headers or {}
+        headers.setdefault("Host", self.host)
+        headers.setdefault("x-amz-date", dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+        request = AWSRequest(method=method, url=url, headers=headers, data=data)
+        SigV4Auth(self.credentials, "s3", self.region_name).add_auth(request)
+
+        prepared = request.prepare()
+        response = self._http.send(prepared)
+        response.raw.decode_content = not stream
+        return response
+
+    def _upload(self, local_path, output_key):
+        with open(local_path, "rb") as f:
+            data = f.read()
+        url = f"{self.endpoint_url}/{self.bucket_name}/{output_key}"
+        headers = {
+            "Content-Length": str(len(data)),
+            "Content-Type": "application/octet-stream",
+            "x-amz-content-sha256": "UNSIGNED-PAYLOAD"
+        }
+        response = self._signed_request("PUT", url, headers=headers, data=data)
+        if response.status_code not in [200, 201]:
+            raise RuntimeError(f"Upload failed: {response.status_code} - {response.text}")
+
+    def _download(self, input_key, local_path):
+        url = f"{self.endpoint_url}/{self.bucket_name}/{input_key}"
+        response = self._signed_request("GET", url, stream=True)
+        if response.status_code == 200:
+            with open(local_path, "wb") as f:
+                for chunk in response.raw.stream(1024 * 64, decode_content=False):
+                    f.write(chunk)
+        else:
+            raise RuntimeError(f"Download failed: {response.status_code} - {response.text}")
+
+    def _delete(self, key):
+        url = f"{self.endpoint_url}/{self.bucket_name}/{key}"
+        response = self._signed_request("DELETE", url)
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Delete failed: {response.status_code} - {response.text}")
+
+    def _check_data(self, prefix) -> bool:
+        url = f"{self.endpoint_url}/{self.bucket_name}?list-type=2&prefix={prefix}"
+        response = self._signed_request("GET", url)
+        return b"<Key>" in response.content
+
+    def _walk(self, prefix):
+        continuation_token = None
+        while True:
+            url = f"{self.endpoint_url}/{self.bucket_name}?list-type=2&prefix={prefix}"
+            if continuation_token:
+                url += f"&continuation-token={continuation_token}"
+            response = self._signed_request("GET", url)
+            if response.status_code != 200:
+                raise RuntimeError(f"List failed: {response.status_code} - {response.text}")
+            xml_root = ET.fromstring(response.content)
+            for elem in xml_root.findall(".//Key"):
+                yield elem.text
+            is_truncated = xml_root.findtext(".//IsTruncated") == "true"
+            if is_truncated:
+                continuation_token = xml_root.findtext(".//NextContinuationToken")
+            else:
+                break
+
+    def update(self, in_place = False, **kwargs):
+        self.options.update({'endpoint_url': self.endpoint_url})
+        new_self = super().update(in_place = in_place, **kwargs)
+
+        if in_place:
+            self = new_self
+            return self
+        else:
+            return new_self
+
+
 class SFTPDataset(RemoteDataset):
     type = 'sftp'
     sftp_clients = {}  # Class-level attribute to store the SFTP clients
 
-    def __init__(self, key_pattern: str,
-                       host: str,
-                       username: str,
-                       password: Optional[str] = None,
-                       port = 22,
-                       tmp_dir: Optional[str] = None,
-                       **kwargs):
+    def __init__(self, *,
+                 key_pattern: str,
+                 host: str,
+                 username: str,
+                 password: Optional[str] = None,
+                 port = 22,
+                 tmp_dir: Optional[str] = None,
+                 **kwargs):
 
         self.key_pattern = key_pattern
 
@@ -214,7 +326,7 @@ class SFTPDataset(RemoteDataset):
                                  'password': self.password, 'private_key': self.private_key,
                                  'port': self.port}
 
-        super().__init__(tmp_dir, **kwargs)
+        super().__init__(tmp_dir = tmp_dir, **kwargs)
 
     def _connect(self):
 
