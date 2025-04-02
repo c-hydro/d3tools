@@ -184,6 +184,8 @@ def extract_date_and_tags(string: str, string_pattern: str):
             new_name = copy.deepcopy(name).replace('.', '_p_').replace('-', '_d_').replace('#', '_h_')
             pattern = pattern.replace(f'(?P<{name}>', f'(?P<{new_name}>')
             names_map[new_name] = name
+        else:
+            names_map[name] = name
     
     substituted_names_2 = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
     for name in set(substituted_names_2):
