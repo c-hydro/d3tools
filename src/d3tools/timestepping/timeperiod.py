@@ -33,11 +33,16 @@ class TimePeriod(ABC):
         self.end = end if isinstance(end, datetime.datetime) else get_date_from_str(end, end = True)
 
     def get_length(self, unit = 'days'):
-        days = (self.end - self.start).days + 1
         if unit == 'days':
+            days = (self.end - self.start).days + 1
             return days
         elif unit == 'hours':
-            return days * 24
+            if len(self.hours) >= 24:
+                hours = self.get_length(unit='days') * 24
+                # hours = ((self.end + datetime.timedelta(1)) - self.start).seconds / 3600
+            else:
+                hours = ((self.end - self.start).seconds + 1) / 3600
+            return hours
         else:
             raise ValueError(f'Unknown unit "{unit}", must be "days" or "hours"')
 
