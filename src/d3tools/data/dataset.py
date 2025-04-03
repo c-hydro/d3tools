@@ -628,9 +628,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
                 raise ValueError('Cannot write numpy array without a template.')
-
+        
         output = self.set_data_to_template(data, template_dict)
-
         output = set_type(output, self.nan_value, read = False)
         output = straighten_data(output)
         output.attrs['source_key'] = output_file
@@ -716,7 +715,8 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
         data = self.fn(**parent_data)
-        self.write_data(data, time, **kwargs)
+        if self.type != 'memory':
+            self.write_data(data, time, **kwargs)
         return data
 
     ## METHODS TO CHECK DATA AVAILABILITY
@@ -870,6 +870,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
+
+        if isinstance(templatearray, xr.Dataset):
+            vars = list(templatearray.data_vars)
+            templatearray = templatearray[vars[0]]
+        else:
+            vars = None
+
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
         crs = templatearray.attrs.get('crs', templatearray.rio.crs)
@@ -889,9 +896,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                                 'dims_ends': {},
                                 'dims_lengths': {}}
         
-        if isinstance(templatearray, xr.Dataset):
-            self._template[tile]['variables'] = list(templatearray.data_vars)
-        
+        if vars is not None:
+            self._template[tile]['variables'] = vars
+
         for dim in templatearray.dims:
             this_dim_values = templatearray[dim].data
             start = this_dim_values[0]
@@ -920,32 +927,26 @@ class Dataset(ABC, metaclass=DatasetMeta):
             length = template_dict['dims_lengths'][dim]
             template[dim] = np.linspace(start, end, length)
 
-
         template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
         template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_crs(template_dict['crs']).rio.write_coordinate_system()
 
-        if 'variables' in template_dict:
-            template_ds = xr.Dataset({var: template.copy() for var in template_dict['variables']})
-            return template_ds
-        
         return template
 
     @staticmethod
     def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
                              template_dict: dict) -> xr.DataArray|xr.Dataset:
-
+        
         if isinstance(data, xr.DataArray):
             #data = straighten_data(data)
-            fill_value = data.attrs.get('_FillValue', template_dict['_FillValue'])
             data = Dataset.build_templatearray(template_dict, data.values)
-            data.attrs['_FillValue'] = fill_value
         elif isinstance(data, np.ndarray):
             data = Dataset.build_templatearray(template_dict, data)
         elif isinstance(data, xr.Dataset):
-            all_data = [Dataset.set_data_to_template(data[var], template_dict) for var in template_dict['variables']]
-            data = xr.merge(all_data)
+            vars = template_dict['variables']
+            template = Dataset.build_templatearray(template_dict, data[vars[0]].values)
+            data = xr.Dataset({var: template.copy(data = data[var]) for var in vars})
         
-        return data
+        return set_type(data, read = True)
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
