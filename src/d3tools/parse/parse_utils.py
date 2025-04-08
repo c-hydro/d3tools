@@ -176,6 +176,8 @@ def extract_date_and_tags(string: str, string_pattern: str):
 
     # get all the substituted names (i.e. the parts of the pattern that are between < and >)
     substituted_names = re.findall(r'(?<=<)[\w#-\.]+(?=>)', pattern)
+    if "file_version" in substituted_names:
+        pattern = pattern.replace('(?P<file_version>[^/]+', '(?P<file_version>.+')
     names_map = {}
 
     # if there are duplicate names or there are symbols in the names, change them to avoid conflicts
@@ -186,7 +188,7 @@ def extract_date_and_tags(string: str, string_pattern: str):
             names_map[new_name] = name
         else:
             names_map[name] = name
-    
+
     substituted_names_2 = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
     for name in set(substituted_names_2):
         count = substituted_names_2.count(name)
