@@ -1,7 +1,6 @@
 from ..parse import get_unique_values, flatten_dict, substitute_values, set_dataset
 from ..data import Dataset
-
-import json
+from .utils import load_jsons
 
 class Options(dict):
 
@@ -41,18 +40,12 @@ class Options(dict):
             raise AttributeError(f"'Options' object has no attribute '{item}'")
 
     @classmethod
-    def load(cls, path: str, **kwargs) -> dict:
+    def load(cls, *paths: str, **kwargs) -> dict:
         """
         Load the configuration from the specified path as a dictionary.
         """
         
-        ext:str = path.split('.')[-1]
-
-        if ext != 'json':
-            raise ValueError(f"Unsupported file format: {ext}. Config file should be in JSON format.")
-
-        with open(path, 'r') as file:
-            config:dict = json.load(file)
+        config = load_jsons(*paths)
 
         config_options = Options(config)
         parsed_options = config_options.parse(**kwargs)
