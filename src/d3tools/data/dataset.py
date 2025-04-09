@@ -771,6 +771,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         """
         Check if data is available for a given time.
         """
+        # if this is a versioned file, and the version is not specified, get the latest version
+        if self.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions is not None:
+                available_versions.sort()
+                kwargs['file_version'] = available_versions[-1]
+
         if 'tile' in kwargs:
             full_key = self.get_key(time, **kwargs)
             if self._check_data(full_key):
