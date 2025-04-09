@@ -79,7 +79,7 @@ class CaseManager():
             groups = [{id.replace(mid, ''): id for id in prev_layer if mid in id} for mid in merge_ids]
             for key in groups[0]:
                 prev_keys = [group.get(key) for group in groups]
-                case0 = prev_layer[prev_keys[0]]
+                case0 = copy.deepcopy(prev_layer[prev_keys[0]])
                 case0.options.pop(merge)
                 case0.tags.pop(merge)
                 casenew = Case(options = case0.options, tags = case0.tags)
