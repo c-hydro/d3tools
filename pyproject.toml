@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "d3tools"
-version = "2.0.0"
+version = "2.1.0"
 description = "A package of common tools for the door, dam and dryes packages of CIMA Research Foundation"
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" }
@@ -24,6 +24,7 @@ dependencies = [
     "python_dateutil>=2.8.1",
     "rioxarray>=0.15.5",
     "xarray>=2024.3.0",
+    "setuptools>=42",
 ]
 
 [project.urls]
