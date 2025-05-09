@@ -246,8 +246,11 @@ def set_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
     data_type = data.dtype
     new_fill_value = nan_value or fill_value
 
-    data = change_nan(data, new_fill_value, fill_value)
+    # check that the fill value is compatible with the data type
+    if np.issubdtype(data_type, np.integer) and np.isnan(new_fill_value):
+        return reset_nan(data)
 
+    data = change_nan(data, new_fill_value, fill_value)
     return data.astype(data_type)
 
 @withxrds

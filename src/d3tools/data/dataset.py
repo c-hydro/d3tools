@@ -884,6 +884,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             vars = None
 
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # write the template to a temporary file
+            templatearray.rio.to_raster(os.path.join(tmpdir, 'template.tif'), driver = 'GTiff')
+            # read the template back in
+            templatearray = xr.open_dataarray(os.path.join(tmpdir, 'template.tif'))
+            # this ensures that the template is in the same format as the data that will be read later
+
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
         crs = templatearray.attrs.get('crs', templatearray.rio.crs)
