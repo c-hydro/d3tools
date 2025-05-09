@@ -60,7 +60,10 @@ class TimeWindow():
                 time_start:datetime.datetime = time
                 time_end:datetime.datetime = time + datetime.timedelta(days=1) + relativedelta(**{reldelta_unit: size}) - datetime.timedelta(days=2)
             else:
-                time_start:datetime.datetime = time + datetime.timedelta(days=1) - relativedelta(**{reldelta_unit: size})
+                if time.second == 0:
+                    time_start:datetime.datetime = time + datetime.timedelta(days=1) - relativedelta(**{reldelta_unit: size})
+                else:
+                    time_start:datetime.datetime = time + datetime.timedelta(seconds=1) - relativedelta(**{reldelta_unit: size})
                 time_end:datetime.datetime = time
         elif unit == 't':
             time_dekad:Dekad = Dekad.from_date(time) # dekad of the given time
@@ -97,7 +100,7 @@ class TimeWindow():
         elif self.unit == 'w':
             return self.size * 7 * 24
         elif limit is None:
-            raise ValueError('Cannot convert to hourse, sepecify if max or min limit is desired')
+            raise ValueError('Cannot convert to hours, sepecify if max or min limit is desired')
         elif self.unit == 'm':
             if limit == 'max':
                 return self.size * 31 * 24

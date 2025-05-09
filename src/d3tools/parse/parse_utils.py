@@ -180,6 +180,11 @@ def extract_date_and_tags(string: str, string_pattern: str):
         pattern = pattern.replace('(?P<file_version>[^/]+', '(?P<file_version>.+')
     names_map = {}
 
+    for name in set(substituted_names):
+        if '{'+name+'}' in string:
+            new_name = name.replace('.', '').replace('-', '').replace('#', '').replace('_', '')
+            string = string.replace('{'+name+'}', new_name)
+
     # if there are duplicate names or there are symbols in the names, change them to avoid conflicts
     for name in set(substituted_names):
         if any(s in name for s in ['.', '-', '#']):
@@ -188,15 +193,16 @@ def extract_date_and_tags(string: str, string_pattern: str):
             names_map[new_name] = name
         else:
             names_map[name] = name
-
+    
     substituted_names_2 = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
     for name in set(substituted_names_2):
         count = substituted_names_2.count(name)
+        
         if count > 1:
             for i in range(count - 1):
                 pattern = pattern.replace(f'(?P<{name}>', f'(?P<{name}{i}>', 1)
                 names_map[f'{name}{i}'] = name if name not in names_map else names_map[name]
-
+    
     # Match the string with the pattern
     match = re.match(pattern, string)
     
@@ -221,6 +227,7 @@ def extract_date_and_tags(string: str, string_pattern: str):
         if value not in tags:
             tags[value] = all_tags[key]
         elif tags[value] != all_tags[key]:
+            breakpoint()
             raise ValueError(f"Duplicate values for tag {value} in the string")
 
     return date, tags

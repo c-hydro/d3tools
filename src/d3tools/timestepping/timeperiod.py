@@ -33,6 +33,10 @@ class TimePeriod(ABC):
         self.end = end if isinstance(end, datetime.datetime) else get_date_from_str(end, end = True)
 
     def get_length(self, unit = 'days'):
+
+        if self.start > self.end:
+            return 0
+
         if unit == 'days':
             days = (self.end - self.start).days + 1
             return days
