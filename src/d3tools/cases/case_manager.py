@@ -88,6 +88,7 @@ class CaseManager():
                 for key in prev_keys: prev_layer.pop(key)
 
         for id, case in prev_layer.items():
+            _new_case = case # this line is only here beacause otherwise line 99 doesn't work when an empty case set is added
             for new_id, new_case in zip(new_ids, new_cases):
                 _new_case = new_case + case
                 _new_id = '/'.join([id, new_id])
