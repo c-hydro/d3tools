@@ -891,6 +891,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             templatearray = xr.open_dataarray(os.path.join(tmpdir, 'template.tif'))
             # this ensures that the template is in the same format as the data that will be read later
 
+            # close the file to make sure the temporary folder is deleted
+            templatearray.close()
+
         # save in self._template the minimum that is needed to recreate the template
         # get the crs and the nodata value, these are the same for all tiles
         crs = templatearray.attrs.get('crs', templatearray.rio.crs)
