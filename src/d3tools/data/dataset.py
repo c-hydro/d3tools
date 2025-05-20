@@ -256,6 +256,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
         
+        if isinstance(time, TimeRange):
+            months = time.months
+            if len(months) > 1:
+                files = []
+                for month in months:
+                    t_start =  max(month.start, time.start)
+                    t_end   =  min(month.end, time.end)
+                    files.extend(self.get_available_keys(TimeRange(t_start, t_end), **kwargs))
+                return files    
+
         prefix = self.get_prefix(time, **kwargs)
         if not self._check_data(prefix):
             return []
