@@ -104,7 +104,8 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
 
     # read the data from a geotiff
     elif format == 'geotiff':
-        data = rxr.open_rasterio(path)
+        data = rxr.open_rasterio(path).load()
+        data.close()
 
     # read the data from a netcdf
     elif format == 'netcdf':
