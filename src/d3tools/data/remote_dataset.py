@@ -8,6 +8,8 @@ import os
 from functools import cached_property
 import shutil
 import paramiko
+import hashlib
+from requests.models import PreparedRequest
 
 import datetime as dt
 from urllib.parse import urlparse
@@ -220,14 +222,29 @@ class OVHS3Dataset(S3Dataset):
         self.credentials = Credentials(creds.access_key, creds.secret_key)
         self._http = URLLib3Session()
 
-    def _signed_request(self, method, url, headers=None, data=None, stream=False):
+    def _signed_request(self, method, url, headers=None, data=None, stream=False, params=None):
         headers = headers or {}
-        headers.setdefault("Host", self.host)
-        headers.setdefault("x-amz-date", dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
-        request = AWSRequest(method=method, url=url, headers=headers, data=data)
-        SigV4Auth(self.credentials, "s3", self.region_name).add_auth(request)
+        headers["Host"] = self.host
+        headers["x-amz-date"] = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
+        if method == "GET":
+            payload_hash = hashlib.sha256(b"").hexdigest()
+        else:
+            payload_hash = hashlib.sha256(data if data else b"").hexdigest()
+        headers["x-amz-content-sha256"] = payload_hash
+
+        # Costruct the canonical request
+        pr = PreparedRequest()
+        pr.prepare_url(url, params)
+
+        # Add the query string to the URL
+        request = AWSRequest(method=method, url=pr.url, headers=headers, data=data)
+        SigV4Auth(self.credentials, "s3", self.region_name).add_auth(request)
         prepared = request.prepare()
+
+        # print("DEBUG REQUEST URL:", prepared.url)
+        # print("DEBUG REQUEST HEADERS:", prepared.headers)
+
         response = self._http.send(prepared)
         response.raw.decode_content = not stream
         return response
@@ -238,8 +255,7 @@ class OVHS3Dataset(S3Dataset):
         url = f"{self.endpoint_url}/{self.bucket_name}/{output_key}"
         headers = {
             "Content-Length": str(len(data)),
-            "Content-Type": "application/octet-stream",
-            "x-amz-content-sha256": "UNSIGNED-PAYLOAD"
+            "Content-Type": "application/octet-stream"
         }
         response = self._signed_request("PUT", url, headers=headers, data=data)
         if response.status_code not in [200, 201]:
@@ -248,10 +264,24 @@ class OVHS3Dataset(S3Dataset):
     def _download(self, input_key, local_path):
         url = f"{self.endpoint_url}/{self.bucket_name}/{input_key}"
         response = self._signed_request("GET", url, stream=True)
+
         if response.status_code == 200:
-            with open(local_path, "wb") as f:
-                for chunk in response.raw.stream(1024 * 64, decode_content=False):
-                    f.write(chunk)
+            response.raw.decode_content = True
+            try:
+                total = 0
+                with open(local_path, "wb") as f:
+                    while True:
+                        chunk = response.raw.read(1024 * 64)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        total += len(chunk)
+                if total == 0:
+                    raise RuntimeError("No data written, falling back to content()")
+            except Exception as e:
+                # print(f"[WARN] Streaming failed, retrying with .content(): {e}")
+                with open(local_path, "wb") as f:
+                    f.write(response.content)
         else:
             raise RuntimeError(f"Download failed: {response.status_code} - {response.text}")
 
@@ -262,25 +292,43 @@ class OVHS3Dataset(S3Dataset):
             raise RuntimeError(f"Delete failed: {response.status_code} - {response.text}")
 
     def _check_data(self, prefix) -> bool:
-        url = f"{self.endpoint_url}/{self.bucket_name}?list-type=2&prefix={prefix}"
-        response = self._signed_request("GET", url)
+        url = f"{self.endpoint_url}/{self.bucket_name}"
+        params = {
+            "list-type": "2",
+            "prefix": prefix
+        }
+        response = self._signed_request("GET", url, params=params)
+        # print("DEBUG STATUS:", response.status_code)
+        # print("DEBUG RESPONSE CONTENT:\n", response.content.decode())
         return b"<Key>" in response.content
 
     def _walk(self, prefix):
         continuation_token = None
+        ns = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
+
         while True:
-            url = f"{self.endpoint_url}/{self.bucket_name}?list-type=2&prefix={prefix}"
+            url = f"{self.endpoint_url}/{self.bucket_name}"
+            params = {
+                "list-type": "2",
+                "prefix": prefix
+            }
             if continuation_token:
-                url += f"&continuation-token={continuation_token}"
-            response = self._signed_request("GET", url)
+                params["continuation-token"] = continuation_token
+
+            response = self._signed_request("GET", url, params=params)
             if response.status_code != 200:
                 raise RuntimeError(f"List failed: {response.status_code} - {response.text}")
+
             xml_root = ET.fromstring(response.content)
-            for elem in xml_root.findall(".//Key"):
+
+            # Extract keys from the XML response
+            for elem in xml_root.findall(".//s3:Key", ns):
                 yield elem.text
-            is_truncated = xml_root.findtext(".//IsTruncated") == "true"
+
+            # Check if there are more keys to fetch
+            is_truncated = xml_root.findtext("s3:IsTruncated", default="false", namespaces=ns) == "true"
             if is_truncated:
-                continuation_token = xml_root.findtext(".//NextContinuationToken")
+                continuation_token = xml_root.findtext("s3:NextContinuationToken", namespaces=ns)
             else:
                 break
 
