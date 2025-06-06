@@ -41,16 +41,18 @@ class TimeRange(TimePeriod):
 
         if isinstance(freq, int):
             tss = self.get_timesteps_from_tsnumber(freq)
-
-        freq = find_unit_of_time(freq.lower())
-        if freq == 'd': tss = self.days
-        elif freq == 't': tss = self.dekads
-        elif freq == 'm': tss = self.months
-        elif freq == 'y': tss = self.years
-        elif freq == 'v': tss = self.viirstimes
-        elif freq == 'h': tss = self.hours
+        elif isinstance(freq, str):
+            freq = find_unit_of_time(freq.lower())
+            if freq == 'd': tss = self.days
+            elif freq == 't': tss = self.dekads
+            elif freq == 'm': tss = self.months
+            elif freq == 'y': tss = self.years
+            elif freq == 'v': tss = self.viirstimes
+            elif freq == 'h': tss = self.hours
+            else:
+                raise ValueError(f'Frequency {freq} not supported')
         else:
-            raise ValueError(f'Frequency {freq} not supported')
+            raise TypeError(f'Frequency must be an int or str, not {type(freq)}')
         
         if agg is not None:
             for ts in tss:
