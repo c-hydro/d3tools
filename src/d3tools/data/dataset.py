@@ -1202,7 +1202,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         log_ds.write_data(log_output, time, append = True, **kwargs)
 
     @staticmethod
-    def qc_checks(data: xr.DataArray) -> dict:
+    def qc_checks(data: xr.DataArray|xr.Dataset) -> dict:
         """
         Perform quality checks on the data.
         - max and min values
@@ -1211,6 +1211,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
         - sum of values
         - sum of absolute values
         """
+        if isinstance(data, xr.Dataset):
+            full_dict = {}
+            var_list = list(data.data_vars.values())
+            for var in var_list:
+                full_dict[var.name] = Dataset.qc_checks(var)
+
+            qc_dict = {}
+            for k, d in full_dict.items():
+                for k_, v_ in d.items():
+                    qc_dict[f'{k}_{k_}'] = v_
+            
+            return qc_dict
+
         data = data.values
         qc_dict = {}
         qc_dict['max'] = np.nanmax(data)
