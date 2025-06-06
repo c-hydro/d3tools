@@ -680,7 +680,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_to_log['source_key'] = output_file
         if thumbnail_file is not None:
             other_to_log['thumbnail'] = thumbnail_file
-        log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
         if hasattr(self, 'log_opts'):
             log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
             log_opts = self.log_opts.copy()
@@ -688,6 +687,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self.write_log(log_dict, log_output, time, **kwargs)
         
         if hasattr(self, 'notif_opts'):
+            log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
             this_layer = {'tags' : kwargs, 'time' : time, 'log' : log_dict, 'thumbnail' : thumbnail_file}
             if 'layers' in self.notif_opts:
                 self.notif_opts['layers'].append(this_layer)
