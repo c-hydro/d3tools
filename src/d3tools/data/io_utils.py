@@ -40,7 +40,7 @@ def check_data_format(data, format: str) -> None:
             raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
                 
     elif 'pd' in globals() and isinstance(data, pd.DataFrame):
-        if format not in ['csv']:
+        if format not in ['csv', 'parquet']:
             raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
     
     elif format not in ['file']:
@@ -53,6 +53,10 @@ def get_format_from_path(path: str) -> str:
     # check if the file is a csv
     if extension == 'csv':
         return 'csv'
+    
+    # check if the file is a parquet
+    if extension == 'parquet':
+        return 'parquet'
 
     # check if the file is a geotiff
     elif extension == 'tif' or extension == 'tiff':
@@ -85,6 +89,10 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
     if format == 'csv':
         data = pd.read_csv(path)
 
+    # read the data from a parquet
+    elif format == 'parquet':
+        data = pd.read_parquet(path)
+
     # read the data from a json
     elif format == 'json':
         with open(path, 'r') as f:
@@ -104,8 +112,7 @@ def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Datase
 
     # read the data from a geotiff
     elif format == 'geotiff':
-        data = rxr.open_rasterio(path).load()
-        data.close()
+        data = rxr.open_rasterio(path)
 
     # read the data from a netcdf
     elif format == 'netcdf':
@@ -137,6 +144,13 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
             data.to_csv(path, mode = 'a', header = False, index=False)
         else:
             data.to_csv(path, index=False)
+
+    # write the data to a parquet
+    elif format == 'parquet':
+        if append:
+            data.to_parquet(path, mode = 'a', header = False, index=False, compression='snappy')
+        else:
+            data.to_parquet(path, index=False, compression='snappy')
 
     # write the data to a json
     elif format == 'json':

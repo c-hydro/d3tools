@@ -558,7 +558,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         full_key = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt', 'shp']:
+        if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
             else:
@@ -616,7 +616,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         output_file = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt', 'shp']:
+        if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             append = kwargs.pop('append', False)
             self._write_data(data, output_file, append = append)
             return
@@ -680,7 +680,6 @@ class Dataset(ABC, metaclass=DatasetMeta):
         other_to_log['source_key'] = output_file
         if thumbnail_file is not None:
             other_to_log['thumbnail'] = thumbnail_file
-        log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
         if hasattr(self, 'log_opts'):
             log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
             log_opts = self.log_opts.copy()
@@ -688,6 +687,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self.write_log(log_dict, log_output, time, **kwargs)
         
         if hasattr(self, 'notif_opts'):
+            log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
             this_layer = {'tags' : kwargs, 'time' : time, 'log' : log_dict, 'thumbnail' : thumbnail_file}
             if 'layers' in self.notif_opts:
                 self.notif_opts['layers'].append(this_layer)
@@ -1202,7 +1202,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         log_ds.write_data(log_output, time, append = True, **kwargs)
 
     @staticmethod
-    def qc_checks(data: xr.DataArray) -> dict:
+    def qc_checks(data: xr.DataArray|xr.Dataset) -> dict:
         """
         Perform quality checks on the data.
         - max and min values
@@ -1211,6 +1211,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
         - sum of values
         - sum of absolute values
         """
+        if isinstance(data, xr.Dataset):
+            full_dict = {}
+            var_list = list(data.data_vars.values())
+            for var in var_list:
+                full_dict[var.name] = Dataset.qc_checks(var)
+
+            qc_dict = {}
+            for k, d in full_dict.items():
+                for k_, v_ in d.items():
+                    qc_dict[f'{k}_{k_}'] = v_
+            
+            return qc_dict
+
         data = data.values
         qc_dict = {}
         qc_dict['max'] = np.nanmax(data)

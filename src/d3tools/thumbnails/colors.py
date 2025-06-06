@@ -106,19 +106,20 @@ def create_colormap(sorted_colors, nan_color: list[float] = [0.5, 0.5, 0.5, 1.0]
 def keep_used_colors(unique_values:list[float], colors: list[tuple]) -> list[tuple]:
     '''
     Keep only the colors that are used in the list of unique values.
+    We actually need to keep all the colors in the range of unique values
     '''
 
-    col_list = list(deepcopy(colors))
-    to_remove = []
-    for i in range(len(col_list)):
-        if i not in unique_values:
-            to_remove.append(i)
+    #col_list = list(deepcopy(colors))
+    # to_remove = []
+    # for i in range(len(col_list)):
+    #     if i not in unique_values:
+    #         to_remove.append(i)
 
-    # Sort to_remove in descending order
-    to_remove.sort(reverse=True)
+    # # Sort to_remove in descending order
+    # to_remove.sort(reverse=True)
 
-    for i in to_remove:
-        col_list.pop(i)
+    # for i in to_remove:
+    #     col_list.pop(i)
 
-    return col_list
+    return colors[min(unique_values):max(unique_values)+1]
 
