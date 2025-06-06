@@ -558,7 +558,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         full_key = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt', 'shp']:
+        if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             if self._check_data(full_key):
                 return self._read_data(full_key)
             else:
@@ -616,7 +616,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         output_file = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt', 'shp']:
+        if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             append = kwargs.pop('append', False)
             self._write_data(data, output_file, append = append)
             return
