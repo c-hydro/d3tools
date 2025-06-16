@@ -149,7 +149,7 @@ def estimate_timestep(sample) -> TimeStep:
                 return ViirsModisTimeStep
         elif 9 <= step_length <= 11:
             return Dekad
-        elif 30 <= step_length <= 31:
+        elif 28 <= step_length <= 31:
             return Month
         elif 365 <= step_length <= 366:
             return Year
