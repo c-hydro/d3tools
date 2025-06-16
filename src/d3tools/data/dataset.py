@@ -372,7 +372,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             timestep = self.timestep
         else:
             kwargs.pop('now', None)
-            other_dates = self.get_last_date(now = last_date, n = 8, **kwargs)
+            other_dates = self.get_last_date(now = last_date, n = 3, **kwargs)
             timestep = estimate_timestep(other_dates)
             if timestep is None:
                 return None
