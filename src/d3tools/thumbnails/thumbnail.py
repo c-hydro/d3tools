@@ -14,45 +14,77 @@ from .colors import parse_colors, keep_used_colors, create_colormap
 
 #TODO TEST
 class Thumbnail:
-    def __init__(self, raster:str|xr.DataArray, color_definition_file:str):
-        if isinstance(raster, xr.DataArray):
-            self.src = raster
-        elif isinstance(raster, str):
-            self.raster_file = raster
-            self.src = rioxarray.open_rasterio(raster)
+    def __init__(self, data:str|xr.DataArray|gpd.GeoDataFrame, color_definition_file:str):
+        if isinstance(data, xr.DataArray):
+            self.src = data
+            self.type = 'raster'
 
-        # check if the raster is all nan
-        if np.all(np.isclose(self.src.data, self.src.rio.nodata, equal_nan=True)):
-            self.allnan = True
+        elif isinstance(data, gpd.GeoDataFrame):
+            self.src = data
+            self.type = 'vector'
+
+        elif isinstance(data, str):
+            self.raster_file = data
+            self.src = rioxarray.open_rasterio(data)
+            self.type = 'raster'
+
         else:
-            self.allnan = False
+            raise TypeError(f"Unsupported data type: {type(data)}. Expected str, xr.DataArray, or gpd.GeoDataFrame.")
 
-            self.transform = self.src.rio.transform()
-            self.img = self.src.data.squeeze()
-            self.nan_value = self.src.rio.nodata
-            self.shape = self.img.shape
-            self.crs = self.src.rio.crs
+        # parse the color definition file
+        self.txt_file = color_definition_file
+        all_breaks, self.all_colors, all_labels = parse_colors(self.txt_file)
 
-            self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
-                        self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
+        if self.type == 'vector':
+            # check if the vector is all nan
+            if np.all(np.isnan(self.src['value'])):
+                self.allnan = True
+            else:
+                self.allnan = False
+                self.crs = self.src.crs
+                self.digital_src = self.discretize(all_breaks)
 
-            self.txt_file = color_definition_file
-            all_breaks, self.all_colors, all_labels = parse_colors(color_definition_file)
+                self.breaks = np.unique(self.digital_src["value_discrete"])
+                has_nans = max(self.breaks) == len(all_breaks)
 
-            self.digital_img = self.discretize_raster(all_breaks)
+                # Assume a resolution of 0.01 and create shape from extent
+                x_min, y_min, x_max, y_max = self.src.total_bounds
+                res = 0.01
+                width = int(np.ceil((x_max - x_min) / res))
+                height = int(np.ceil((y_max - y_min) / res))
+                self.shape = (height, width)
+                self.extent = (x_min, x_max, y_min, y_max)
 
-            self.breaks = np.unique(self.digital_img)
-            has_nans = max(self.breaks) == len(all_breaks)
+        elif self.type == 'raster':
+            # check if the raster is all nan
+            if np.all(np.isclose(self.src.data, self.src.rio.nodata, equal_nan=True)):
+                self.allnan = True
+            else:
+                self.allnan = False
 
-            self.colors = keep_used_colors(self.breaks, self.all_colors)
-            self.all_labels = all_labels.copy()
+                self.transform = self.src.rio.transform()
+                self.img = self.src.data.squeeze()
+                self.nan_value = self.src.rio.nodata
+                self.shape = self.img.shape
+                self.crs = self.src.rio.crs
 
-            all_labels.append('nan')
-            self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
+                self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
+                               self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
 
-            self.colormap = create_colormap(self.colors, include_nan = has_nans)
+                self.digital_img = self.discretize(all_breaks)
+                self.breaks = np.unique(self.digital_img)
+                
+        has_nans = max(self.breaks) == len(all_breaks)
 
-    def discretize_raster(self, breaks: list, nan_value = np.nan):
+        self.colors = keep_used_colors(self.breaks, self.all_colors)
+        self.all_labels = all_labels.copy()
+
+        all_labels.append('nan')
+        self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
+
+        self.colormap = create_colormap(self.colors, include_nan = has_nans)
+
+    def discretize(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
         if len(breaks) == 0:
             return np.zeros_like(self.img)
@@ -61,13 +93,24 @@ class Thumbnail:
         else:
             bins = [float(pos) for pos in breaks]
 
-        # Discretize the raster values
-        raster_discrete = np.digitize(self.img, bins, right = True)
+        if self.type == 'raster':
+            # Discretize the raster values
+            raster_discrete = np.digitize(self.img, bins, right = True)
 
-        # Set the nan values to the last bin
-        raster_discrete = np.where(np.isclose(self.img, nan_value, equal_nan= True), len(bins) + 1, raster_discrete)
+            # Set the nan values to the last bin
+            raster_discrete = np.where(np.isclose(self.img, nan_value, equal_nan= True), len(bins) + 1, raster_discrete)
 
-        return raster_discrete
+            return raster_discrete
+
+        elif self.type == 'vector':
+            # Discretize the vector 'value' column
+            values = self.src['value'].to_numpy()
+            vector_discrete = np.digitize(values, bins, right=True)
+            # Set nan values to the last bin
+            vector_discrete = np.where(np.isnan(values), len(bins) + 1, vector_discrete)
+            result = self.src.copy()
+            result['value_discrete'] = vector_discrete
+            return result
 
     def make_image(self,
                    size: Optional[float] = None,
@@ -96,7 +139,14 @@ class Thumbnail:
         fig, ax = plt.subplots(figsize=(fig_width_in_inches, fig_height_in_inches), dpi=dpi)
 
         # Plot the TIFF file
-        im = ax.imshow(self.digital_img, cmap=self.colormap, extent=self.extent, interpolation='nearest')
+        if self.type == 'raster':    
+            im = ax.imshow(self.digital_img, cmap=self.colormap, extent=self.extent, interpolation='nearest')
+        # or the vector data
+        elif self.type == 'vector':
+            #ax.set_facecolor([0.5, 0.5, 0.5, 1.0])
+            im = self.digital_src.plot(column='value_discrete', ax=ax, cmap=self.colormap, linewidth=0, legend=False)
+            ax.set_xlim(self.extent[0], self.extent[1])
+            ax.set_ylim(self.extent[2], self.extent[3])
 
         self.ax = ax
         self.fig = fig
@@ -174,6 +224,9 @@ class Thumbnail:
         if self.allnan:
            return
 
+        if "shape" in kwargs:
+            self.shape = kwargs['shape']
+
         if not hasattr(self, 'fig'):
             size = kwargs.get('size', None)
             dpi  = kwargs.pop('dpi', None)
@@ -219,6 +272,7 @@ class Thumbnail:
 
         self.ax.axis('off')
         self.fig.tight_layout(pad=0)
+        self.fig.patch.set_facecolor([0.5, 0.5, 0.5, 1.0])
     
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
