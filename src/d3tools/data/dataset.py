@@ -2,6 +2,7 @@ from typing import Optional, Generator, Callable
 import datetime as dt
 import numpy as np
 import xarray as xr
+import geopandas as gpd
 #import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
@@ -619,6 +620,20 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             append = kwargs.pop('append', False)
             self._write_data(data, output_file, append = append)
+
+            if hasattr(self, 'thumb_opts') and self.thumb_opts is not None:
+                thumb_opts = self.thumb_opts.copy()
+
+                destination = thumb_opts.pop('destination')
+                if 'annotation' in thumb_opts and 'text' not in thumb_opts['annotation']:
+                    thumb_opts['annotation']['text'] = os.path.basename(output_file)
+                else:
+                    thumb_opts['annotation'] = {'text': os.path.basename(output_file)}
+                self.make_thumbnail(data = data,
+                                    options = thumb_opts,
+                                    destination = destination,
+                                    time = time, **kwargs)
+
             return
         
         if self.format == 'file':
@@ -1033,7 +1048,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return thumbnail_options
 
     @staticmethod
-    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray], options: dict, destination: 'Dataset', **kwargs):
+    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray]|gpd.GeoDataFrame, options: dict, destination: 'Dataset', **kwargs):
         try:
             from ..thumbnails import Thumbnail, ThumbnailCollection
         except ImportError:
@@ -1048,6 +1063,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
             col_def = colors.update(**kwargs)
             if isinstance(data, dict):
                 data = data['']
+            elif isinstance(data, gpd.GeoDataFrame):
+                field = options.pop('field')
+                data = data[['geometry', field]].rename(columns = {field: 'value'})
             this_thumbnail = Thumbnail(data, col_def)
         
         destination_path = destination.get_key(**kwargs)
