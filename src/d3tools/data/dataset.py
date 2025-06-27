@@ -610,9 +610,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def write_data(self, data,
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
-                   metadata = {},
+                   metadata = None,
                    **kwargs):
-        
+
+        if metadata is None: metadata = {}
         check_data_format(data, self.format)
 
         output_file = self.get_key(time, **kwargs)
@@ -685,7 +686,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         output.attrs = old_attrs
         
         name = substitute_string(self.name, kwargs)
-        metadata['name'] = name
+        metadata['name'] = str(name)
         output = self.set_metadata(output, time, time_format, **metadata)
         # write the data
         self._write_data(output, output_file)
