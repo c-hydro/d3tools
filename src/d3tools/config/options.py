@@ -1,4 +1,4 @@
-from ..parse import get_unique_values, flatten_dict, substitute_values, set_dataset
+from ..parse import get_unique_values, flatten_dict, substitute_values, set_dataset, set_env
 from ..data import Dataset
 from .utils import load_jsons
 
@@ -57,6 +57,8 @@ class Options(dict):
         Parse the options, using the tags.
         And parse the datasets in the options.
         """
+
+        self = Options(set_env(self))
         
         tags = self.get('tags', {}, ignore_case = True) #flatten_dict(self, **kwargs)
         tags = substitute_values(tags, tags, rec=True)
