@@ -1,5 +1,6 @@
 import datetime as dt
 import re
+import os
 
 from ..timestepping.time_utils import get_date_from_str
 
@@ -72,6 +73,31 @@ def substitute_string(string, tag_dict, rec=False):
 
     return generate_strings(string, tag_dict)
 
+def set_env(structure):
+    """
+    Replace the {ENV.var, default = 'value'} in the structure with the corresponding environment variable.
+    the default = 'value' is used to provide a default value if the environment variable is not set.
+    """
+    if isinstance(structure, dict):
+        return {set_env(key): set_env(value) for key, value in structure.items()}
+    elif isinstance(structure, list):
+        return [set_env(value) for value in structure]
+    elif isinstance(structure, str):
+        pattern = r'(\{ENV\.([\w#\-\.]+)(?:\s*,\s*(?:default\s*=\s*)?\'(.*?)\'\s*)?\})'
+        matches = re.findall(pattern, structure)
+        if matches:
+            for match in matches:
+                var = match[1]
+                default = match[2] if len(match[2]) > 0 else None
+                value = os.getenv(var, default)
+
+                if value is None:
+                    raise ValueError(f"Environment variable {var} is not set and no default value provided")
+            
+                structure = structure.replace(match[0], value)
+    
+    return structure
+
 def set_dataset(structure, obj_dict):
     """
     Replace the {obj, tag = 'value'} in the structure with the corresponding dataset in the obj_dict.
@@ -86,7 +112,7 @@ def set_dataset(structure, obj_dict):
         match = re.match(pattern, structure)
         if match:
             key= match.group(1)
-            ds = obj_dict.get(key, structure)
+            structure = obj_dict.get(key, structure)
 
             if len(match.groups()) > 1:
                 tag_values = match.group(2)
@@ -96,13 +122,9 @@ def set_dataset(structure, obj_dict):
                     for tag_values_match in re.finditer(tag_values_pattern, tag_values):
                         tags[tag_values_match.group(1)] = tag_values_match.group(2)
 
-                    ds = ds.update(**tags)
+                    structure = structure.update(**tags)
 
-            return ds
-        else:
-            return structure
-    else:
-        return structure
+    return structure
 
 def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
     """
