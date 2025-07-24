@@ -926,10 +926,13 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if crs is not None:
             crs_wkt = crs.to_wkt()
-        elif hasattr(templatearray, 'spatial_ref'):
+        elif hasattr(templatearray, 'spatial_ref') and hasattr(templatearray.spatial_ref, 'crs_wkt'):
             crs_wkt = templatearray.spatial_ref.crs_wkt
-        elif hasattr(templatearray, 'crs'):
+        elif hasattr(templatearray, 'crs') and hasattr(templatearray.crs, 'crs_wkt'):
             crs_wkt = templatearray.crs.crs_wkt
+        else: # if all fails, assume EPSG:4326
+            from pyproj import CRS
+            crs_wkt = CRS.from_epsg(4326).to_wkt()
 
         self._template[tile] = {'crs': crs_wkt,
                                 '_FillValue' : templatearray.attrs.get('_FillValue'),
