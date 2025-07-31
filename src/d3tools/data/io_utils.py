@@ -5,6 +5,7 @@ import numpy as np
 import os
 import json
 import datetime as dt
+import rasterio
 
 try:
     import pandas as pd
@@ -187,7 +188,42 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
 
     # write the data to a geotiff
     elif format == 'geotiff':
-        data.rio.to_raster(path, compress = 'LZW')
+        # If data is chunked, use chunk size as block size
+        
+        if data.chunks is not None:
+            profile = {
+                "driver": "GTiff",
+                "height": data.sizes[data.rio.y_dim],
+                "width": data.sizes[data.rio.x_dim],
+                "count": data.shape[0] if "band" in data.dims or "bands" in data.dims else 1,
+                "dtype": str(data.dtype),
+                "crs": data.rio.crs,
+                "transform": data.rio.transform(),
+                "compress": "LZW"
+            }
+            # Assume 2D spatial chunks (y, x) are last two dims
+            chunk_map = dict(zip(data.dims, data.chunks))
+            y_chunk = chunk_map.get('y', [None])[0]
+            x_chunk = chunk_map.get('x', [None])[0]
+            if y_chunk and x_chunk:
+                profile.update(blockxsize=max(16, (x_chunk//16) * 16),
+                               blockysize=max(16, (y_chunk//16) * 16))
+
+            with rasterio.open(path, 'w', **profile) as dst:
+                for ji, window in dst.block_windows(1):
+                    arr = data.isel(
+                        x=slice(window.col_off, window.col_off + window.width),
+                        y=slice(window.row_off, window.row_off + window.height)
+                    ).values
+                    dst.write(arr, window=window)
+                    print(f'Wrote window {window}')
+                if hasattr(data, "attrs") and data.attrs:
+                    # Convert all attrs to strings for GeoTIFF tags
+                    tags = {k: str(v) for k, v in data.attrs.items()}
+                    dst.update_tags(**tags)
+        else:
+            # If not chunked, write directly
+            data.rio.to_raster(path, compress='LZW', windowed=np.prod(data.shape) > 1e8)
 
     # write the data to a netcdf
     elif format == 'netcdf':
