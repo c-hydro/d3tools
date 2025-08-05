@@ -221,6 +221,9 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
                     # Convert all attrs to strings for GeoTIFF tags
                     tags = {k: str(v) for k, v in data.attrs.items()}
                     dst.update_tags(**tags)
+
+                # Set nodata value if available
+                dst.nodata = data.attrs.get('_FillValue', data.rio.nodata)
         else:
             # If not chunked, write directly
             data.rio.to_raster(path, compress='LZW', windowed=np.prod(data.shape) > 1e8)

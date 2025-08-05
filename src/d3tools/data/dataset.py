@@ -611,6 +611,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                    time: Optional[dt.datetime|TimeStep] = None,
                    time_format: str = '%Y-%m-%d',
                    metadata = None,
+                   as_is = False,
                    **kwargs):
 
         if metadata is None: metadata = {}
@@ -641,25 +642,29 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._write_data(data, output_file)
             return
         
+        if as_is:
+            output = data
+            output = output.rio.write_nodata(output.attrs.get('_FillValue', self.nan_value))
+        else:
         # if data is a numpy array, ensure there is a template available
-        try:
-            template_dict = self.get_template_dict(**kwargs)
-        except PermissionError:
-            template_dict = None
+            try:
+                template_dict = self.get_template_dict(**kwargs)
+            except PermissionError:
+                template_dict = None
 
-        if template_dict is None:
-            if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-                #templatearray = self.make_templatearray_from_data(data)
-                self.set_template(data, **kwargs)
-                template_dict = self.get_template_dict(**kwargs, make_it=False)
-            else:
-                raise ValueError('Cannot write numpy array without a template.')
-        
-        output = self.set_data_to_template(data, template_dict)
-        output = set_type(output, self.nan_value, read = False)
-        output = straighten_data(output)
+            if template_dict is None:
+                if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
+                    #templatearray = self.make_templatearray_from_data(data)
+                    self.set_template(data, **kwargs)
+                    template_dict = self.get_template_dict(**kwargs, make_it=False)
+                else:
+                    raise ValueError('Cannot write numpy array without a template.')
+            
+            output = self.set_data_to_template(data, template_dict)
+            output = set_type(output, self.nan_value, read = False)
+            output = straighten_data(output)
+            
         output.attrs['source_key'] = output_file
-
         # if necessary generate the thubnail
         if 'parents' in metadata:
             parents = metadata.pop('parents')
