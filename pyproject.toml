@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "d3tools"
-version = "2.1.0"
+version = "2.2.0"
 description = "A package of common tools for the door, dam and dryes packages of CIMA Research Foundation"
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" }
