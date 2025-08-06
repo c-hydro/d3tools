@@ -348,7 +348,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         while len(last_date) < n:
             this_month_times = self.get_times(this_month, **kwargs)
             if len(this_month_times) > 0:
-                valid_time = [t for t in this_month_times if t < now]
+                valid_time = [t for t in this_month_times if t <= now]
                 valid_time.sort(reverse = True)
                 last_date.extend(valid_time)
             elif this_month.start < lim:
