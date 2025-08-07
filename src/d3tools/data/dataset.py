@@ -660,8 +660,16 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 else:
                     raise ValueError('Cannot write numpy array without a template.')
             
-            data = straighten_data(data)
-            output = self.set_data_to_template(data, template_dict)
+            # if the data is an xarray, straighen it before setting it to the template
+            if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
+                data = straighten_data(data)
+                output = self.set_data_to_template(data, template_dict)
+            # if the data is a numpy array, set it to the template and then straighten it (which should be unnecessary)
+            else:
+                output = self.set_data_to_template(data, template_dict)
+                output = straighten_data(output)
+            
+            # fix the type and the nodata value
             output = set_type(output, self.nan_value, read = False)
             
         output.attrs['source_key'] = output_file
