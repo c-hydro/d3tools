@@ -660,9 +660,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 else:
                     raise ValueError('Cannot write numpy array without a template.')
             
+            data = straighten_data(data)
             output = self.set_data_to_template(data, template_dict)
             output = set_type(output, self.nan_value, read = False)
-            output = straighten_data(output)
             
         output.attrs['source_key'] = output_file
         # if necessary generate the thubnail
