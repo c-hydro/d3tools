@@ -463,7 +463,7 @@ class SFTPDataset(RemoteDataset):
 
     def _check_data(self, data_key) -> bool:
         try:
-            self.sftp_client.stat(data_key)
+            self.sftp_client.stat(data_key)# Check if the file exists
             return True
         except:
             return False
