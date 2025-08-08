@@ -27,6 +27,8 @@ from .io_utils import write_to_file, read_from_file
 from ..parse import extract_date_and_tags
 from ..exit import rm_at_exit
 
+# test
+
 class RemoteDataset(Dataset):
     type = 'remote'
 
@@ -146,24 +148,28 @@ class S3Dataset(RemoteDataset):
                  key_pattern: str,
                  bucket_name: str,
                  region_name: Optional[str] = None,
+                 profile_name: Optional[str] = None,
                  tmp_dir: Optional[str] = None,
                  **kwargs):
 
         self.key_pattern = key_pattern
         self.bucket_name = bucket_name
         self.region_name = region_name
+        self.profile_name = profile_name
+
+        self._session = boto3.Session(profile_name=self.profile_name)
 
         # Initialize the S3 client if it hasn't been initialized yet
         if S3Dataset.s3_client is None:
-            S3Dataset.s3_client = boto3.client('s3')
+            S3Dataset.s3_client = self._session.client('s3')
 
         if hasattr(self, "_creation_kwargs"):
             self._creation_kwargs.update({'type': self.type, 'bucket_name': self.bucket_name,
-                                          'region_name': self.region_name})
+                                          'region_name': self.region_name, 'profile_name': self.profile_name})
         else:
             self._creation_kwargs = {'type': self.type, 'bucket_name': self.bucket_name,
-                                    'region_name': self.region_name}
-            
+                                    'region_name': self.region_name, 'profile_name': self.profile_name}
+
         super().__init__(tmp_dir = tmp_dir, **kwargs)
 
 
@@ -193,7 +199,7 @@ class S3Dataset(RemoteDataset):
                 yield file['Key']
 
     def update(self, in_place = False, **kwargs):
-        self.options.update({'bucket_name': self.bucket_name, 'region_name': self.region_name, 'tmp_dir': self.tmp_dir})
+        self.options.update({'bucket_name': self.bucket_name, 'region_name': self.region_name, 'profile_name': self.profile_name, 'tmp_dir': self.tmp_dir})
         new_self = super().update(in_place = in_place, **kwargs)
 
         if in_place:
@@ -217,9 +223,9 @@ class OVHS3Dataset(S3Dataset):
         super().__init__(**kwargs)
 
         self.host = urlparse(self.endpoint_url).netloc
-        session = boto3.Session()
-        creds = session.get_credentials().get_frozen_credentials()
+        creds = self._session.get_credentials().get_frozen_credentials()
         self.credentials = Credentials(creds.access_key, creds.secret_key)
+
         self._http = URLLib3Session()
 
     def _signed_request(self, method, url, headers=None, data=None, stream=False, params=None):
@@ -463,7 +469,7 @@ class SFTPDataset(RemoteDataset):
 
     def _check_data(self, data_key) -> bool:
         try:
-            self.sftp_client.stat(data_key)# Check if the file exists
+            self.sftp_client.stat(data_key)
             return True
         except:
             return False
