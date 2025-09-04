@@ -568,7 +568,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self._check_data(full_key):
             data = self._read_data(full_key)
 
-            if as_is:
+            if as_is or self.type == 'memory':
                 return data
             
             # ensure that the data has descending latitudes
@@ -642,7 +642,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             self._write_data(data, output_file)
             return
         
-        if as_is:
+        if as_is or self.type == 'memory':
             output = data
             output = output.rio.write_nodata(output.attrs.get('_FillValue', self.nan_value))
         else:
