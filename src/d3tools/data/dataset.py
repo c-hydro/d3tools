@@ -621,6 +621,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             append = kwargs.pop('append', False)
+
+            if self.format in ['json']:
+                data = self.set_metadata(data, time, time_format, **metadata)
+
             self._write_data(data, output_file, append = append)
 
             if hasattr(self, 'thumb_opts') and self.thumb_opts is not None:
