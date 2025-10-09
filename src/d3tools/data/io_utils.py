@@ -160,6 +160,12 @@ def write_to_file(data, path, format: Optional[str] = None, append = False) -> N
     elif format == 'json':
 
         if isinstance(data, gpd.GeoDataFrame):
+            # ensure time columns are converted to strings
+            for col in data.columns:
+                if isinstance(data[col].iloc[0], np.datetime64):
+                    data[col] = data[col].apply(lambda x: x.astype('O'))
+                if isinstance(data[col].iloc[0], (dt.datetime, dt.date)):
+                    data[col] = data[col].apply(lambda x: x.isoformat())
             dict_data = json.loads(data.to_json())
             if data.attrs:
                 dict_data['metadata'] = data.attrs
