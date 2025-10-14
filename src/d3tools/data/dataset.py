@@ -321,6 +321,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         return prefix
 
     def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        if self.time_signature == 'end+1' and time is not None:
+            if isinstance(time, dt.datetime):
+                time = time + dt.timedelta(days = 1)
+            elif isinstance(time, TimeRange):
+                time = TimeRange(time.start + dt.timedelta(days = 1), time.end + dt.timedelta(days = 1))
+        
         all_keys = self.get_available_keys(time, **kwargs)
         all_tags = {}
         all_dates = set()
@@ -335,6 +341,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
         all_tags['time'] = list(all_dates)
+
+        if self.time_signature == 'end+1':
+            all_tags['time'] = [t - dt.timedelta(days = 1) for t in all_tags['time']]
+            all_tags['time'].sort()
 
         return all_tags
 
