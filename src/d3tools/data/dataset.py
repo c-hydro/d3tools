@@ -632,7 +632,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
         if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
             append = kwargs.pop('append', False)
 
-            if self.format in ['json']:
+            if isinstance(data, gpd.GeoDataFrame):
                 data = self.set_metadata(data, time, time_format, **metadata)
 
             self._write_data(data, output_file, append = append)
