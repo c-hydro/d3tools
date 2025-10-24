@@ -198,6 +198,7 @@ def extract_date_and_tags(string: str, string_pattern: str):
     pattern = pattern.replace('%H', '(?P<hour>\\d{2})')
     pattern = pattern.replace('%M', '(?P<minute>\\d{2})')
     pattern = pattern.replace('%S', '(?P<second>\\d{2})')
+    pattern = pattern.replace('%j', '(?P<doy>\\d{3})')
 
     # get all the substituted names (i.e. the parts of the pattern that are between < and >)
     substituted_names = re.findall(r'(?<=<)[\w#-\.]+(?=>)', pattern)
@@ -236,18 +237,23 @@ def extract_date_and_tags(string: str, string_pattern: str):
 
     all_tags = match.groupdict()
     # Extract the date components
-    year   = int(all_tags.pop('year',   1900))
-    month  = int(all_tags.pop('month',  1))
-    day    = int(all_tags.pop('day',    1))
-    hour   = int(all_tags.pop('hour',   0))
-    minute = int(all_tags.pop('minute', 0))
-    second = int(all_tags.pop('second', 0))
-    date   = dt.datetime(year, month, day, hour, minute, second)
+    if 'doy' in all_tags:
+        year = int(all_tags.pop('year', 1900))
+        doy = int(all_tags.pop('doy'))
+        date = dt.datetime(year, 1, 1) + dt.timedelta(days=doy - 1)
+    else:
+        year   = int(all_tags.pop('year',   1900))
+        month  = int(all_tags.pop('month',  1))
+        day    = int(all_tags.pop('day',    1))
+        hour   = int(all_tags.pop('hour',   0))
+        minute = int(all_tags.pop('minute', 0))
+        second = int(all_tags.pop('second', 0))
+        date   = dt.datetime(year, month, day, hour, minute, second)
 
     # Extract the other key-value pairs
     tags = {}
     for key, value in names_map.items():
-        if value in ['year', 'month', 'day', 'hour', 'minute', 'second']:
+        if value in ['year', 'month', 'day', 'hour', 'minute', 'second', 'doy']:
             continue
         if value not in tags:
             tags[value] = all_tags[key]
