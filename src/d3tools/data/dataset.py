@@ -313,6 +313,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                     prefix = prefix.replace('%m', f'{start.month:02d}')
                     if start.day == end.day:
                         prefix = prefix.replace('%d', f'{start.day:02d}')
+                        prefix = prefix.replace('%j', f'{start.timetuple().tm_yday:03d}')  # Substitute %j if present
 
         prefix = os.path.dirname(prefix)
         while '%' in prefix or '{' in prefix:
@@ -551,7 +552,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 time = time.replace(minute = 0)
                 if '%H' not in key_without_tags:
                     time = time.replace(hour = 0)
-                    if '%d' not in key_without_tags:
+                    if all(tag not in key_without_tags for tag in ('%d', '%j')):
                         time = time.replace(day = 1)
                         if '%m' not in key_without_tags:
                             time = time.replace(month = 1)
