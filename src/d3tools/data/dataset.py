@@ -919,9 +919,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 self.set_template(data, tile = tile)
 
             else:
-                first_date = self.get_first_date(tile = tile, **kwargs)
-                if first_date is not None:
-                    data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
+                last_ts = self.get_last_ts(tile = tile, **kwargs)
+                if last_ts is None:
+                    last_ts = self.get_last_date(tile = tile, **kwargs)
+                if last_ts is not None:
+                    data = self.get_data(time = last_ts, tile = tile, as_is=True, **kwargs)
                 else:
                     return None
             
