@@ -815,7 +815,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         
         timesteps = [timestep.from_date(t) for t in times]
         for ts in timesteps:
-            if ts.start > time_range.end + dt.timedelta(minutes=1439) or ts.end < time_range.start:
+            end = time_range.end
+            if end.hour == 0 and end.minute == 0:
+                end = end + dt.timedelta(minutes = 1439)
+            if ts.start > end or ts.end < time_range.start:
                 timesteps.remove(ts)
 
         return timesteps
@@ -916,9 +919,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 self.set_template(data, tile = tile)
 
             else:
-                first_date = self.get_first_date(tile = tile, **kwargs)
-                if first_date is not None:
-                    data = self.get_data(time = first_date, tile = tile, as_is=True, **kwargs)
+                last_ts = self.get_last_ts(tile = tile, **kwargs)
+                if last_ts is None:
+                    last_ts = self.get_last_date(tile = tile, **kwargs)
+                if last_ts is not None:
+                    data = self.get_data(time = last_ts, tile = tile, as_is=True, **kwargs)
                 else:
                     return None
             
