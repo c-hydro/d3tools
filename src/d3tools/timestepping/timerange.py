@@ -3,6 +3,8 @@ from typing import Generator, Iterable, TYPE_CHECKING
 
 from .timeperiod import TimePeriod
 from .time_utils import find_unit_of_time
+from .timewindow import TimeWindow
+
 if TYPE_CHECKING:
     from .fixed_num_timestep import Year, Month, Dekad, FixedNTimeStep
     from .fixed_len_timestep import Day, Hour, FixedLenTimeStep
@@ -37,6 +39,10 @@ class TimeRange(TimePeriod):
     def viirstimes(self) -> list:
         return self.get_timesteps_from_DOY(range(1, 366, 8))
 
+    def extend(self, window: TimeWindow, before = False):
+        extended_period = super().extend(window, before)
+        return TimeRange(extended_period.start, extended_period.end)
+    
     def get_timesteps(self, freq: str|int, agg: str|tuple|None = None) -> list:
 
         if isinstance(freq, int):

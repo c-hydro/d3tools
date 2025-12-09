@@ -65,7 +65,7 @@ class TimePeriod(ABC):
             else:
                 new_end = window.apply(self.end + datetime.timedelta(1), start = True).end
 
-        return self.__class__(new_start, new_end)
+        return TimePeriod(new_start, new_end)
 
     #TODO remove this method eventually, it conflicts with the .length property of FixedLenTimeStep
     def length(self, **kwargs):
