@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "d3tools"
-version = "2.3.0"
+version = "2.4.0"
 description = "A package of common tools for the door, dam and dryes packages of CIMA Research Foundation"
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" }
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: ECPL License",
@@ -36,7 +36,7 @@ more-data = [
     "pandas~=2.3.3",
     "geopandas~=1.1.1",
     "pyarrow~=20.0.0",
-    "fastparquet~=2025.11.0",
+    "fastparquet~=2024.11.0",
 ]
 
 # dependencies for creating thumbnails
@@ -44,7 +44,7 @@ thumbnails = [
     "matplotlib~=3.10.3",
     "img2pdf~=0.5.1",
     "geopandas~=1.1.1",
-    "Pillow~=9.0.1"
+    "Pillow~=10.0.0"
 ]
 
 # dependencies for reading and writing remote data
