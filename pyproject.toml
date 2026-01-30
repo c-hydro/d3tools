@@ -25,6 +25,7 @@ dependencies = [
     "rioxarray~=0.20.0",
     "xarray~=2025.11.0",
     "setuptools>=42",
+    "geopandas~=1.1.1",
 ]
 
 [project.urls]
@@ -34,7 +35,6 @@ Repository = "https://github.com/c-hydro/d3tools"
 # dependencies for using csv and parquet files and shapefiles
 more-data = [
     "pandas~=2.3.3",
-    "geopandas~=1.1.1",
     "pyarrow~=20.0.0",
     "fastparquet~=2024.11.0",
 ]
