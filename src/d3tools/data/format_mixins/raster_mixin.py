@@ -6,13 +6,9 @@ for datasets that store gridded/raster data (NetCDF, GeoTIFF, etc.).
 """
 import numpy as np
 import xarray as xr
-import datetime as dt
-from typing import Optional
 
 from ...spatial import TemplateManager
 from ..io_utils import straighten_data
-from ...timestepping import TimeStep
-
 
 class RasterMixin:
     """
@@ -26,7 +22,7 @@ class RasterMixin:
     Used by datasets that store spatially gridded data like NetCDF, GeoTIFF.
     """
     
-    def _init_raster_properties(self):
+    def _init_format_properties(self):
         """Initialize raster-specific properties. Call from __init__."""
         self.template_manager = TemplateManager()
     
@@ -125,3 +121,97 @@ class RasterMixin:
             xarray with template coordinates applied
         """
         return TemplateManager.apply_to_data(data, template_dict)
+    
+    def _format_after_read(self, data, full_key: str, **kwargs):
+        """
+        Post-process raster data after reading from storage.
+        
+        Handles coordinate straightening, nodata value conversion,
+        and template application/creation.
+        
+        Args:
+            data: Raw raster data from storage
+            full_key: Full path/key to source file
+            **kwargs: Additional arguments (as_is flag, etc.)
+            
+        Returns:
+            Processed xarray ready for use
+        """
+        from ..io_utils import straighten_data, set_type
+        
+        # Handle as_is flag or memory datasets
+        if kwargs.get('as_is', False) or self.type == 'memory':
+            return data
+        
+        # Ensure data has descending latitudes
+        data = straighten_data(data)
+        
+        # Convert nodata values
+        data = set_type(data, self.nan_value, read=True)
+        
+        # Handle templates
+        template_dict = self.get_template_dict(make_it=False, **kwargs)
+        if template_dict is None:
+            # Create template from data
+            self.set_template(data, **kwargs)
+        else:
+            # Apply existing template to align coordinates
+            attrs = data.attrs
+            data = self.set_data_to_template(data, template_dict)
+            data.attrs.update(attrs)
+        
+        # Add source metadata
+        data.attrs.update({'source_key': full_key})
+        
+        return data
+    
+    def _format_before_write(self, data, time, time_format: str, 
+                     metadata: dict, **kwargs):
+        """
+        Prepare raster data for writing with format-specific logic.
+        
+        Handles template creation/application, coordinate straightening,
+        and nodata value management.
+        
+        Args:
+            data: Raster data to prepare (xarray or numpy array)
+            time: Timestamp
+            time_format: Format string for time
+            metadata: Metadata dictionary
+            **kwargs: Additional arguments
+            
+        Returns:
+            Prepared xarray ready for writing
+        """
+        from ..io_utils import straighten_data, set_type
+        
+        # Handle as_is flag or memory datasets
+        if kwargs.get('as_is', False) or self.type == 'memory':
+            output = data
+            output = output.rio.write_nodata(output.attrs.get('_FillValue', self.nan_value))
+        else:
+            # Ensure there is a template available
+            try:
+                template_dict = self.get_template_dict(**kwargs)
+            except PermissionError:
+                template_dict = None
+
+            if template_dict is None:
+                if isinstance(data, (xr.DataArray, xr.Dataset)):
+                    self.set_template(data, **kwargs)
+                    template_dict = self.get_template_dict(**kwargs, make_it=False)
+                else:
+                    raise ValueError('Cannot write numpy array without a template.')
+            
+            # Apply template to data
+            if isinstance(data, (xr.DataArray, xr.Dataset)):
+                data = straighten_data(data)
+                output = self.set_data_to_template(data, template_dict)
+            else:
+                output = self.set_data_to_template(data, template_dict)
+                output = straighten_data(output)
+            
+            # Fix the type and nodata value
+            output = set_type(output, self.nan_value, read=False)
+        
+        return output
