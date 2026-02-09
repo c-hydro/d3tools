@@ -3,7 +3,6 @@ import datetime as dt
 import numpy as np
 import xarray as xr
 import geopandas as gpd
-#import atexit
 
 from abc import ABC, ABCMeta, abstractmethod
 import os
@@ -154,46 +153,32 @@ class Dataset(ABC, metaclass=DatasetMeta):
     ## CLASS METHODS FOR FACTORY
     @classmethod
     def from_options(cls, options: dict, defaults: dict = None):
-        defaults = defaults or {}
-        new_options = defaults.copy()
-        new_options.update(options)
-
-        type = new_options.pop('type', None)
-        type = cls.get_type(type)
-        Subclass: 'Dataset' = cls.get_subclass(type)
+        """
+        Create a Dataset from a configuration dictionary.
         
-        # Parse manager configs if they're dicts/strings (not already manager objects)
-        # Create dataset_factory once for use by both managers
-        dataset_factory = lambda cfg: cls.from_options(cfg) if isinstance(cfg, dict) else cls.from_options({'path': os.path.dirname(cfg), 'file': os.path.basename(cfg)})
+        This is a user-friendly factory method that delegates to the
+        centralized dataset parser.
         
-        # Helper to parse manager config if needed
-        def parse_manager_if_needed(config, manager_class, check_method):
-            """Parse config into manager if it's not already a manager object."""
-            if config is None:
-                return None
-            # Check if already a manager by testing for a characteristic method
-            if hasattr(config, check_method):
-                return config
-            # Not a manager - parse it
-            return manager_class.from_dict(config, dataset_factory)
-        
-        if 'thumbnail' in new_options:
-            from ..thumbnails import DatasetThumbnailManager
-            new_options['thumbnail'] = parse_manager_if_needed(
-                new_options['thumbnail'], 
-                DatasetThumbnailManager, 
-                'make_thumbnail'
-            )
-        
-        if 'log' in new_options:
-            from ..logging import DatasetLogManager
-            new_options['log'] = parse_manager_if_needed(
-                new_options['log'], 
-                DatasetLogManager, 
-                'write_log'
-            )
-
-        return Subclass(**new_options)
+        Args:
+            options: Configuration dictionary
+            defaults: Optional default values to merge with options
+            
+        Returns:
+            Dataset instance of the appropriate subclass
+            
+        Example:
+            >>> config = {
+            ...     'type': 'local',
+            ...     'path': '/data',
+            ...     'file': 'output.tif',
+            ...     'thumbnail': {...},
+            ...     'log': '/logs/output.txt'
+            ... }
+            >>> dataset = Dataset.from_options(config)
+        """
+        # Delegate to centralized parser
+        from ..config.parsers import dataset_from_config
+        return dataset_from_config(options, defaults)
 
     @classmethod
     def get_subclass(cls, type: str):
