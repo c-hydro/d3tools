@@ -9,12 +9,9 @@ from abc import ABC, ABCMeta, abstractmethod
 import os
 import re
 
-import tempfile
-
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
-from ..exit import run_at_exit_first, rm_at_exit
 from .template_manager import TemplateManager
 
 def withcases(func):
@@ -74,15 +71,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
             if hasattr(self, 'agg'):
                 self.timestep = self.timestep.with_agg(self.agg)
 
-        if 'notification' in kwargs:
-            self.notif_opts = kwargs.pop('notification')
-            run_at_exit_first(self.notify)
-
         if 'thumbnail' in kwargs:
-            self.thumb_opts = self.parse_thumbnail_options(kwargs.pop('thumbnail'))
+            self.thumbnail = kwargs.pop('thumbnail')
 
         if 'log' in kwargs:
-            self.log_opts = self.parse_log_options(kwargs.pop('log'))
+            self.log = kwargs.pop('log')
 
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
@@ -152,12 +145,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
         new_dataset = self.update()
         if template:
             new_dataset.template_manager = self.template_manager
-        if hasattr(self, 'log_opts'):
-            new_dataset.log_opts = self.log_opts
-        if hasattr(self, 'thumb_opts'):
-            new_dataset.thumb_opts = self.thumb_opts
-        if hasattr(self, 'notif_opts'):
-            new_dataset.notif_opts = self.notif_opts
+        if hasattr(self, 'log'):
+            new_dataset.log = self.log
+        if hasattr(self, 'thumbnail'):
+            new_dataset.thumbnail = self.thumbnail
         return new_dataset
 
     ## CLASS METHODS FOR FACTORY
@@ -170,6 +161,37 @@ class Dataset(ABC, metaclass=DatasetMeta):
         type = new_options.pop('type', None)
         type = cls.get_type(type)
         Subclass: 'Dataset' = cls.get_subclass(type)
+        
+        # Parse manager configs if they're dicts/strings (not already manager objects)
+        # Create dataset_factory once for use by both managers
+        dataset_factory = lambda cfg: cls.from_options(cfg) if isinstance(cfg, dict) else cls.from_options({'path': os.path.dirname(cfg), 'file': os.path.basename(cfg)})
+        
+        # Helper to parse manager config if needed
+        def parse_manager_if_needed(config, manager_class, check_method):
+            """Parse config into manager if it's not already a manager object."""
+            if config is None:
+                return None
+            # Check if already a manager by testing for a characteristic method
+            if hasattr(config, check_method):
+                return config
+            # Not a manager - parse it
+            return manager_class.from_dict(config, dataset_factory)
+        
+        if 'thumbnail' in new_options:
+            from ..thumbnails import DatasetThumbnailManager
+            new_options['thumbnail'] = parse_manager_if_needed(
+                new_options['thumbnail'], 
+                DatasetThumbnailManager, 
+                'make_thumbnail'
+            )
+        
+        if 'log' in new_options:
+            from ..logging import DatasetLogManager
+            new_options['log'] = parse_manager_if_needed(
+                new_options['log'], 
+                DatasetLogManager, 
+                'write_log'
+            )
 
         return Subclass(**new_options)
 
@@ -714,19 +736,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 data = self.set_metadata(data, time, time_format, **metadata)
 
             self._write_data(data, output_file, append = append)
-
-            if hasattr(self, 'thumb_opts') and self.thumb_opts is not None:
-                thumb_opts = self.thumb_opts.copy()
-
-                destination = thumb_opts.pop('destination')
-                if 'annotation' in thumb_opts and 'text' not in thumb_opts['annotation']:
-                    thumb_opts['annotation']['text'] = os.path.basename(output_file)
-                else:
-                    thumb_opts['annotation'] = {'text': os.path.basename(output_file)}
-                self.make_thumbnail(data = data,
-                                    options = thumb_opts,
-                                    destination = destination,
-                                    time = time, **kwargs)
+            self._make_thumbnail(data, time, output_file, **kwargs)
 
             return
         
@@ -765,24 +775,14 @@ class Dataset(ABC, metaclass=DatasetMeta):
             output = set_type(output, self.nan_value, read = False)
             
         output.attrs['source_key'] = output_file
-        # if necessary generate the thubnail
+        
+        # Generate thumbnail if configured
         if 'parents' in metadata:
             parents = metadata.pop('parents')
         else:
             parents = {}
-
-        if hasattr(self, 'thumb_opts') and self.thumb_opts is not None:
-            parents[''] = output
-            thumb_opts = self.thumb_opts.copy()
-
-            destination = thumb_opts.pop('destination')
-            thumbnail = self.make_thumbnail(data = parents,
-                                            options = thumb_opts,
-                                            destination = destination,
-                                            time = time, **kwargs)
-            thumbnail_file = thumbnail.thumbnail_file
-        else:
-            thumbnail_file = None
+        parents[''] = output
+        thumbnail_file = self._make_thumbnail(parents, time, **kwargs)
 
         # add the metadata
         old_attrs = data.attrs if hasattr(data, 'attrs') else {}
@@ -793,27 +793,12 @@ class Dataset(ABC, metaclass=DatasetMeta):
         name = substitute_string(self.name, kwargs)
         metadata['name'] = str(name)
         output = self.set_metadata(output, time, time_format, **metadata)
+        
         # write the data
         self._write_data(output, output_file)
         
-        # get the info for the logs
-        other_to_log = {}
-        other_to_log['source_key'] = output_file
-        if thumbnail_file is not None:
-            other_to_log['thumbnail'] = thumbnail_file
-        if hasattr(self, 'log_opts'):
-            log_dict = self.get_log(output, options = self.log_opts, time = time, **kwargs, **other_to_log)
-            log_opts = self.log_opts.copy()
-            log_output = log_opts.pop('output')
-            self.write_log(log_dict, log_output, time, **kwargs)
-        
-        if hasattr(self, 'notif_opts'):
-            log_dict = self.get_log(output, time = time, **kwargs, **other_to_log)
-            this_layer = {'tags' : kwargs, 'time' : time, 'log' : log_dict, 'thumbnail' : thumbnail_file}
-            if 'layers' in self.notif_opts:
-                self.notif_opts['layers'].append(this_layer)
-            else:
-                self.notif_opts['layers'] = [this_layer]
+        # Write log if configured
+        self._make_log(output, output_file, thumbnail_file, time, **kwargs)
 
     def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         data = self.get_data(time, **kwargs)
@@ -839,6 +824,57 @@ class Dataset(ABC, metaclass=DatasetMeta):
     @abstractmethod
     def _rm_data(self, key: str):
         raise NotImplementedError
+    
+    def _make_thumbnail(self, data, time, output_file=None, **kwargs):
+        """
+        Helper method to generate thumbnail if manager is configured.
+        
+        Args:
+            data: Data to visualize
+            time: Timestamp
+            output_file: Optional output file path for annotation
+            **kwargs: Additional context
+            
+        Returns:
+            Thumbnail file path if generated, None otherwise
+        """
+        if not hasattr(self, 'thumbnail') or self.thumbnail is None:
+            return None
+        
+        # Add output file annotation if not already set and output_file is provided
+        if output_file is not None:
+            if 'annotation' in self.thumbnail.options and 'text' not in self.thumbnail.options['annotation']:
+                self.thumbnail.options['annotation']['text'] = os.path.basename(output_file)
+            elif 'annotation' not in self.thumbnail.options:
+                self.thumbnail.options['annotation'] = {'text': os.path.basename(output_file)}
+        
+        thumbnail = self.thumbnail.make_thumbnail(data=data, time=time, **kwargs)
+        return thumbnail.thumbnail_file
+    
+    def _make_log(self, output, output_file, thumbnail_file, time, **kwargs):
+        """
+        Helper method to write log if manager is configured.
+        
+        Args:
+            output: Output data that was written
+            output_file: Path where data was written
+            thumbnail_file: Path to thumbnail if generated
+            time: Timestamp
+            **kwargs: Additional context
+        """
+        if not hasattr(self, 'log') or self.log is None:
+            return
+        
+        log_dict = self.log.get_log(
+            self.name,
+            output,
+            self.get_time_signature,
+            source_key=output_file,
+            thumbnail=thumbnail_file,
+            time=time,
+            **kwargs
+        )
+        self.log.write_log(log_dict, time, **kwargs)
 
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         if not hasattr(self, 'parents') or self.parents is None:
@@ -1054,247 +1090,3 @@ class Dataset(ABC, metaclass=DatasetMeta):
             data.name = name
 
         return data
-
-    def parse_as_ds(self, value) -> 'Dataset':
-        if isinstance(value, str):
-            return Dataset.from_options({"key_pattern":value}, defaults = self._creation_kwargs.copy())
-        else:
-            return value
-
-    ## THUMBNAIL METHODS
-
-    def parse_thumbnail_options(self, thumbnail_options: dict) -> dict:
-        if 'colors' not in thumbnail_options or 'destination' not in thumbnail_options:
-            #TODO add a warning
-            return None
-        else:
-            colors = thumbnail_options.get('colors')
-            destination = thumbnail_options.get('destination')
-
-        if isinstance(colors, dict):
-            thumbnail_options['colors'] = {key: self.parse_as_ds(colors[key]) for key in colors}
-        else:
-            thumbnail_options['colors'] = self.parse_as_ds(colors)
-
-        thumbnail_options['destination'] = self.parse_as_ds(destination)
-
-        if 'overlay' in thumbnail_options:
-            thumbnail_options['overlay'] = self.parse_as_ds(thumbnail_options['overlay'])
-        
-        return thumbnail_options
-
-    @staticmethod
-    def make_thumbnail(data: xr.DataArray|dict[str,xr.DataArray]|gpd.GeoDataFrame, options: dict, destination: 'Dataset', **kwargs):
-        try:
-            from ..thumbnails import Thumbnail, ThumbnailCollection
-        except ImportError:
-            from thumbnails import Thumbnail, ThumbnailCollection
-
-        colors = options.pop('colors')
-        if isinstance(colors, dict):
-            col_defs       = [v.update(**kwargs) for v in colors.values()]
-            data           = list(data[k] for k in colors.keys())
-            this_thumbnail = ThumbnailCollection(data, col_defs)
-        else:
-            col_def = colors.update(**kwargs)
-            if isinstance(data, dict):
-                data = data['']
-            elif isinstance(data, gpd.GeoDataFrame):
-                field = options.pop('field')
-                data = data[['geometry', field]].rename(columns = {field: 'value'})
-            this_thumbnail = Thumbnail(data, col_def)
-        
-        destination_path = destination.get_key(**kwargs)
-        if hasattr(destination, 'tmp_dir'):
-            if destination_path.startswith('/'):
-                _path = destination_path[1:]
-            else:
-                _path = destination_path
-            tmp_destination = os.path.join(destination.tmp_dir, _path)
-            this_thumbnail.save(tmp_destination, **options)
-            destination.write_data(tmp_destination, **kwargs)
-        else:
-            this_thumbnail.save(destination_path, **options)
-        
-        return this_thumbnail
-
-    ## NOTIFICATION METHODS
-    def notify(self):
-        try:
-            from ..notification import EmailNotification
-        except ImportError:
-            from notification import EmailNotification
-
-        notification_options = self.notif_opts.copy()
-        layers = notification_options.pop('layers', None)
-        if layers is None:
-            return
-
-        from_address = notification_options.pop('from', None)
-        email_client = notification_options.pop('email_client', None)
-        email_login_env = notification_options.pop('email_login_env', None)
-        email_pwd_env = notification_options.pop('email_pwd_env', None)
-
-        notification = EmailNotification(from_address, email_client, email_login_env, email_pwd_env)
-
-        log_list = []
-        layers_string = ""
-        attachement_size = 0
-        other_thubmnails = []
-        for layer in layers:
-            tags = layer.pop('tags')
-            tags_string = ':' + ', '.join([f'{k}: {v}' for k,v in tags.items() if not (isinstance(v, str) and len(v) == 0)])
-            time = layer.pop('time')
-            log_dict = layer.pop('log')
-            log_list.append(log_dict)
-            thumbnail_file = layer.pop('thumbnail')
-            if thumbnail_file is not None:
-                this_size = os.path.getsize(thumbnail_file)
-                if attachement_size + this_size < 25e6:
-                    notification.attach(thumbnail_file)
-                    attachement_size += this_size
-                    attachment_string = '[thumbnail attached]'
-                else:
-                    other_thubmnails.append(thumbnail_file)
-                    attachment_string = f'\n    [thumbnail: {thumbnail_file}]'
-            else:
-                attachment_string = ''
-            layers_string += f" - {time} {tags_string} {attachment_string}\n"
-
-        header = 'Hello,\nthis is an automatic notification.\nSome new data is available and I thought you should know.\n'
-        main = f'\n\nHere is a list of the newly available layers for the dataset {self.name}:\n{layers_string}'
-        attach_str = 'Attached is a log file with more information for each layer.'
-        if len(other_thubmnails) > 0:
-            attach_str += 'Due to the size of the attachments, some thumbnails are not attached but are available for download.'
-        footer = '\n\nBest regards,\nYour friendly data provider.'
-
-        body = header + main + attach_str + footer
-
-        import json
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdirname:
-            now = dt.datetime.now()
-            log_file = os.path.join(tmpdirname, f'{self.name}_{now:%Y%m%d_%H%M%S}.json')
-            with open(log_file, 'w') as f:
-                json.dump(log_list, f, indent = 4)
-            notification.attach(log_file)
-
-            recipients = notification_options.pop('to')
-            subject = notification_options.pop('subject', f'[AUTOMATIC NOTIFICATION] {self.name} : new data available')
-            notification.send(recipients, subject, body = body)
-
-            rm_at_exit(tmpdirname)
-
-    ## LOGGING METHODS
-    def parse_log_options(self, value) -> dict:
-        # if value is a Dataset already it will have a "key_pattern" attribute
-        if isinstance(value, Dataset):
-            log_output= value.update(now = dt.datetime.now())
-            log_opts = {'output' : log_output}
-        # if it is a string, we use that as the key_pattern and the default from the creation kwargs of this dataset
-        elif isinstance(value, str):
-            log_output_file = substitute_string(value, {'now': dt.datetime.now()})
-            log_output = Dataset.from_options({"key_pattern":log_output_file},
-                                                defaults = self._creation_kwargs.copy())
-            log_opts = {'output' : log_output}
-        # if it is a dictionary, we use the "file" key as the "key_pattern" and the rest are options for the log
-        elif isinstance(value, dict):
-            log_output_file = substitute_string(value.pop('file'), {'now': dt.datetime.now()})
-            log_output = Dataset.from_options({'key_pattern' : log_output_file},
-                                                defaults = self._creation_kwargs.copy())
-            log_opts['output'] = log_output
-        return log_opts
-
-    def get_log(self, data: xr.DataArray, options = None, **kwargs) -> dict:
-        log_dict = {}
-
-        metadata = data.attrs
-
-        log_dict['dataset'] = self.name
-        log_dict['source_key'] = metadata.get('source_key', kwargs.get('source_key', None))
-        log_dict['thumbnail'] = kwargs.get('thumbnail', None)
-        log_dict['time'] = metadata.get('time', kwargs.get('time', None))
-        log_dict['time_produced'] = metadata.get('time_produced', dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-
-        kwargs.update(metadata)
-        for k, v in kwargs.items():
-            if k not in log_dict:
-                log_dict[k] = v
-        
-        kwargs.update(metadata)
-
-        # format the log_dict correctly
-        final_log_dict = {}
-        for key, value in log_dict.items():
-            if isinstance(value, TimeStep):
-                final_log_dict[key] = self.get_time_signature(value).strftime('%Y-%m-%d %H:%M:%S')
-            if isinstance(value, dt.datetime):
-                final_log_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-            elif isinstance(value, str) and len(value.strip()) > 0 and not value.startswith('__'):
-                final_log_dict[key] = value
-            elif isinstance(value, int): 
-                final_log_dict[key] = str(value)
-            elif isinstance(value, float):
-                final_log_dict[key] = str(round(value, 4))
-
-        final_log_dict['data_checks'] = {k: str(v) for k,v in self.qc_checks(data).items()}
-
-        return final_log_dict
-
-    @staticmethod
-    def write_log(log_dict, log_ds, time, **kwargs):
-        
-        if log_ds.format == 'txt':
-            # convert the log_dict to a string
-            log_str = '---'
-            for key, value in log_dict.items():
-                log_str += f'{key}: {value}\n'
-            log_str += '---'
-            log_output = log_str
-        elif log_ds.format == 'json':
-            log_output = log_dict
-
-        log_ds.write_data(log_output, time, append = True, **kwargs)
-
-    @staticmethod
-    def qc_checks(data: xr.DataArray|xr.Dataset) -> dict:
-        """
-        Perform quality checks on the data.
-        - max and min values
-        - percentage and absolute number of NaNs
-        - percentage and absolute number of zeros
-        - sum of values
-        - sum of absolute values
-        """
-        if isinstance(data, xr.Dataset):
-            full_dict = {}
-            var_list = list(data.data_vars.values())
-            for var in var_list:
-                full_dict[var.name] = Dataset.qc_checks(var)
-
-            qc_dict = {}
-            for k, d in full_dict.items():
-                for k_, v_ in d.items():
-                    qc_dict[f'{k}_{k_}'] = v_
-            
-            return qc_dict
-
-        data = data.values
-        qc_dict = {}
-        qc_dict['max'] = np.nanmax(data)
-        qc_dict['min'] = np.nanmin(data)
-        qc_dict['nans'] = int(np.sum(np.isnan(data)))
-        qc_dict['nans_pc'] = qc_dict['nans'] / data.size * 100
-        qc_dict['zeros'] = int(np.sum(data == 0))
-        if (data.size - qc_dict['nans']) != 0:
-            qc_dict['zeros_pc'] = qc_dict['zeros'] / (data.size - qc_dict['nans']) * 100
-        else:
-            qc_dict['zeros_pc'] = 0
-        qc_dict['sum'] = np.nansum(data)
-        qc_dict['sum_abs'] = np.nansum(np.abs(data))
-
-        for key, value in qc_dict.items():
-            if not isinstance(value, int):
-                qc_dict[key] = round(float(value), 4)
-
-        return qc_dict
-    
