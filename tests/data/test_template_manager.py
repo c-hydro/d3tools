@@ -6,7 +6,7 @@ import numpy as np
 import xarray as xr
 from pyproj import CRS
 
-from d3tools.data.template_manager import TemplateManager
+from d3tools.spatial.template_manager import TemplateManager
 
 
 @pytest.fixture

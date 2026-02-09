@@ -11,7 +11,7 @@ import json
 import numpy as np
 import xarray as xr
 from pathlib import Path
-from .io_utils import set_type
+from ..data.io_utils import set_type
 from ..errors import TemplateValidationError, TemplateMemoryError
 
 

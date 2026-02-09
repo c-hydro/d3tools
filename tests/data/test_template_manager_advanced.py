@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from pyproj import CRS
 
-from d3tools.data.template_manager import TemplateManager
+from d3tools.spatial.template_manager import TemplateManager
 from d3tools.errors import TemplateValidationError
 
 
