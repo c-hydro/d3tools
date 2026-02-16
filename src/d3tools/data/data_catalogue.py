@@ -15,6 +15,7 @@ import datetime as dt
 import os
 
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
+from ..cases.utils import withcases
 
 if TYPE_CHECKING:
     from .dataset import Dataset
@@ -49,6 +50,7 @@ class DataCatalogue:
     def __repr__(self):
         return f"DataCatalogue({self.dataset.name})"
     
+    @withcases
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs) -> str:
         """
         Get the directory prefix for file discovery.
@@ -88,6 +90,7 @@ class DataCatalogue:
         
         return prefix
     
+    @withcases
     def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs) -> list[str]:
         """
         Get list of available file keys/paths.
@@ -145,6 +148,7 @@ class DataCatalogue:
         
         return files
     
+    @withcases
     def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs) -> dict[str, list]:
         """
         Extract all unique tags and times from available files.
@@ -234,6 +238,7 @@ class DataCatalogue:
                 if time not in all_times and time_range.contains(time):
                     yield time
 
+    @withcases
     def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
         """
         Get a list of times between two dates.
@@ -255,6 +260,7 @@ class DataCatalogue:
         """
         return list(self._get_times(time_range, **kwargs))
 
+    @withcases
     def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
         """
         Get a list of TimeStep objects within a time range.
@@ -397,6 +403,7 @@ class DataCatalogue:
         
         return boundary_month
 
+    @withcases
     def get_last_date(self, now=None, n=1, lim=None, **kwargs) -> dt.datetime | list[dt.datetime] | None:
         """
         Find the most recent available date(s).
@@ -517,6 +524,7 @@ class DataCatalogue:
         # No data found
         return None
 
+    @withcases
     def get_first_date(self, start=None, n=1, **kwargs) -> dt.datetime | list[dt.datetime] | None:
         """
         Find the earliest available date(s).
@@ -577,6 +585,7 @@ class DataCatalogue:
         else:
             return first_date
 
+    @withcases
     def get_last_ts(self, **kwargs) -> TimeStep:
         """
         Get the most recent timestep.
@@ -613,6 +622,7 @@ class DataCatalogue:
         else:
             return timestep.from_date(last_date)
 
+    @withcases
     def get_first_ts(self, **kwargs) -> TimeStep:
         """
         Get the earliest timestep.
@@ -648,6 +658,7 @@ class DataCatalogue:
         else:
             return timestep.from_date(first_date)
 
+    @withcases
     def get_start(self, agg=False, **kwargs) -> dt.datetime | None:
         """
         Get the start of the available data.
@@ -677,6 +688,7 @@ class DataCatalogue:
         else:
             return self.get_first_date(**kwargs)
 
+    @withcases
     def check_data(self, time: Optional[dt.datetime] = None, **kwargs) -> bool:
         """
         Check if data is available for a given time and tags.
@@ -727,7 +739,8 @@ class DataCatalogue:
             if not self.check_data(time, tile=tile, **kwargs):
                 return False
         return True
-    
+
+    @withcases
     def find_times(self, times: list[dt.datetime], id: bool = False, rev: bool = False, **kwargs) -> list[dt.datetime] | list[int]:
         """
         Find which times from a list are available in the catalogue.
@@ -779,6 +792,7 @@ class DataCatalogue:
         else:
             return [times[i] for i in ids]
 
+    @withcases
     def find_tiles(self, time: Optional[dt.datetime] = None, rev: bool = False, **kwargs) -> list[str]:
         """
         Find which tiles are available for a given time.

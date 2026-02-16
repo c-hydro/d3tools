@@ -1,12 +1,8 @@
 from typing import Optional, Iterator
 import copy
 
-try:
-    from .case import Case, get_cases
-    from .utils import rand_str
-except ImportError:
-    from case import Case, get_cases
-    from utils import rand_str
+from .case import Case, get_cases
+from .utils import rand_str, split_id, get_parents
 
 class CaseManager():
 
@@ -163,67 +159,3 @@ class CaseManager():
             else:
                 yield case
             yield from self.iterate_subtree(child, depth - 1, get_layer=get_layer)
-
-
-def split_id(id, sep = '/', bracket = ('[', ']')):
-    parts = []
-    bracket_level = 0
-    current_part = []
-
-    for char in id:
-        if char == bracket[0]:
-            bracket_level += 1
-        elif char == bracket[1]:
-            bracket_level -= 1
-        elif char == sep and bracket_level == 0:
-            parts.append(''.join(current_part))
-            current_part = []
-            continue
-        current_part.append(char)
-
-    parts.append(''.join(current_part))
-    return parts
-
-def get_parents(id):
-    id_sep = split_id(id)
-    if len(id_sep) == 1:
-        return []
-
-    parents = []
-    for i, piece in enumerate(id_sep[:-1]):
-        if '&' in piece:
-            more_parents = []
-            for subpiece in split_id(piece,'&'):
-                if subpiece.startswith('[') and subpiece.endswith(']'):
-                    subpiece = subpiece[1:-1]
-                more_parents.append(subpiece)
-            for parent in more_parents:
-                parents.extend(get_parents(parent))
-            parents.extend(more_parents)
-        else:
-            parents.append('/'.join(id_sep[:i+1]))
-
-    # remove duplicates
-    parents = list(dict.fromkeys(parents))
-
-    # order by length
-    parents.sort(key = lambda x: len(x))
-
-    return parents
-
-if __name__ == '__main__':
-    options = {
-        'a': {'a1': 1, 'a2': 2, 'a3': 3},
-        'b': {'b1': 3, 'b2': 4}
-    }
-
-    cm = CaseManager(options)
-
-    cm.add_layer({'c': {'c1':5, 'c2': 6}})
-    cm.add_layer({'d': {'d1':7, 'd2': 8}}, merge='a')
-    cm.add_layer({'e': {'e1':9, 'e2': 10}})
-    cm.add_layer({'f': {'f1':11, 'f2': 12}})
-    
-    first_id = list(cm[0].keys())[0]
-    for case, layer in cm.iterate_tree(get_layer = True):
-        print(case, layer)
