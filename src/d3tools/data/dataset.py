@@ -9,6 +9,7 @@ import re
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format
+from .data_catalog import DataCatalog
 
 # Cache for dynamically created classes (avoids recreating same class combinations)
 _CLASS_CACHE = {}
@@ -35,6 +36,7 @@ class Dataset(metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
+    # region: INITIALIZATION AND CONFIGURATION METHODS
     def _get_or_derive_name(self, kwargs: dict) -> str:
         """Get name from kwargs or derive from key_pattern."""
         if 'name' in kwargs:
@@ -136,13 +138,18 @@ class Dataset(metaclass=DatasetMeta):
         # Initialize format-specific properties (e.g., template manager for raster)
         self._init_format_properties()
         
+        # Initialize data catalog for discovery operations
+        self.catalog = DataCatalog(self)
+        
         # Store remaining options and initialize tags
         self.options = kwargs
         self.tags = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
+    # endregion
 
+    # region: UPDATE AND COPY METHODS
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -194,8 +201,9 @@ class Dataset(metaclass=DatasetMeta):
         if hasattr(self, 'thumbnail'):
             new_dataset.thumbnail = self.thumbnail
         return new_dataset
+    # endregion
 
-    ## CLASS METHODS FOR FACTORY
+    # region: CLASS METHODS FOR FACTORY
     def __new__(cls, **kwargs):
         """Create Dataset instance of the appropriate subclass based on type."""
         # Step 1: Detect format BEFORE creating instance
@@ -278,8 +286,9 @@ class Dataset(metaclass=DatasetMeta):
             return cls.type
         else:
             return cls._defaults['type']
+    # endregion
     
-    ## PROPERTIES
+    # region PROPERTIES
     @property
     def format(self):
         return self._format
@@ -355,39 +364,6 @@ class Dataset(metaclass=DatasetMeta):
         if hasattr(self, 'agg'):
             self._timestep = self._timestep.with_agg(self.agg)
 
-    def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        
-        if isinstance(time, TimeRange):
-            months = time.months
-            if len(months) > 1:
-                files = []
-                for month in months:
-                    t_start =  max(month.start, time.start)
-                    t_end   =  min(month.end, time.end)
-                    files.extend(self.get_available_keys(TimeRange(t_start, t_end), **kwargs))
-                return files    
-
-        prefix = self.get_prefix(time, **kwargs)
-        if not self._check_data(prefix):
-            return []
-        if isinstance(time, dt.datetime):
-            time = TimeRange(time, time)
-
-        key_pattern = self.get_key(time = None, **kwargs)
-        files = []
-        for file in self._walk(prefix):
-            try:
-                this_time, _ = extract_date_and_tags(file, key_pattern)
-                if time is None or (time is not None and time.contains(this_time)) or not self.has_time:
-                    files.append(file)
-            except ValueError:
-                pass
-        
-        return files
-
-    def _walk(self, prefix: str) -> Generator[str, None, None]:
-        raise NotImplementedError
-
     @property
     def is_static(self):
         return not '{' in self.key_pattern and not self.has_time
@@ -399,260 +375,63 @@ class Dataset(metaclass=DatasetMeta):
     @property
     def available_tags(self):
         return self.get_available_tags()
+    # endregion
 
+    # region METHODS DELEGATED TO CATALOG
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        if not isinstance(time, TimeRange):
-            prefix = self.get_key(time = time, **kwargs)
-        else:
-            start = time.start
-            end = time.end
-            prefix = self.get_key(time = None, **kwargs)
-            if start.year == end.year:
-                prefix = prefix.replace('%Y', str(start.year))
-                if start.month == end.month:
-                    prefix = prefix.replace('%m', f'{start.month:02d}')
-                    if start.day == end.day:
-                        prefix = prefix.replace('%d', f'{start.day:02d}')
-                        prefix = prefix.replace('%j', f'{start.timetuple().tm_yday:03d}')  # Substitute %j if present
-
-        prefix = os.path.dirname(prefix)
-        while '%' in prefix or '{' in prefix:
-            prefix = os.path.dirname(prefix)
-        
-        return prefix
+        """Get the directory prefix for file discovery. Delegates to catalog."""
+        return self.catalog.get_prefix(time=time, **kwargs)
+    
+    def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        """Get list of available file keys/paths. Delegates to catalog."""
+        return self.catalog.get_available_keys(time=time, **kwargs)
 
     def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        if self.time_signature == 'end+1' and time is not None:
-            if isinstance(time, dt.datetime):
-                time = time + dt.timedelta(days = 1)
-            elif isinstance(time, TimeRange):
-                time = TimeRange(time.start + dt.timedelta(days = 1), time.end + dt.timedelta(days = 1))
-        
-        all_keys = self.get_available_keys(time, **kwargs)
-        all_tags = {}
-        all_dates = set()
-        for key in all_keys:
-            this_date, this_tags = extract_date_and_tags(key, self.key_pattern)
-            
-            for tag in this_tags:
-                if tag not in all_tags:
-                    all_tags[tag] = set()
-                all_tags[tag].add(this_tags[tag])
-            all_dates.add(this_date)
-        
-        all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
-        all_tags['time'] = list(all_dates)
+        """Extract all unique tags and times from available files. Delegates to catalog."""
+        return self.catalog.get_available_tags(time=time, **kwargs)
 
-        if self.time_signature == 'end+1':
-            all_tags['time'] = [t - dt.timedelta(days = 1) for t in all_tags['time']]
-            all_tags['time'].sort()
-
-        return all_tags
-
-    def get_last_date(self, now = None, n = 1, lim = None, **kwargs) -> dt.datetime|list[dt.datetime]|None:
-        if now is None:
-            now = dt.datetime.now()
-        
-        # Find ANY date first using exponential backoff
-        any_date = self.get_any_date(now=now, lim=lim, **kwargs)
-        if any_date is None:
-            return None
-        
-        # Binary search between any_date and now to find the last date
-        start_month = Month(any_date.year, any_date.month)
-        end_month = Month(now.year, now.month)
-        last_month_with_data = start_month
-        
-        while start_month <= end_month:
-            # Calculate midpoint
-            months_diff = (end_month.start.year - start_month.start.year) * 12 + \
-                         (end_month.start.month - start_month.start.month)
-            
-            if months_diff <= 1:
-                # Adjacent or same months - we're done
-                break
-            
-            mid_months = months_diff // 2
-            mid_month = start_month + mid_months
-            
-            # Check if mid month has data
-            mid_times = self.get_times(mid_month, **kwargs)
-            if len(mid_times) > 0:
-                # Data exists at midpoint, search forward
-                last_month_with_data = mid_month
-                start_month = mid_month
-            else:
-                # No data at midpoint, search backward
-                end_month = mid_month - 1
-        
-        # Now collect n dates from last_month_with_data and nearby months
-        last_date = []
-        search_month = last_month_with_data
-        end_search = Month(now.year, now.month)
-        
-        # Search forward from last known month
-        while search_month <= end_search and len(last_date) < n * 3:  # Get extra to ensure we have enough
-            month_times = self.get_times(search_month, **kwargs)
-            if len(month_times) > 0:
-                valid_time = [t for t in month_times if t <= now]
-                last_date.extend(valid_time)
-            search_month = search_month + 1
-        
-        # Sort and take the most recent n
-        last_date.sort(reverse=True)
-        last_date = last_date[:n]
-        
-        if len(last_date) == 0:
-            return None
-        if n == 1:
-            return last_date[0]
-        else:
-            return last_date
-
-    def get_any_date(self, now=None, lim=None, **kwargs) -> dt.datetime|None:
-        """
-        Find ANY available date quickly (used for template extraction).
-        Much faster than get_last_date when you don't care which file.
-        
-        Returns immediately on first match.
-        """
-        if now is None:
-            now = dt.datetime.now()
-        
-        # Default limit: 5 years back (reasonable for most datasets)
-        if lim is None:
-            lim = now - dt.timedelta(days=5*365)
-        
-        # Find any month with data using exponential backoff
-        search_month = Month(now.year, now.month)
-        months_back = 0
-        jump_sizes = [1, 2, 3, 6, 12, 24, 48, 96]  # Exponentially increasing jumps
-        
-        for jump in jump_sizes:
-            if search_month.start < lim:
-                break
-            
-            month_times = self.get_times(search_month, **kwargs)
-            if len(month_times) > 0:
-                valid_times = [t for t in month_times if t <= now]
-                return valid_times[0] if valid_times else None
-            
-            months_back += jump
-            search_month = Month(now.year, now.month) - months_back  
-
-    def get_last_ts(self, **kwargs) -> TimeStep:
-
-        last_date = self.get_last_date(**kwargs)
-        if last_date is None:
-            return None
-        
-        if hasattr(self, 'timestep') and self.timestep is not None:
-            timestep = self.timestep
-        else:
-            kwargs.pop('now', None)
-            other_dates = self.get_last_date(now = last_date, n = 3, **kwargs)
-            timestep = estimate_timestep(other_dates)
-            if timestep is None:
-                return None
-
-        if self.time_signature == 'end+1':
-            return timestep.from_date(last_date) -1
-        else:
-            return timestep.from_date(last_date)
+    def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
+        """Generate times within a time range. Delegates to catalog."""
+        return self.catalog._get_times(time_range, **kwargs)
 
     def estimate_timestep(self, date_sample = None, **kwargs) -> TimeStep:
-        if hasattr(self, 'timestep') and self.timestep is not None:
-            return self.timestep
-        
-        if date_sample is None or len(date_sample) == 0:
-            date_sample = self.get_last_date(n = 8, **kwargs)
-        elif len(date_sample) < 5:
-            other_dates = self.get_last_date(n = 8 - len(date_sample), now = min(date_sample), **kwargs)  or []
-            date_sample = other_dates + date_sample
+        """Estimate the dataset's timestep from a sample of dates. Delegates to catalog."""
+        return self.catalog.estimate_timestep(date_sample, **kwargs)
 
-        timestep = estimate_timestep(date_sample)
-        if timestep is not None and hasattr(self, 'agg'):
-            timestep = timestep.with_agg(self.agg)
-        
-        self.timestep = timestep
-        return timestep
+    @withcases
+    def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
+        """Get a list of times between two dates. Delegates to catalog."""
+        return self.catalog.get_times(time_range, **kwargs)
+
+    @withcases
+    def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
+        """Get a list of TimeStep objects within a time range. Delegates to catalog."""
+        return self.catalog.get_timesteps(time_range, **kwargs)
+
+    def get_any_date(self, now=None, lim=None, **kwargs) -> dt.datetime|None:
+        """Find ANY available date quickly. Delegates to catalog."""
+        return self.catalog.get_any_date(now=now, lim=lim, **kwargs) 
+
+    def get_last_date(self, now = None, n = 1, lim = None, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        """Find the most recent available date(s). Delegates to catalog."""
+        return self.catalog.get_last_date(now=now, n=n, lim=lim, **kwargs)
+
+    def get_last_ts(self, **kwargs) -> TimeStep:
+        """Get the most recent timestep. Delegates to catalog."""
+        return self.catalog.get_last_ts(**kwargs)
 
     def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
-        if start is None:
-            start = dt.datetime(1900, 1, 1)
-
-        end = self.get_last_date(**kwargs)
-        if end is None:
-            return None
-        
-        start_month = Month(start.year, start.month)
-        end_month   = Month(end.year, end.month)
-
-        # first look for a suitable time to start the search
-        while True:
-            midpoint = start_month.start + (end_month.end - start_month.start) / 2
-            mid_month = Month(midpoint.year, midpoint.month)
-            mid_month_times = self.get_times(mid_month, **kwargs)
-            # if we do actually find some times in the month
-            if len(mid_month_times) > 0:
-
-                    # end goes to midpoint
-                    end_month = mid_month
-            # if we didn't find any times in the month 
-            else:
-                # we start from the midpoint this time
-                start_month = mid_month
-
-            if start_month + 1 == end_month:
-                break
-        
-        first_date = []
-        while len(first_date) < n and start_month.end <= end:
-            this_month_times = self.get_times(start_month, **kwargs)
-            valid_time = [t for t in this_month_times if t >= start]
-            valid_time.sort()
-            first_date.extend(valid_time)
-
-            start_month = start_month + 1
-
-        if len(first_date) == 0:
-            return None
-        if n == 1:
-            return first_date[0]
-        else:
-            return first_date
+        """Find the earliest available date(s). Delegates to catalog."""
+        return self.catalog.get_first_date(start=start, n=n, **kwargs)
 
     def get_first_ts(self, **kwargs) -> TimeStep:
-
-        first_date = self.get_first_date(**kwargs)
-        if first_date is None:
-            return None
-        
-        if hasattr(self, 'timestep') and self.timestep is not None:
-            timestep = self.timestep
-        else:
-            other_dates = self.get_first_date(start = first_date, n = 8, **kwargs)
-            timestep = estimate_timestep(other_dates)
-            if timestep is None:
-                return None
-
-        if self.time_signature == 'end+1':
-            return timestep.from_date(first_date) -1
-        else:
-            return timestep.from_date(first_date)
+        """Get the earliest timestep. Delegates to catalog."""
+        return self.catalog.get_first_ts(**kwargs)
 
     def get_start(self, agg=True, **kwargs) -> dt.datetime:
-        """
-        Get the start of the available data.
-        """
-        first_ts = self.get_first_ts(**kwargs)
-        if first_ts is not None:
-            if agg:
-                return first_ts.agg_range.start
-            else:
-                return first_ts.start
-        else:
-            return self.get_first_date(**kwargs)
+        """Get the start of the available data. Delegates to catalog."""
+        return self.catalog.get_start(agg=agg, **kwargs)
+    # endregion
 
     def is_subdataset(self, other: 'Dataset') -> bool:
         key = self.get_key(time = dt.datetime(1900,1,1))
@@ -662,7 +441,7 @@ class Dataset(metaclass=DatasetMeta):
         except ValueError:
             return False
 
-    ## TIME-SIGNATURE MANAGEMENT
+    # region: TIME-SIGNATURE MANAGEMENT
     @property
     def time_signature(self):
         if not hasattr(self, '_time_signature'):
@@ -724,8 +503,9 @@ class Dataset(metaclass=DatasetMeta):
                             time = time.replace(month = 1)
 
         return time
+    # endregion
 
-    ## INPUT/OUTPUT METHODS
+    # region: INPUT/OUTPUT METHODS
 
     # _read_data, _write_data and _rm_data are implemented in the subclasses (LocalDataset, S3Dataset, etc.)
     # to handle the actual reading and writing of data.
@@ -739,6 +519,11 @@ class Dataset(metaclass=DatasetMeta):
 
     @abstractmethod
     def _rm_data(self, key: str):
+        raise NotImplementedError
+    
+    # _walk is implemented in the subclasses to handle the actual walking of the directory structure for discovery operations.
+    @abstractmethod
+    def _walk(self, prefix: str) -> Generator[str, None, None]:
         raise NotImplementedError
 
     # These are the main methods for getting and writing data, which handle the logic of checking availability,
@@ -832,7 +617,9 @@ class Dataset(metaclass=DatasetMeta):
     def move_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         self.copy_data(new_key_pattern, time, **kwargs)
         self.rm_data(time, **kwargs)
+    # endregion
 
+    # region: HELPER METHODS FOR THUMBNAIL AND LOG MANAGERS
     def _make_thumbnail(self, data, time, output_file=None, **kwargs):
         """
         Helper method to generate thumbnail if manager is configured.
@@ -883,7 +670,9 @@ class Dataset(metaclass=DatasetMeta):
             **kwargs
         )
         self.log.write_log(log_dict, time, **kwargs)
+    # endregion
 
+    # region: METHODS TO MAKE DATA FROM PARENTS
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         if not hasattr(self, 'parents') or self.parents is None:
             raise ValueError(f'No parents for {self.name}')
@@ -894,55 +683,7 @@ class Dataset(metaclass=DatasetMeta):
             self.write_data(data, time, **kwargs)
         return data
 
-    ## METHODS TO CHECK DATA AVAILABILITY
-    def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-
-        all_times = self.get_available_tags(time_range, **kwargs)['time']
-        all_times.sort()
-        for time in all_times:
-            if time_range.contains(time):
-                yield time
-        
-        if hasattr(self, 'parents') and self.parents is not None:
-            parent_times = [set(parent.get_times(time_range, **kwargs)) for parent in self.parents.values()]
-            # get the intersection of all times
-            parent_times = set.intersection(*parent_times)
-            for time in parent_times:
-                if time not in all_times and time_range.contains(time):
-                    yield time
-
-    @withcases
-    def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
-        """
-        Get a list of times between two dates.
-        """
-        return list(self._get_times(time_range, **kwargs))
-
-    def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
-
-        timestep = self.estimate_timestep()
-        window = TimeWindow(1, timestep.unit)
-
-        if self.time_signature == 'start':
-            _time_range = time_range.extend(window, before = True)
-        elif self.time_signature.startswith('end'):
-            _time_range = time_range.extend(window, before = False)
-            if self.time_signature == 'end+1':
-                _time_range = time_range.extend(TimeWindow(1, 'd'), before = False)
-
-        times = self.get_times(_time_range, **kwargs)
-        if self.time_signature == 'end+1':
-            times = [t - dt.timedelta(days = 1) for t in times]
-        
-        timesteps = [timestep.from_date(t) for t in times]
-        for ts in timesteps:
-            end = time_range.end
-            if end.hour == 0 and end.minute == 0:
-                end = end + dt.timedelta(minutes = 1439)
-            if ts.start > end or ts.end < time_range.start:
-                timesteps.remove(ts)
-
-        return timesteps
+    # endregion
 
     @withcases
     def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
