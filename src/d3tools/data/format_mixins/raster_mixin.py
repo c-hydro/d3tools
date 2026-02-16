@@ -72,7 +72,7 @@ class RasterMixin(FormatMixin):
         Returns:
             Processed xarray ready for use
         """
-        from ..io_utils import straighten_data, set_type
+        from ..io_utils_raster import straighten_data, set_type
 
         # Ensure data has descending latitudes
         data = straighten_data(data)
@@ -111,7 +111,7 @@ class RasterMixin(FormatMixin):
         Returns:
             Prepared xarray ready for writing
         """
-        from ..io_utils import straighten_data, set_type
+        from ..io_utils_raster import straighten_data, set_type
         
         # Ensure there is a template available
         try:
@@ -153,7 +153,7 @@ class RasterMixin(FormatMixin):
         if self.format == 'geotiff':
             if data.chunks is not None:
                 # If data is chunked, save it in chunks
-                from ..io_utils import save_raster_in_chunks
+                from ..io_utils_raster import save_raster_in_chunks
                 save_raster_in_chunks(data, path)
             else:
                 # If not chunked, write directly
@@ -211,7 +211,7 @@ class RasterMixin(FormatMixin):
                 else:
                     return None
             
-            from ..io_utils import straighten_data
+            from ..io_utils_raster import straighten_data
             data = straighten_data(data)
             self.set_template(data, tile=tile)
             template_dict = self.get_template_dict(make_it=False, tile=tile, **kwargs)
