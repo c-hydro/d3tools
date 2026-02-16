@@ -6,9 +6,9 @@ from abc import ABCMeta, abstractmethod
 import os
 import re
 
-from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
+from ..timestepping import TimeRange, TimeStep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
-from .io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format
+from .io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format, read_from_file
 from .data_catalogue import DataCatalogue
 
 # Cache for dynamically created classes (avoids recreating same class combinations)
@@ -139,60 +139,6 @@ class Dataset(metaclass=DatasetMeta):
         return f"{self.__class__.__name__}({self.name})"
     # endregion
 
-    # region: UPDATE AND COPY METHODS
-    def update(self, in_place = False, **kwargs):
-        new_name = substitute_string(self.name, kwargs)
-        new_key_pattern = substitute_string(self.key_pattern, kwargs)
-
-        if in_place:
-            self.name = new_name
-            self.key_pattern = self.get_key(**kwargs)
-            self.tags.update(kwargs)
-
-            if hasattr(self, 'parents') and self.parents is not None:
-                new_parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
-                self.parents = new_parents
-
-            return self
-        else:
-            new_options = self.options.copy()
-            new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
-            # Use original storage class, not the dynamic class (avoids MRO conflicts)
-            original_class = getattr(self, '_original_class', self.__class__)
-            new_dataset = original_class(**new_options)
-
-            if hasattr(self, 'template_manager'):
-                new_dataset.template_manager = self.template_manager
-            if hasattr(self, '_tile_names'):
-                new_dataset._tile_names = self._tile_names
-
-            new_dataset.time_signature = self.time_signature
-            if hasattr(self, 'timestep') and self.timestep is not None:
-                new_dataset.timestep = self.timestep
-            if hasattr(self, 'agg'):
-                new_dataset.agg = self.agg
-
-            if hasattr(self, 'parents') and self.parents is not None:
-                new_dataset.parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
-                new_dataset.fn = self.fn
-            
-            new_tags = self.tags.copy()
-            new_tags.update(kwargs)
-            new_dataset.tags = new_tags
-            new_dataset.nan_value = self.nan_value
-            return new_dataset
-
-    def copy(self, template = False):
-        new_dataset = self.update()
-        if template:
-            new_dataset.template_manager = self.template_manager
-        if hasattr(self, 'log'):
-            new_dataset.log = self.log
-        if hasattr(self, 'thumbnail'):
-            new_dataset.thumbnail = self.thumbnail
-        return new_dataset
-    # endregion
-
     # region: CLASS METHODS FOR FACTORY
     def __new__(cls, **kwargs):
         """Create Dataset instance of the appropriate subclass based on type."""
@@ -277,8 +223,72 @@ class Dataset(metaclass=DatasetMeta):
         else:
             return cls._defaults['type']
     # endregion
+
+    # region: METHODS TO COPY, UPDATE AND COMPARE DATASETS
+    def update(self, in_place = False, **kwargs):
+        new_name = substitute_string(self.name, kwargs)
+        new_key_pattern = substitute_string(self.key_pattern, kwargs)
+
+        if in_place:
+            self.name = new_name
+            self.key_pattern = self.get_key(**kwargs)
+            self.tags.update(kwargs)
+
+            if hasattr(self, 'parents') and self.parents is not None:
+                new_parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
+                self.parents = new_parents
+
+            return self
+        else:
+            new_options = self.options.copy()
+            new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
+            # Use original storage class, not the dynamic class (avoids MRO conflicts)
+            original_class = getattr(self, '_original_class', self.__class__)
+            new_dataset = original_class(**new_options)
+
+            if hasattr(self, 'template_manager'):
+                new_dataset.template_manager = self.template_manager
+            if hasattr(self, '_tile_names'):
+                new_dataset._tile_names = self._tile_names
+
+            new_dataset.time_signature = self.time_signature
+            if hasattr(self, 'timestep') and self.timestep is not None:
+                new_dataset.timestep = self.timestep
+            if hasattr(self, 'agg'):
+                new_dataset.agg = self.agg
+
+            if hasattr(self, 'parents') and self.parents is not None:
+                new_dataset.parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
+                new_dataset.fn = self.fn
+            
+            new_tags = self.tags.copy()
+            new_tags.update(kwargs)
+            new_dataset.tags = new_tags
+            new_dataset.nan_value = self.nan_value
+            return new_dataset
+
+    def copy(self, template = False):
+        new_dataset = self.update()
+        if template:
+            new_dataset.template_manager = self.template_manager
+        if hasattr(self, 'log'):
+            new_dataset.log = self.log
+        if hasattr(self, 'thumbnail'):
+            new_dataset.thumbnail = self.thumbnail
+        return new_dataset
+
+    def is_subdataset(self, other: 'Dataset') -> bool:
+        key = self.get_key(time = dt.datetime(1900,1,1))
+        try:
+            extract_date_and_tags(key, other.key_pattern)
+            return True
+        except ValueError:
+            return False
+
+    # endregion
     
-    # region PROPERTIES
+    # region: PROPERTIES
+        # format
     @property
     def format(self):
         return self._format
@@ -287,9 +297,45 @@ class Dataset(metaclass=DatasetMeta):
     def format(self, value):
         self._format = value
 
+        # timestepping and time-signature
     @property
-    def has_version(self):
-        return '{file_version}' in self.key_pattern
+    def has_time(self):
+        return '%' in self.key_pattern
+    
+    @property
+    def timestep(self):
+        return self._timestep
+    
+    @timestep.setter
+    def timestep(self, value):
+        self._timestep = value
+        if hasattr(self, 'agg'):
+            self._timestep = self._timestep.with_agg(self.agg)
+
+    @property
+    def agg(self):
+        return self._agg
+
+    @agg.setter
+    def agg(self, value):
+        self._agg = value
+        if hasattr(self, 'timestep') and self.timestep is not None:
+            self.timestep = self.timestep.with_agg(value)
+
+    @property
+    def time_signature(self):
+        if not hasattr(self, '_time_signature'):
+            self._time_signature = self._defaults['time_signature']
+        
+        return self._time_signature
+        
+    @time_signature.setter
+    def time_signature(self, value):
+        if value not in ['start', 'end', 'end+1']:
+            raise ValueError(f"Invalid time signature: {value}")
+        self._time_signature = value
+
+        # tile management
 
     @property
     def has_tiles (self):
@@ -308,162 +354,44 @@ class Dataset(metaclass=DatasetMeta):
     @tile_names.setter
     def tile_names(self, value):
         if isinstance(value, str):
-            self._tile_names = self.get_tile_names_from_file(value)
+            self._tile_names = [l.strip() for l in read_from_file(value)]
         elif isinstance(value, list) or isinstance(value, tuple):
             self._tile_names = list(value)
         else:
             raise ValueError('Invalid tile names.')
-        
-    def get_tile_names_from_file(self, filename: str) -> list[str]:
-        with open(filename, 'r') as f:
-            return [l.strip() for l in f.readlines()]
 
     @property
     def ntiles(self):
         return len(self.tile_names)
 
-    @property
-    def key_pattern(self):
-        raise NotImplementedError
-
-    @key_pattern.setter
-    def key_pattern(self, value):
-        raise NotImplementedError
-
-    @property
-    def available_keys(self):
-        return self.get_available_keys()
-    
-    @property
-    def agg(self):
-        return self._agg
-
-    @agg.setter
-    def agg(self, value):
-        self._agg = value
-        if hasattr(self, 'timestep') and self.timestep is not None:
-            self.timestep = self.timestep.with_agg(value)
-
-    @property
-    def timestep(self):
-        return self._timestep
-    
-    @timestep.setter
-    def timestep(self, value):
-        self._timestep = value
-        if hasattr(self, 'agg'):
-            self._timestep = self._timestep.with_agg(self.agg)
+        # tags
 
     @property
     def is_static(self):
         return not '{' in self.key_pattern and not self.has_time
 
     @property
-    def has_time(self):
-        return '%' in self.key_pattern
+    def has_version(self):
+        return '{file_version}' in self.key_pattern
 
     @property
     def available_tags(self):
         return self.get_available_tags()
-    # endregion
-
-    # region METHODS TO QUERY THE CATALOGUE FOR AVAILABLE DATA AND TIMES [DELEGATED TO CATALOGUE]
-    def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        """Get the directory prefix for file discovery. Delegates to catalogue."""
-        return self.catalogue.get_prefix(time=time, **kwargs)
     
-    def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        """Get list of available file keys/paths. Delegates to catalogue."""
-        return self.catalogue.get_available_keys(time=time, **kwargs)
-
-    def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        """Extract all unique tags and times from available files. Delegates to catalogue."""
-        return self.catalogue.get_available_tags(time=time, **kwargs)
-
-    def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        """Generate times within a time range. Delegates to catalogue."""
-        return self.catalogue._get_times(time_range, **kwargs)
-
-    def estimate_timestep(self, date_sample = None, **kwargs) -> TimeStep:
-        """Estimate the dataset's timestep from a sample of dates. Delegates to catalogue."""
-        return self.catalogue.estimate_timestep(date_sample, **kwargs)
-
-    def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
-        """Get a list of times between two dates. Delegates to catalogue."""
-        return self.catalogue.get_times(time_range, **kwargs)
-
-    def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
-        """Get a list of TimeStep objects within a time range. Delegates to catalogue."""
-        return self.catalogue.get_timesteps(time_range, **kwargs)
-
-    def get_any_date(self, now=None, lim=None, **kwargs) -> dt.datetime|None:
-        """Find ANY available date quickly. Delegates to catalogue."""
-        return self.catalogue.get_any_date(now=now, lim=lim, **kwargs) 
-
-    def get_last_date(self, now = None, n = 1, lim = None, **kwargs) -> dt.datetime|list[dt.datetime]|None:
-        """Find the most recent available date(s). Delegates to catalogue."""
-        return self.catalogue.get_last_date(now=now, n=n, lim=lim, **kwargs)
-
-    def get_last_ts(self, **kwargs) -> TimeStep:
-        """Get the most recent timestep. Delegates to catalogue."""
-        return self.catalogue.get_last_ts(**kwargs)
-
-    def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
-        """Find the earliest available date(s). Delegates to catalogue."""
-        return self.catalogue.get_first_date(start=start, n=n, **kwargs)
-
-    def get_first_ts(self, **kwargs) -> TimeStep:
-        """Get the earliest timestep. Delegates to catalogue."""
-        return self.catalogue.get_first_ts(**kwargs)
-
-    def get_start(self, agg=True, **kwargs) -> dt.datetime:
-        """Get the start of the available data. Delegates to catalogue."""
-        return self.catalogue.get_start(agg=agg, **kwargs)
+        # availability
     
-    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
-        """Check if data is available for a given time. Delegates to catalogue."""
-        return self.catalogue.check_data(time, **kwargs)
-    
-    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
-        """Find the times for which data is available. Delegates to catalogue."""
-        return self.catalogue.find_times(times, id=id, rev=rev, **kwargs)
-
-    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False, **kwargs) -> list[str]:
-        """Find the tiles for which data is available. Delegates to catalogue."""
-        return self.catalogue.find_tiles(time, rev=rev, **kwargs)
-    
-    # _walk is implemented in the subclasses to match the directory structure for discovery operations.
-    @abstractmethod
-    def _walk(self, prefix: str) -> Generator[str, None, None]:
-        raise NotImplementedError
-
-    # _check_data is implemented in the subclasses to match the directory structure for discovery operations.
-    @abstractmethod
-    def _check_data(self, data_key) -> bool:
-        raise NotImplementedError
-    # endregion
-
-    def is_subdataset(self, other: 'Dataset') -> bool:
-        key = self.get_key(time = dt.datetime(1900,1,1))
-        try:
-            extract_date_and_tags(key, other.key_pattern)
-            return True
-        except ValueError:
-            return False
-
-    # region: TIME-SIGNATURE MANAGEMENT
     @property
-    def time_signature(self):
-        if not hasattr(self, '_time_signature'):
-            self._time_signature = self._defaults['time_signature']
+    def available_keys(self):
+        return self.get_available_keys() 
+    # endregion
+
+    # region: METHODS TO PARSE KEY PATTERN WITH TIME AND TAGS
+    def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
         
-        return self._time_signature
-        
-    @time_signature.setter
-    def time_signature(self, value):
-        if value not in ['start', 'end', 'end+1']:
-            raise ValueError(f"Invalid time signature: {value}")
-        self._time_signature = value
+        time = self.get_time_signature(time)
+        raw_key = substitute_string(self.key_pattern, kwargs)
+        key = time.strftime(raw_key) if time is not None else raw_key
+        return key
 
     def get_time_signature(self, timestep: Optional[TimeStep | dt.datetime]) -> dt.datetime:
         if timestep is None:
@@ -516,20 +444,6 @@ class Dataset(metaclass=DatasetMeta):
     # endregion
 
     # region: INPUT/OUTPUT METHODS
-
-    # _read_data, _write_data and _rm_data are implemented in the subclasses (LocalDataset, S3Dataset, etc.)
-    # to handle the actual reading and writing of data.
-    @abstractmethod
-    def _read_data(self, input_key:str):
-        raise NotImplementedError
-    
-    @abstractmethod
-    def _write_data(self, output: xr.DataArray, output_key: str):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _rm_data(self, key: str):
-        raise NotImplementedError
 
     # These are the main methods for getting and writing data, which handle the logic of checking availability,
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
@@ -623,7 +537,74 @@ class Dataset(metaclass=DatasetMeta):
         self.copy_data(new_key_pattern, time, **kwargs)
         self.rm_data(time, **kwargs)
     # endregion
+    
+    # region: METHODS TO QUERY THE CATALOGUE FOR AVAILABLE DATA AND TIMES [DELEGATED TO CATALOGUE]
+    def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        """Get the directory prefix for file discovery. Delegates to catalogue."""
+        return self.catalogue.get_prefix(time=time, **kwargs)
+    
+    def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        """Get list of available file keys/paths. Delegates to catalogue."""
+        return self.catalogue.get_available_keys(time=time, **kwargs)
 
+    def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
+        """Extract all unique tags and times from available files. Delegates to catalogue."""
+        return self.catalogue.get_available_tags(time=time, **kwargs)
+
+    def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
+        """Generate times within a time range. Delegates to catalogue."""
+        return self.catalogue._get_times(time_range, **kwargs)
+
+    def estimate_timestep(self, date_sample = None, **kwargs) -> TimeStep:
+        """Estimate the dataset's timestep from a sample of dates. Delegates to catalogue."""
+        return self.catalogue.estimate_timestep(date_sample, **kwargs)
+
+    def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
+        """Get a list of times between two dates. Delegates to catalogue."""
+        return self.catalogue.get_times(time_range, **kwargs)
+
+    def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
+        """Get a list of TimeStep objects within a time range. Delegates to catalogue."""
+        return self.catalogue.get_timesteps(time_range, **kwargs)
+
+    def get_any_date(self, now=None, lim=None, **kwargs) -> dt.datetime|None:
+        """Find ANY available date quickly. Delegates to catalogue."""
+        return self.catalogue.get_any_date(now=now, lim=lim, **kwargs) 
+
+    def get_last_date(self, now = None, n = 1, lim = None, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        """Find the most recent available date(s). Delegates to catalogue."""
+        return self.catalogue.get_last_date(now=now, n=n, lim=lim, **kwargs)
+
+    def get_last_ts(self, **kwargs) -> TimeStep:
+        """Get the most recent timestep. Delegates to catalogue."""
+        return self.catalogue.get_last_ts(**kwargs)
+
+    def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
+        """Find the earliest available date(s). Delegates to catalogue."""
+        return self.catalogue.get_first_date(start=start, n=n, **kwargs)
+
+    def get_first_ts(self, **kwargs) -> TimeStep:
+        """Get the earliest timestep. Delegates to catalogue."""
+        return self.catalogue.get_first_ts(**kwargs)
+
+    def get_start(self, agg=True, **kwargs) -> dt.datetime:
+        """Get the start of the available data. Delegates to catalogue."""
+        return self.catalogue.get_start(agg=agg, **kwargs)
+    
+    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
+        """Check if data is available for a given time. Delegates to catalogue."""
+        return self.catalogue.check_data(time, **kwargs)
+    
+    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
+        """Find the times for which data is available. Delegates to catalogue."""
+        return self.catalogue.find_times(times, id=id, rev=rev, **kwargs)
+
+    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False, **kwargs) -> list[str]:
+        """Find the tiles for which data is available. Delegates to catalogue."""
+        return self.catalogue.find_tiles(time, rev=rev, **kwargs)
+    
+    # endregion
+    
     # region: HELPER METHODS FOR THUMBNAIL AND LOG MANAGERS
     def _make_thumbnail(self, data, time, output_file=None, **kwargs):
         """
@@ -678,6 +659,10 @@ class Dataset(metaclass=DatasetMeta):
     # endregion
 
     # region: METHODS TO MAKE DATA FROM PARENTS
+    def set_parents(self, parents:dict[str:'Dataset'], fn:Callable):
+        self.parents = parents
+        self.fn = fn
+
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
         if not hasattr(self, 'parents') or self.parents is None:
             raise ValueError(f'No parents for {self.name}')
@@ -689,14 +674,32 @@ class Dataset(metaclass=DatasetMeta):
         return data
     # endregion
 
-    ## METHODS TO MANIPULATE THE DATASET
-    def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
-        
-        time = self.get_time_signature(time)
-        raw_key = substitute_string(self.key_pattern, kwargs)
-        key = time.strftime(raw_key) if time is not None else raw_key
-        return key
+    # region: ABSTRACT METHODS TO BE IMPLEMENTED IN SUBCLASSES FOR DATA I/O AND DISCOVERY
+    @property
+    def key_pattern(self):
+        raise NotImplementedError
 
-    def set_parents(self, parents:dict[str:'Dataset'], fn:Callable):
-        self.parents = parents
-        self.fn = fn
+    @key_pattern.setter
+    def key_pattern(self, value):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _read_data(self, input_key:str):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _write_data(self, output: xr.DataArray, output_key: str):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _rm_data(self, key: str):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _walk(self, prefix: str) -> Generator[str, None, None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _check_data(self, data_key) -> bool:
+        raise NotImplementedError
+    # endregion
