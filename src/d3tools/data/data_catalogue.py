@@ -1,11 +1,14 @@
 """
-Data Catalog - Discovery and enumeration of available dataset files.
+Data Catalogue - Unified query and validation interface for dataset files.
 
-This manager handles all operations related to discovering what data exists:
+This manager handles all operations related to querying the dataset catalogue:
 - File discovery (get_available_keys, get_available_tags)
 - Boundary discovery (get_last_date, get_first_date)
 - Time enumeration (get_times, get_timesteps)
 - Timestep inference (estimate_timestep)
+- Validation (check_data, find_times, find_tiles)
+
+All operations share the same mental model: querying what exists in the catalogue.
 """
 from typing import Optional, Generator, TYPE_CHECKING
 import datetime as dt
@@ -17,18 +20,21 @@ if TYPE_CHECKING:
     from .dataset import Dataset
 
 
-class DataCatalog:
+class DataCatalogue:
     """
-    Manages discovery and enumeration of available dataset files.
+    Unified query and validation interface for available dataset files.
     
     Responsibilities:
     - Enumerate available files and their properties
     - Find temporal boundaries (first/last dates)
     - List times within ranges
     - Infer dataset timestep from samples
+    - Validate existence of specific items
     
-    All methods here are about DISCOVERING what exists, not validating
-    specific items (that's DataChecker's job).
+    All methods query the catalogue using different patterns:
+    - Enumeration: "What times exist in this range?"
+    - Point query: "Does THIS specific time exist?"
+    - Batch query: "Which of THESE times exist?"
     """
     
     def __init__(self, dataset: 'Dataset'):
@@ -41,7 +47,7 @@ class DataCatalog:
         self.dataset = dataset
     
     def __repr__(self):
-        return f"DataCatalog({self.dataset.name})"
+        return f"DataCatalogue({self.dataset.name})"
     
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs) -> str:
         """
@@ -97,7 +103,7 @@ class DataCatalog:
             List of file paths matching the pattern
             
         Example:
-            >>> dataset.catalog.get_available_keys(
+            >>> dataset.catalogue.get_available_keys(
             ...     time=TimeRange(2021-01-01, 2021-01-31)
             ... )
             ['/data/2021/01/file_20210101.tif', '/data/2021/01/file_20210102.tif', ...]
@@ -155,7 +161,7 @@ class DataCatalog:
             Always includes 'time' key with list of datetimes.
             
         Example:
-            >>> dataset.catalog.get_available_tags()
+            >>> dataset.catalogue.get_available_tags()
             {
                 'time': [datetime(2021, 1, 1), datetime(2021, 1, 2), ...],
                 'tile': ['h18v04', 'h19v04'],
@@ -670,3 +676,138 @@ class DataCatalog:
                 return first_ts.start
         else:
             return self.get_first_date(**kwargs)
+
+    def check_data(self, time: Optional[dt.datetime] = None, **kwargs) -> bool:
+        """
+        Check if data is available for a given time and tags.
+        
+        Validates whether a specific time and tag combination exists in the catalogue.
+        Supports versioned files (selects latest version if not specified) and 
+        parent datasets (checks if all parents have data).
+        
+        Note: This method is wrapped with @withcases decorator in Dataset for 
+        handling multiple cases at once.
+        
+        Args:
+            time: Optional datetime to check. If None, checks all tiles.
+            **kwargs: Tag filters (e.g., tile='h18v04', variable='temp')
+            
+        Returns:
+            True if data exists, False otherwise
+            
+        Example:
+            >>> catalogue.check_data(datetime(2024, 1, 1), tile='h18v04')
+            True
+            >>> catalogue.check_data(datetime(2024, 1, 1))  # Checks all tiles
+            False  # Only returns True if ALL tiles exist
+        """
+        from ..timestepping import TimeStep
+        
+        # Handle versioned files - get latest version if not specified
+        if self.dataset.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions is not None:
+                available_versions.sort()
+                kwargs['file_version'] = available_versions[-1]
+
+        # If specific tile is requested, check that tile
+        if 'tile' in kwargs:
+            full_key = self.dataset.get_key(time, **kwargs)
+            if self.dataset._check_data(full_key):
+                return True
+            # Check parent datasets if available
+            elif hasattr(self.dataset, 'parents') and self.dataset.parents is not None:
+                return all([parent.catalogue.check_data(time, **kwargs) 
+                           for parent in self.dataset.parents.values()])
+            else:
+                return False
+
+        # If no tile specified, check all tiles (returns True only if ALL exist)
+        for tile in self.dataset.tile_names:
+            if not self.check_data(time, tile=tile, **kwargs):
+                return False
+        return True
+    
+    def find_times(self, times: list[dt.datetime], id: bool = False, rev: bool = False, **kwargs) -> list[dt.datetime] | list[int]:
+        """
+        Find which times from a list are available in the catalogue.
+        
+        Efficiently filters a list of times to find which ones have data available.
+        Useful for batch validation before processing.
+        
+        Note: This method is wrapped with @withcases decorator in Dataset for 
+        handling multiple cases at once.
+        
+        Args:
+            times: List of datetime or TimeStep objects to check
+            id: If True, return indices instead of times
+            rev: If True, return times that DON'T exist (reverse filter)
+            **kwargs: Tag filters for validation
+            
+        Returns:
+            List of times (or indices) that exist (or don't exist if rev=True)
+            
+        Example:
+            >>> times = [datetime(2024, 1, i) for i in range(1, 32)]
+            >>> catalogue.find_times(times, tile='h18v04')
+            [datetime(2024, 1, 1), datetime(2024, 1, 3), ...]  # Only available times
+            
+            >>> catalogue.find_times(times, id=True, rev=True)
+            [1, 5, 10]  # Indices of MISSING times
+        """
+        from ..timestepping import TimeStep, TimeRange
+        
+        if len(times) == 0:
+            return []
+        all_ids = list(range(len(times)))
+
+        # Convert all times to their signature representation
+        time_signatures = [self.dataset.get_time_signature(t) for t in times]
+        tr = TimeRange(min(time_signatures), max(time_signatures))
+
+        # Get all available times in the range
+        all_times = self.get_available_tags(tr, **kwargs).get('time', [])
+
+        # Find which times are available
+        ids = [i for i in all_ids if time_signatures[i] in all_times] or []
+        if rev:
+            # Reverse: return times that DON'T exist
+            ids = [i for i in all_ids if i not in ids] or []
+
+        if id:
+            return ids
+        else:
+            return [times[i] for i in ids]
+
+    def find_tiles(self, time: Optional[dt.datetime] = None, rev: bool = False, **kwargs) -> list[str]:
+        """
+        Find which tiles are available for a given time.
+        
+        Returns a filtered list of tile names that have data available.
+        Useful for determining which tiles to process.
+        
+        Note: This method is wrapped with @withcases decorator in Dataset for 
+        handling multiple cases at once.
+        
+        Args:
+            time: Optional datetime to check tiles for
+            rev: If True, return tiles that DON'T exist (reverse filter)
+            **kwargs: Additional tag filters
+            
+        Returns:
+            List of tile names that exist (or don't exist if rev=True)
+            
+        Example:
+            >>> catalogue.find_tiles(datetime(2024, 1, 1))
+            ['h18v04', 'h19v04', 'h20v04']  # Only tiles with data
+            
+            >>> catalogue.find_tiles(datetime(2024, 1, 1), rev=True)
+            ['h21v04']  # Tiles WITHOUT data
+        """
+        all_tiles = self.dataset.tile_names
+        available_tiles = self.get_available_tags(time, **kwargs).get('tile', [])
+        
+        if not rev:
+            return [tile for tile in all_tiles if tile in available_tiles]
+        else:
+            return [tile for tile in all_tiles if tile not in available_tiles]
