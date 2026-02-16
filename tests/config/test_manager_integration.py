@@ -338,7 +338,7 @@ class TestBackwardCompatibility:
         """Test Dataset.from_options() works without thumbnail/log keys."""
         config = {
             'name': 'test_dataset',
-            'format': 'local',
+            'type': 'local',
             'path': '/path/to/data',
             'file': 'output.nc'
         }
@@ -358,7 +358,7 @@ class TestEdgeCases:
         """Test with incomplete thumbnail config (missing colors)."""
         config = {
             'name': 'test_dataset',
-            'format': 'local',
+            'type': 'local',
             'path': '/path/to/data',
             'file': 'output.nc',
             'thumbnail': {
@@ -376,7 +376,7 @@ class TestEdgeCases:
         """Test with incomplete thumbnail config (missing destination)."""
         config = {
             'name': 'test_dataset',
-            'format': 'local',
+            'type': 'local',
             'path': '/path/to/data',
             'file': 'output.nc',
             'thumbnail': {
@@ -394,7 +394,7 @@ class TestEdgeCases:
         """Test with empty log config."""
         config = {
             'name': 'test_dataset',
-            'format': 'local',
+            'type': 'local',
             'path': '/path/to/data',
             'file': 'output.nc',
             'log': {}

@@ -1,5 +1,4 @@
-import xarray as xr
-import pandas as pd
+from typing import Any
 
 from .dataset import Dataset
 from ..parse import extract_date_and_tags
@@ -18,31 +17,33 @@ class MemoryDataset(Dataset):
         return self._key_pattern
 
     @key_pattern.setter
-    def key_pattern(self, key_pattern):
+    def key_pattern(self, key_pattern: str):
         self._key_pattern = key_pattern
 
     ## INPUT/OUTPUT METHODS
-    def _read_data(self, input_key):
+    def _read_data(self, input_key: str, **kwargs) -> Any:
         if self.keep_after_reading:
             return self.data_dict.get(input_key)
         else:
             return self.data_dict.pop(input_key)
     
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
+    def _write_data(self, output: Any, output_key: str, **kwargs) -> None:
+        #future: add append mode for tables and text 
+        # currently they are not supported in MemoryDataset since the Mixins are not called here
         self.data_dict[output_key] = output
 
-    def _rm_data(self, key):
+    def _rm_data(self, key: str) -> None:
         self.data_dict.pop(key)
 
     ## METHODS TO CHECK DATA AVAILABILITY
-    def _check_data(self, data_path) -> bool:
+    def _check_data(self, data_path: str) -> bool:
         for key in self.data_dict.keys():
             if key.startswith(data_path):
                 return True
         else:
             return False
     
-    def _walk(self, prefix):
+    def _walk(self, prefix: str):
         for key in self.data_dict.keys():
             if key.startswith(prefix):
                 yield key

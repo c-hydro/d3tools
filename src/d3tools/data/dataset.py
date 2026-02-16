@@ -1,17 +1,17 @@
 from typing import Optional, Generator, Callable
 import datetime as dt
-import numpy as np
 import xarray as xr
-import geopandas as gpd
 
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod
 import os
 import re
 
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
-from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
-from .format_mixins import RasterMixin
+from .io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format
+
+# Cache for dynamically created classes (avoids recreating same class combinations)
+_CLASS_CACHE = {}
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -31,7 +31,7 @@ class DatasetMeta(ABCMeta):
         elif 'type' in attrs:
             cls.subclasses[attrs['type']] = cls
 
-class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
+class Dataset(metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
@@ -134,9 +134,7 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
         self._set_optional_attributes(kwargs)
         
         # Initialize format-specific properties (e.g., template manager for raster)
-        # This will call the appropriate mixin's _init_format_properties via MRO
-        if hasattr(self, '_init_format_properties'):
-            self._init_format_properties()
+        self._init_format_properties()
         
         # Store remaining options and initialize tags
         self.options = kwargs
@@ -162,9 +160,12 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
         else:
             new_options = self.options.copy()
             new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
-            new_dataset = self.__class__(**new_options)
+            # Use original storage class, not the dynamic class (avoids MRO conflicts)
+            original_class = getattr(self, '_original_class', self.__class__)
+            new_dataset = original_class(**new_options)
 
-            new_dataset.template_manager = self.template_manager
+            if hasattr(self, 'template_manager'):
+                new_dataset.template_manager = self.template_manager
             if hasattr(self, '_tile_names'):
                 new_dataset._tile_names = self._tile_names
 
@@ -195,6 +196,43 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
         return new_dataset
 
     ## CLASS METHODS FOR FACTORY
+    def __new__(cls, **kwargs):
+        """Create Dataset instance of the appropriate subclass based on type."""
+        # Step 1: Detect format BEFORE creating instance
+        format = kwargs.get('format', None)
+        
+        if format is None:
+            # If format not explicitly provided, try to detect from key_pattern
+            key_pattern = kwargs.get('key_pattern', None)
+            if key_pattern is None:
+                dir  = kwargs.get('dir', None) or kwargs.get('path', '')
+                file = kwargs.get('file', '')  or kwargs.get('filename', '')
+                key_pattern = os.path.join(dir, file)
+            format = get_format_from_path(key_pattern)
+        
+        # Step 2: Select mixin
+        format_mixin = get_mixin_class_from_format(format)
+
+        # Step 3: Create dynamic class (cached for performance)
+        cache_key = (cls, format_mixin)
+        if cache_key not in _CLASS_CACHE:
+            # Use DatasetMeta as the metaclass for the dynamic class
+            _CLASS_CACHE[cache_key] = DatasetMeta(
+                cls.__name__,  # Still called "LocalDataset"
+                (format_mixin, cls),  # MRO: Mixin first, then LocalDataset
+                {'__module__': cls.__module__}
+            )
+        
+        DynamicClass = _CLASS_CACHE[cache_key]
+        
+        # Step 4: Create instance of dynamic class
+        instance = object.__new__(DynamicClass)
+        
+        # Store the original storage class so update()/copy() work correctly
+        instance._original_class = cls
+        
+        return instance
+
     @classmethod
     def from_options(cls, options: dict, defaults: dict = None):
         """
@@ -688,7 +726,24 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
         return time
 
     ## INPUT/OUTPUT METHODS
+
+    # _read_data, _write_data and _rm_data are implemented in the subclasses (LocalDataset, S3Dataset, etc.)
+    # to handle the actual reading and writing of data.
+    @abstractmethod
+    def _read_data(self, input_key:str):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _write_data(self, output: xr.DataArray, output_key: str):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _rm_data(self, key: str):
+        raise NotImplementedError
+
+    # These are the main methods for getting and writing data, which handle the logic of checking availability,
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
+        
         # if this is a versioned file, and the version is not specified, get the latest version
         if self.has_version and 'file_version' not in kwargs:
             available_versions = self.get_available_tags(time, **kwargs).get('file_version')
@@ -696,135 +751,67 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
                 available_versions.sort()
                 kwargs['file_version'] = available_versions[-1]
 
+        # parse the full key with the time and tags
         full_key = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
-            if self._check_data(full_key):
-                return self._read_data(full_key)
-            else:
-                raise ValueError(f'Could not resolve data from {full_key}.')
-            
+        # first check that the data is available
         if self._check_data(full_key):
-            data = self._read_data(full_key)
-
-            if as_is or self.type == 'memory':
-                return data
-            
-            # ensure that the data has descending latitudes
-            data = straighten_data(data)
-
-            # make sure the nodata value is set to np.nan for floats and to the max int for integers
-            data = set_type(data, self.nan_value, read = True)
-
-        # if the data is not available, try to calculate it from the parents
+            # if so, read it
+            raw_data = self._read_data(full_key)
+        # if not, check if it has parents to inherit from
         elif hasattr(self, 'parents') and self.parents is not None:
-            data = self.make_data(time, **kwargs)
-            if as_is:
-                return data
-            data = straighten_data(data)
-            data = set_type(data, self.nan_value, read = True)
-
+            raw_data = self.make_data(time, **kwargs)
+        # if the data is not available and there are no parents, raise an error
         else:
-            raise ValueError(f'Could not resolve data from {full_key}.')
+            raise FileNotFoundError(f'Could not resolve data from {full_key}.')
 
-        # if there is no template for the dataset, create it from the data
-        template_dict = self.get_template_dict(make_it=False, **kwargs)
-        if template_dict is None:
-            #template = self.make_templatearray_from_data(data)
-            self.set_template(data, **kwargs)
+        # if we are not reading the data as is, we need to process it
+        if as_is or self.type == 'memory':
+            return raw_data
         else:
-            # otherwise, update the data in the template
-            # (this will make sure there is no errors in the coordinates due to minor rounding)
-            attrs = data.attrs
-            data = self.set_data_to_template(data, template_dict)
-            data.attrs.update(attrs)
-        
-        data.attrs.update({'source_key': full_key})
-        return data
+            # self._format_after_read is implemented in the mixins to handle any
+            # format-specific processing after reading
+            return self._format_after_read(raw_data, full_key = full_key, time = time, **kwargs)
     
-    @abstractmethod
-    def _read_data(self, input_key:str):
-        raise NotImplementedError
-
     def write_data(self, data,
                    time: Optional[dt.datetime|TimeStep] = None,
-                   time_format: str = '%Y-%m-%d',
                    metadata = None,
                    as_is = False,
                    **kwargs):
 
         if metadata is None: metadata = {}
+
+        # check the data format (this will check if the type of the data is compatible with the dataset format)
         check_data_format(data, self.format)
 
+        # get the full output key with the time and tags
         output_file = self.get_key(time, **kwargs)
 
-        if self.format in ['csv', 'json', 'txt', 'shp', 'parquet']:
-            append = kwargs.pop('append', False)
-
-            if isinstance(data, gpd.GeoDataFrame):
-                data = self.set_metadata(data, time, time_format, **metadata)
-
-            self._write_data(data, output_file, append = append)
-            self._make_thumbnail(data, time, output_file, **kwargs)
-
-            return
-        
-        if self.format == 'file':
-            self._write_data(data, output_file)
-            return
-        
+        data = self.validate_data(data)
+        # check if we need to prepare the data before writing
         if as_is or self.type == 'memory':
             output = data
-            output = output.rio.write_nodata(output.attrs.get('_FillValue', self.nan_value))
         else:
-        # if data is a numpy array, ensure there is a template available
-            try:
-                template_dict = self.get_template_dict(**kwargs)
-            except PermissionError:
-                template_dict = None
+            output = self._format_before_write(data, **kwargs)
 
-            if template_dict is None:
-                if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-                    #templatearray = self.make_templatearray_from_data(data)
-                    self.set_template(data, **kwargs)
-                    template_dict = self.get_template_dict(**kwargs, make_it=False)
-                else:
-                    raise ValueError('Cannot write numpy array without a template.')
-            
-            # if the data is an xarray, straighen it before setting it to the template
-            if isinstance(data, xr.DataArray) or isinstance(data, xr.Dataset):
-                data = straighten_data(data)
-                output = self.set_data_to_template(data, template_dict)
-            # if the data is a numpy array, set it to the template and then straighten it (which should be unnecessary)
-            else:
-                output = self.set_data_to_template(data, template_dict)
-                output = straighten_data(output)
-            
-            # fix the type and the nodata value
-            output = set_type(output, self.nan_value, read = False)
-            
-        output.attrs['source_key'] = output_file
-        
-        # Generate thumbnail if configured
-        if 'parents' in metadata:
-            parents = metadata.pop('parents')
-        else:
-            parents = {}
-        parents[''] = output
-        thumbnail_file = self._make_thumbnail(parents, time, **kwargs)
+        # make the thubnail if configured (this is also a bit of a hack since thumbnails only make sense for certain formats,
+        # but we want to allow the user to configure it on any dataset)
+        thumbnail_file = self._make_thumbnail(output, time, output_file, **kwargs)
 
-        # add the metadata
-        old_attrs = data.attrs if hasattr(data, 'attrs') else {}
-        new_attrs = output.attrs
-        old_attrs.update(new_attrs)
-        output.attrs = old_attrs
+        # fix the metadata
+        old_md = self.get_metadata(data)#.attrs if hasattr(data, 'attrs') else {}
+        new_md = self.get_metadata(output)#output.attrs
+        old_md.update(new_md)
         
         name = substitute_string(self.name, kwargs)
         metadata['name'] = str(name)
-        output = self.set_metadata(output, time, time_format, **metadata)
+        # remove time from metadata and old_md if present
+        metadata.pop('time', None)
+        old_md.pop('time', None)
+        output = self.set_metadata(output, time=time, **old_md, **metadata)
         
         # write the data
-        self._write_data(output, output_file)
+        self._write_data(output, output_file, append = kwargs.get('append', False))
         
         # Write log if configured
         self._make_log(output, output_file, thumbnail_file, time, **kwargs)
@@ -846,14 +833,6 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
         self.copy_data(new_key_pattern, time, **kwargs)
         self.rm_data(time, **kwargs)
 
-    @abstractmethod
-    def _write_data(self, output: xr.DataArray, output_key: str):
-        raise NotImplementedError
-    
-    @abstractmethod
-    def _rm_data(self, key: str):
-        raise NotImplementedError
-    
     def _make_thumbnail(self, data, time, output_file=None, **kwargs):
         """
         Helper method to generate thumbnail if manager is configured.
@@ -1041,39 +1020,3 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
     def set_parents(self, parents:dict[str:'Dataset'], fn:Callable):
         self.parents = parents
         self.fn = fn
-
-    ## METHODS TO MANIPULATE THE TEMPLATE
-    # Template methods moved to RasterMixin
-    # - get_template_dict()
-    # - set_template()
-    # - build_templatearray()
-    # - set_data_to_template()
-
-    def set_metadata(self, data: xr.DataArray|xr.Dataset,
-                     time: Optional[TimeStep|dt.datetime] = None,
-                     time_format: str = '%Y-%m-%d', **kwargs) -> xr.DataArray:
-        """
-        Set metadata for the data.
-        """
-     
-        if hasattr(data, 'attrs'):
-            if 'long_name' in data.attrs:
-                data.attrs.pop('long_name')
-            kwargs.update(data.attrs)
-        
-        metadata = kwargs.copy()
-        metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        if time is not None:
-            datatime = self.get_time_signature(time)
-            metadata['time'] = datatime.strftime(time_format)
-
-        name = metadata.get('name', self.name)
-        if 'long_name' in metadata:
-            metadata.pop('long_name')
-
-        data.attrs.update(metadata)
-
-        if isinstance(data, xr.DataArray):
-            data.name = name
-
-        return data

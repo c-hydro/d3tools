@@ -11,7 +11,6 @@ import json
 import numpy as np
 import xarray as xr
 from pathlib import Path
-from ..data.io_utils import set_type
 from ..errors import TemplateValidationError, TemplateMemoryError
 
 
@@ -372,4 +371,6 @@ class TemplateManager:
             template = TemplateManager.build_array(template_dict, data[vars[0]].values)
             data = xr.Dataset({var: template.copy(data=data[var]) for var in vars})
         
+        # Lazy import to avoid circular dependency
+        from ..data.io_utils import set_type
         return set_type(data, read=True)

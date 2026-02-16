@@ -5,9 +5,9 @@ import pandas as pd
 
 from .dataset import Dataset
 from ..timestepping.timestep import TimeStep
-from .io_utils import write_to_file, read_from_file, rm_file
+from .io_utils import rm_file
 
-from typing import Optional
+from typing import Any, Optional
 
 class LocalDataset(Dataset):
     type = 'local'
@@ -43,20 +43,25 @@ class LocalDataset(Dataset):
         return self.get_key(time, **kwargs)
 
     ## INPUT/OUTPUT METHODS
-    def _read_data(self, input_path) -> xr.DataArray|xr.Dataset|pd.DataFrame:
-        return read_from_file(input_path, self.format)
+    def _read_data(self, input_path: str, **kwargs) -> Any:
+        # _read_from_file is defined in format mixins,
+        # so it will handle format-specific reading
+        data = self._read_from_file(input_path, **kwargs)
+        return data
     
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_path: str, **kwargs) -> None:
-        write_to_file(output, output_path, self.format, **kwargs)
+    def _write_data(self, output: Any, output_path: str, **kwargs) -> None:
+        # _write_to_file is defined in format mixins,
+        # so it will handle format-specific writing
+        self._write_to_file(output, output_path, **kwargs)
 
-    def _rm_data(self, path) -> None:
+    def _rm_data(self, path: str) -> None:
         rm_file(path)
 
     ## METHODS TO CHECK DATA AVAILABILITY
-    def _check_data(self, data_path) -> bool:
+    def _check_data(self, data_path: str) -> bool:
         return os.path.exists(data_path)
     
-    def _walk(self, prefix):
+    def _walk(self, prefix: str):
         for root, _, filenames in os.walk(prefix):
             for filename in filenames:
                 yield os.path.join(root, filename)

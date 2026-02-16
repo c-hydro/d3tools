@@ -2,7 +2,7 @@ import paramiko.ed25519key
 import xarray as xr
 import pandas as pd
 import tempfile
-from typing import Optional
+from typing import Any, Optional
 import boto3
 import os
 from functools import cached_property
@@ -23,11 +23,8 @@ import stat
 import posixpath
 
 from .dataset import Dataset
-from .io_utils import write_to_file, read_from_file
 from ..parse import extract_date_and_tags
 from ..exit import rm_at_exit
-
-# test
 
 class RemoteDataset(Dataset):
     type = 'remote'
@@ -55,25 +52,36 @@ class RemoteDataset(Dataset):
     def key_pattern(self, key_pattern):
         self._key_pattern = key_pattern
 
-    def _read_data(self, input_key):
+    def _read_data(self, input_key: str, **kwargs) -> Any:
         local_key = self.get_local_key(input_key)
         if not os.path.exists(local_key):
             os.makedirs(os.path.dirname(local_key), exist_ok = True)
             self._download(input_key, local_key)
 
+        # Future: thic could be handled in the VectorMixin with 
+        # a method like _post_write_processing that is format-specific,
+        # instead of hardcoding shapefile logic here
         # if this is a shapefile, also copy the dbf, shx, and prj files
         if self.format == 'shp':
             for ext in ['dbf', 'shx', 'prj']:
                 local_ext = self.get_local_key(f"{input_key.replace('.shp', '')}.{ext}")
                 self._download(input_key.replace('.shp', f'.{ext}'), local_ext)
+        
+        # _read_from_file is defined in format mixins,
+        # so it will handle format-specific reading
+        data = self._read_from_file(local_key, **kwargs)
+        return data
 
-        return read_from_file(local_key, self.format)
-
-    def _write_data(self, output: xr.DataArray|pd.DataFrame, output_key: str, **kwargs):
+    def _write_data(self, output: Any, output_key: str, **kwargs) -> None:
         local_key = self.get_local_key(output_key)
-        write_to_file(output, local_key, self.format, **kwargs)
+        # _write_to_file is defined in format mixins,
+        # so it will handle format-specific writing
+        self._write_to_file(output, local_key, **kwargs)
         self._upload(local_key, output_key)
 
+        # Future: thic could be handled in the VectorMixin with 
+        # a method like _post_write_processing that is format-specific,
+        # instead of hardcoding shapefile logic here
         # If the format is 'shp', also upload the associated files
         if self.format == 'shp':
             base_key = output_key.replace('.shp', '')
@@ -478,23 +486,6 @@ class SFTPDataset(RemoteDataset):
         for root, dirs, filenames in sftp_walk(self.sftp_client, prefix):
             for file in filenames:
                 yield os.path.join(root, file)
-
-    def _write_data(self, output: xr.DataArray | pd.DataFrame, output_key: str, **kwargs):
-        local_key = self.get_local_key(output_key)
-        write_to_file(output, local_key, self.format, **kwargs)
-        self._upload(local_key, output_key)
-
-        # If the format is 'shp', also upload the associated files
-        if self.format == 'shp':
-            base_key = output_key.replace('.shp', '')
-            for ext in ['dbf', 'shx', 'prj']:
-                local_ext = self.get_local_key(f"{base_key}.{ext}")
-                if os.path.exists(local_ext):
-                    self._upload(local_ext, f"{base_key}.{ext}")
-
-        if self.available_keys_are_cached:
-            if output_key not in self.available_keys:
-                self.available_keys.append(output_key)
 
 def sftp_walk(sftp, remote_path, rev = False):
     """

@@ -163,7 +163,7 @@ class TestGetTemplateDict:
 class TestBuildTemplatearrayDelegation:
     """Test that Dataset.build_templatearray() delegates to TemplateManager."""
     
-    def test_build_templatearray_delegation(self):
+    def test_build_templatearray_delegation(self, sample_dataset):
         """Test that build_templatearray delegates to TemplateManager.build_array."""
         template_dict = {
             'crs': CRS.from_epsg(4326).to_wkt(),
@@ -175,8 +175,8 @@ class TestBuildTemplatearrayDelegation:
             'dims_lengths': {'x': 20, 'y': 10}
         }
         
-        # Call Dataset static method
-        result = LocalDataset.build_templatearray(template_dict)
+        # Call instance method
+        result = sample_dataset.build_templatearray(template_dict)
         
         # Should produce same result as TemplateManager directly
         expected = TemplateManager.build_array(template_dict)
@@ -185,7 +185,7 @@ class TestBuildTemplatearrayDelegation:
         assert result.dims == expected.dims
         assert result.shape == expected.shape
     
-    def test_build_templatearray_with_data(self):
+    def test_build_templatearray_with_data(self, sample_dataset):
         """Test building template array with provided data."""
         template_dict = {
             'crs': CRS.from_epsg(4326).to_wkt(),
@@ -198,7 +198,7 @@ class TestBuildTemplatearrayDelegation:
         }
         
         data = np.ones((10, 20)) * 42
-        result = LocalDataset.build_templatearray(template_dict, data)
+        result = sample_dataset.build_templatearray(template_dict, data)
         
         assert np.all(result.values == 42)
 
@@ -206,7 +206,7 @@ class TestBuildTemplatearrayDelegation:
 class TestSetDataToTemplateDelegation:
     """Test that Dataset.set_data_to_template() delegates to TemplateManager."""
     
-    def test_set_data_to_template_with_numpy(self):
+    def test_set_data_to_template_with_numpy(self, sample_dataset):
         """Test applying template to numpy array."""
         template_dict = {
             'crs': CRS.from_epsg(4326).to_wkt(),
@@ -219,7 +219,7 @@ class TestSetDataToTemplateDelegation:
         }
         
         data = np.ones((10, 20)) * 100
-        result = LocalDataset.set_data_to_template(data, template_dict)
+        result = sample_dataset.set_data_to_template(data, template_dict)
         
         # Should delegate to TemplateManager.apply_to_data
         expected = TemplateManager.apply_to_data(data, template_dict)
@@ -228,7 +228,7 @@ class TestSetDataToTemplateDelegation:
         assert np.array_equal(result.values, expected.values)
         assert result.dims == expected.dims
     
-    def test_set_data_to_template_with_dataarray(self, sample_dataarray):
+    def test_set_data_to_template_with_dataarray(self, sample_dataset, sample_dataarray):
         """Test applying template to xarray.DataArray."""
         template_dict = {
             'crs': CRS.from_epsg(4326).to_wkt(),
@@ -240,7 +240,7 @@ class TestSetDataToTemplateDelegation:
             'dims_lengths': {'x': 20, 'y': 10}
         }
         
-        result = LocalDataset.set_data_to_template(sample_dataarray, template_dict)
+        result = sample_dataset.set_data_to_template(sample_dataarray, template_dict)
         
         assert isinstance(result, xr.DataArray)
         # Coordinates should match template
