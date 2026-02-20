@@ -12,10 +12,10 @@ All operations share the same mental model: querying what exists in the catalogu
 """
 from typing import Optional, Generator, TYPE_CHECKING
 import datetime as dt
-import os
 
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..cases.utils import withcases
+from ..parse import KeyParser
 
 if TYPE_CHECKING:
     from .datasets import Dataset
@@ -70,25 +70,8 @@ class DataCatalogue:
             time = TimeRange(2021-01-01, 2021-01-31)
             → returns '/data/2021/01'
         """
-        if not isinstance(time, TimeRange):
-            prefix = self.dataset.get_key(time=time, **kwargs)
-        else:
-            start = time.start
-            end = time.end
-            prefix = self.dataset.get_key(time=None, **kwargs)
-            if start.year == end.year:
-                prefix = prefix.replace('%Y', str(start.year))
-                if start.month == end.month:
-                    prefix = prefix.replace('%m', f'{start.month:02d}')
-                    if start.day == end.day:
-                        prefix = prefix.replace('%d', f'{start.day:02d}')
-                        prefix = prefix.replace('%j', f'{start.timetuple().tm_yday:03d}')  # Substitute %j if present
-
-        prefix = os.path.dirname(prefix)
-        while '%' in prefix or '{' in prefix:
-            prefix = os.path.dirname(prefix)
-        
-        return prefix
+        key_pattern = KeyParser(self.dataset.key_pattern)
+        return key_pattern.prefix(time=time, tags=kwargs)
     
     @withcases
     def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs) -> list[str]:
@@ -111,8 +94,6 @@ class DataCatalogue:
             ... )
             ['/data/2021/01/file_20210101.tif', '/data/2021/01/file_20210102.tif', ...]
         """
-        from ..parse import extract_date_and_tags
-        
         # Handle multi-month TimeRange by splitting into per-month queries
         if isinstance(time, TimeRange):
             months = time.months
@@ -135,12 +116,14 @@ class DataCatalogue:
         
         # Get key pattern for matching
         key_pattern = self.dataset.get_key(time=None, **kwargs)
+        key_parser = KeyParser(key_pattern)
         
         # Walk directory and filter matching files
         files = []
         for file in self.dataset._walk(prefix):
             try:
-                this_time, _ = extract_date_and_tags(file, key_pattern)
+                parsed = key_parser.match(file)
+                this_time = parsed.time
                 if time is None or (time is not None and time.contains(this_time)) or not self.dataset.has_time:
                     files.append(file)
             except ValueError:
@@ -172,8 +155,6 @@ class DataCatalogue:
                 'variable': ['temp', 'precip']
             }
         """
-        from ..parse import extract_date_and_tags
-        
         # Handle time_signature adjustment
         if self.dataset.time_signature == 'end+1' and time is not None:
             if isinstance(time, dt.datetime):
@@ -183,12 +164,15 @@ class DataCatalogue:
         
         # Get all available files
         all_keys = self.get_available_keys(time, **kwargs)
+        key_parser = KeyParser(self.dataset.key_pattern)
         
         # Extract tags from each file
         all_tags = {}
         all_dates = set()
         for key in all_keys:
-            this_date, this_tags = extract_date_and_tags(key, self.dataset.key_pattern)
+            parsed = key_parser.match(key)
+            this_date = parsed.time
+            this_tags = parsed.tags
             
             for tag in this_tags:
                 if tag not in all_tags:
