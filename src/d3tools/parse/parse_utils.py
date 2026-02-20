@@ -7,10 +7,10 @@ from ..timestepping.time_utils import get_date_from_str
 
 def extract_date_and_tags(string: str, string_pattern: str):
     # Local import avoids circular dependency:
-    # key_pattern -> string_rendering -> parse_utils.
-    from .key_pattern import KeyPattern
+    # key_parser -> string_rendering -> parse_utils.
+    from .key_parser import KeyParser
 
-    parsed = KeyPattern(string_pattern).match(string)
+    parsed = KeyParser(string_pattern).match(string)
     return parsed.time, parsed.tags
 
 def set_env(structure):

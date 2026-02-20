@@ -34,7 +34,7 @@ class _CompiledMatcher:
     substituted_names: tuple[str, ...]
 
 
-class KeyPattern:
+class KeyParser:
     """Dataset key-pattern helper for rendering, matching, and prefix discovery.
 
     A key pattern is a string that can include:
@@ -319,4 +319,4 @@ class KeyPattern:
         return tags
 
 
-__all__ = ["ParsedKey", "KeyPattern"]
+__all__ = ["ParsedKey", "KeyParser"]
