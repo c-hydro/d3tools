@@ -108,6 +108,37 @@ class TestKeyPatternMatch:
         with pytest.raises(ValueError):
             key_pattern.match('root/file_without_date.tif')
 
+    def test_match_with_duplicate_tag_placeholders_same_value(self):
+        """Test duplicate placeholders map to one tag when values are consistent."""
+        key_pattern = KeyPattern('root/{tile}/file_{tile}_%Y%m%d.tif')
+        parsed = key_pattern.match('root/h18v04/file_h18v04_20240220.tif')
+
+        assert parsed.time == dt.datetime(2024, 2, 20)
+        assert parsed.tags == {'tile': 'h18v04'}
+
+    def test_match_with_duplicate_tag_placeholders_different_values_raises(self):
+        """Test duplicate placeholders with different values raise ValueError."""
+        key_pattern = KeyPattern('root/{tile}/file_{tile}_%Y%m%d.tif')
+
+        with pytest.raises(ValueError):
+            key_pattern.match('root/h18v04/file_h19v04_20240220.tif')
+
+    def test_match_with_hour_minute_second(self):
+        """Test matching parses hour/minute/second directives."""
+        key_pattern = KeyPattern('root/file_%Y%m%d_%H%M%S.tif')
+        parsed = key_pattern.match('root/file_20240220_134501.tif')
+
+        assert parsed.time == dt.datetime(2024, 2, 20, 13, 45, 1)
+        assert parsed.tags == {}
+
+    def test_match_file_version_allows_path_fragments(self):
+        """Test file_version placeholder can include path separators."""
+        key_pattern = KeyPattern('root/{file_version}/file_%Y%m%d.tif')
+        parsed = key_pattern.match('root/v1.2/build/file_20240220.tif')
+
+        assert parsed.time == dt.datetime(2024, 2, 20)
+        assert parsed.tags == {'file_version': 'v1.2/build'}
+
 
 class TestKeyPatternPrefix:
     """Test KeyPattern.prefix method."""
@@ -133,3 +164,23 @@ class TestKeyPatternPrefix:
         time_range = TimeRange('2024-02-01', '2024-02-29')
         prefix = key_pattern.prefix(time=time_range, tags={'tile': 'h18v04'})
         assert prefix == 'root/2024/02'
+
+    def test_prefix_with_timerange_and_doy(self):
+        """Test prefix resolves day-of-year when range is a single day."""
+        key_pattern = KeyPattern('root/%Y/%j/file_%Y%j.tif')
+        time_range = TimeRange('2024-02-29', '2024-02-29')
+        prefix = key_pattern.prefix(time=time_range)
+        assert prefix == 'root/2024/060'
+
+
+class TestKeyPatternCaching:
+    """Test KeyPattern internal matcher caching behavior."""
+
+    def test_compiled_matcher_is_cached(self):
+        """Test that compiled matcher metadata is reused between calls."""
+        key_pattern = KeyPattern('root/%Y/%m/file_%Y%m%d.tif')
+
+        matcher1 = key_pattern._get_compiled_matcher()
+        matcher2 = key_pattern._get_compiled_matcher()
+
+        assert matcher1 is matcher2
