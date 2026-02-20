@@ -9,9 +9,7 @@ import tempfile
 import os
 
 from d3tools.thumbnails import DatasetThumbnailManager
-from d3tools.data import Dataset
-from d3tools.data.local_dataset import LocalDataset
-
+from d3tools.data import Dataset, LocalDataset
 
 @pytest.fixture
 def sample_colors_dataset():

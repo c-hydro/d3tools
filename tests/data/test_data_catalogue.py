@@ -6,7 +6,7 @@ and validation of available dataset files.
 """
 import pytest
 import datetime as dt
-from d3tools.data.local_dataset import LocalDataset
+from d3tools.data import LocalDataset
 from d3tools.data.data_catalogue import DataCatalogue
 from d3tools.timestepping import TimeRange, TimeStep
 

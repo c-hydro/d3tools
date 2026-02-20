@@ -2,8 +2,8 @@ from abc import ABC
 import datetime
 from typing import Sequence
 
-from .time_utils import get_date_from_str
-from .timewindow import TimeWindow
+from ..time_utils import get_date_from_str
+from ..timewindow import TimeWindow
 
 class TimePeriod(ABC):
     

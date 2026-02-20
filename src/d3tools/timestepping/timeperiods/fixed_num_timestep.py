@@ -3,7 +3,7 @@ import datetime
 from typing import Optional
 
 from .timestep import TimeStep, TimeStepMeta
-from .time_utils import get_date_from_str
+from ..time_utils import get_date_from_str
 
 class FixedNTimeStepMeta(TimeStepMeta):
     def __init__(cls, name, bases, attrs):

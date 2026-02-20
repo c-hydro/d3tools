@@ -13,9 +13,7 @@ import numpy as np
 from datetime import datetime
 
 from d3tools.logging import DatasetLogManager
-from d3tools.data import Dataset
-from d3tools.data.local_dataset import LocalDataset
-
+from d3tools.data import Dataset, LocalDataset
 
 @pytest.fixture
 def sample_log_dataset():

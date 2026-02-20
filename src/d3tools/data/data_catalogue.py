@@ -18,7 +18,7 @@ from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWi
 from ..cases.utils import withcases
 
 if TYPE_CHECKING:
-    from .dataset import Dataset
+    from .datasets import Dataset
 
 
 class DataCatalogue:

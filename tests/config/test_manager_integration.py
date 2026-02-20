@@ -6,8 +6,7 @@ Tests the integration of manager classes with config parsing and Dataset class.
 import pytest
 from unittest import mock
 
-from d3tools.data import Dataset
-from d3tools.data.local_dataset import LocalDataset
+from d3tools.data import Dataset, LocalDataset
 from d3tools.thumbnails import DatasetThumbnailManager
 from d3tools.logging import DatasetLogManager
 
@@ -80,7 +79,7 @@ class TestDatasetFromOptionsManagerCreation:
     def test_from_options_with_thumbnail(self, dataset_config_with_thumbnail):
         """Test creating dataset with thumbnail options creates manager."""
         # Mock the dataset_factory for nested dataset parsing
-        with mock.patch('d3tools.data.local_dataset.LocalDataset') as mock_ds:
+        with mock.patch('d3tools.data.LocalDataset') as mock_ds:
             mock_ds.from_options.return_value = mock.Mock(spec=LocalDataset)
             
             dataset = LocalDataset.from_options(dataset_config_with_thumbnail)

@@ -2,8 +2,8 @@ import datetime
 from typing import Generator, Iterable, TYPE_CHECKING
 
 from .timeperiod import TimePeriod
-from .time_utils import find_unit_of_time
-from .timewindow import TimeWindow
+from ..time_utils import find_unit_of_time
+from ..timewindow import TimeWindow
 
 if TYPE_CHECKING:
     from .fixed_num_timestep import Year, Month, Dekad, FixedNTimeStep

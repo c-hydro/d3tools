@@ -8,8 +8,7 @@ from unittest import mock
 import os
 
 from d3tools.config.parsers import dataset_from_config, _manager_from_config
-from d3tools.data import Dataset
-from d3tools.data.local_dataset import LocalDataset
+from d3tools.data import Dataset,LocalDataset
 from d3tools.thumbnails import DatasetThumbnailManager
 from d3tools.logging import DatasetLogManager
 from d3tools.timestepping import Day, Dekad
