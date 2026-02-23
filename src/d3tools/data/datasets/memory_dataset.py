@@ -1,7 +1,7 @@
 from typing import Any
 
 from .dataset import Dataset
-from ...parse import extract_date_and_tags
+from ...parse import KeyParser
 
 class MemoryDataset(Dataset):
     type = 'memory'
@@ -56,12 +56,10 @@ class MemoryDataset(Dataset):
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
 
-        for key in self.available_keys:
-            try: 
-                extract_date_and_tags(key, new_self.key_pattern)
-                new_self.data_dict[key] = self.data_dict.get(key)
-            except ValueError:
-                pass
+        key_parser = KeyParser(new_self.key_pattern)
+        matching_keys = key_parser.get_matching_keys(self.available_keys)
+        for key in matching_keys:
+            new_self.data_dict[key] = self.data_dict.get(key)
 
         if in_place:
             self = new_self
