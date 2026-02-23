@@ -135,3 +135,26 @@ def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     from .options import Options
     options = Options(config)
     return options.parse()
+
+def workflow_section_from_config(engine: str, section_options: Any) -> Any:
+    """
+    Parse a workflow section payload for a specific engine.
+    
+    Args:
+        engine: Normalized workflow engine keyword ('door', 'dam', 'dryes')
+        section_options: Configuration options for the section
+        
+    Returns:
+        Parsed section payload.
+
+    Note:
+        This function is currently a scaffold and returns the input payload
+        unchanged after engine validation. A future stage can instantiate
+        engine-specific runtime objects here.
+    """
+    if engine not in ['door', 'dam', 'dryes']:
+        raise ValueError(f"Unknown workflow section engine: {engine}")
+    
+    # return section options for now, later we will create DoorDownloader, DamWorkflow, DryesIndex objects here
+    # based on the engine and the options provided
+    return section_options

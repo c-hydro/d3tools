@@ -2,6 +2,7 @@ from ..parse import get_unique_values
 from .parsing_pipeline import parse_options
 from .utils import load_jsons
 
+
 class WorkflowDefinition(dict):
     """Canonical workflow configuration container.
 
