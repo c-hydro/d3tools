@@ -136,25 +136,59 @@ def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     options = Options(config)
     return options.parse()
 
-def workflow_section_from_config(engine: str, section_options: Any) -> Any:
+def _build_door_downloader(section_options: Any) -> Any:
+    import door
+    return door.Downloader.from_options(section_options)
+
+
+def _build_dam_workflow(section_options: Any) -> Any:
+    from dam import DAMWorkflow
+    return DAMWorkflow.from_options(section_options)
+
+
+def _build_dryes_index(section_options: Any) -> Any:
+    from dryes import DRYESIndex
+    if not isinstance(section_options, dict):
+        raise TypeError("DRYES section options must be a mapping")
+    return DRYESIndex.from_options(**section_options)
+
+
+_WORKFLOW_ENGINE_BUILDERS = {
+    "door": _build_door_downloader,
+    "dam": _build_dam_workflow,
+    "dryes": _build_dryes_index,
+}
+
+
+def workflow_section_from_config(
+        engine: str,
+        section_options: Any,
+        build_object: bool = False,
+        strict_imports: bool = False,
+    ) -> Any:
     """
     Parse a workflow section payload for a specific engine.
     
     Args:
         engine: Normalized workflow engine keyword ('door', 'dam', 'dryes')
         section_options: Configuration options for the section
+        build_object: If ``True``, try building runtime objects from options.
+        strict_imports: If ``True``, raise on build/import errors. If ``False``,
+            fallback to returning ``section_options`` unchanged.
         
     Returns:
-        Parsed section payload.
-
-    Note:
-        This function is currently a scaffold and returns the input payload
-        unchanged after engine validation. A future stage can instantiate
-        engine-specific runtime objects here.
+        Parsed section payload or runtime object depending on ``build_object``.
     """
-    if engine not in ['door', 'dam', 'dryes']:
+    if engine not in _WORKFLOW_ENGINE_BUILDERS:
         raise ValueError(f"Unknown workflow section engine: {engine}")
-    
-    # return section options for now, later we will create DoorDownloader, DamWorkflow, DryesIndex objects here
-    # based on the engine and the options provided
-    return section_options
+
+    if not build_object:
+        return section_options
+
+    builder = _WORKFLOW_ENGINE_BUILDERS[engine]
+    try:
+        return builder(section_options)
+    except Exception:
+        if strict_imports:
+            raise
+        return section_options

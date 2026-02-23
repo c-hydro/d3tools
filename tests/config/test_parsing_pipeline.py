@@ -202,6 +202,33 @@ class TestCollectWorkflowSections:
         assert sections[0].definition["process_list"][0]["function"] == "a"
         assert sections[1].definition["process_list"][0]["function"] == "b"
 
+    def test_collect_workflow_sections_forwards_build_flags(self, monkeypatch):
+        """Collector should forward build/strict flags to WorkflowSection factory."""
+        calls = []
+        from d3tools.config import parsing_pipeline as pipeline
+
+        def _fake_from_config(name, definition, build_object=False, strict_imports=False):
+            calls.append((name, build_object, strict_imports))
+            return WorkflowSection(name=name, engine="door", definition=definition, value=definition)
+
+        monkeypatch.setattr(pipeline.WorkflowSection, "from_config", staticmethod(_fake_from_config))
+
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Download": {"source": "ERA5"},
+            }
+        )
+        collected = collect_workflow_sections(
+            options,
+            build_workflow_objects=True,
+            strict_workflow_imports=True,
+        )
+
+        assert len(collected["workflow_sections"]) == 1
+        assert calls == [("Download", True, True)]
+
 
 class TestParseOptionsIntegration:
     """Integration tests for full parse_options stage."""
@@ -310,3 +337,34 @@ class TestParseOptionsIntegration:
         assert io_opts["gamma.a"].tags.get("par_name") == "gamma.a"
         assert isinstance(io_opts["index"], Dataset)
         assert dryes_section.definition["run_options"]["history_start"] == "1990-01-01"
+
+    def test_parse_options_forwards_build_flags_to_collector(self, monkeypatch):
+        """parse_options should forward workflow build flags to collector stage."""
+        from d3tools.config import parsing_pipeline as pipeline
+        from d3tools.config import parsers
+
+        seen = {}
+        original_collector = pipeline.collect_workflow_sections
+
+        def _collector_proxy(options, build_workflow_objects=False, strict_workflow_imports=False):
+            seen["build"] = build_workflow_objects
+            seen["strict"] = strict_workflow_imports
+            return original_collector(
+                options,
+                build_workflow_objects=build_workflow_objects,
+                strict_workflow_imports=strict_workflow_imports,
+            )
+
+        monkeypatch.setattr(pipeline, "collect_workflow_sections", _collector_proxy)
+        monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", lambda section: {"built": True, **section})
+
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {"destination": {"type": "local", "path": "/tmp", "filename": "x.tif"}},
+                "Download": {"source": "ERA5"},
+            }
+        )
+
+        parse_options(options, build_workflow_objects=True, strict_workflow_imports=False)
+        assert seen == {"build": True, "strict": False}
