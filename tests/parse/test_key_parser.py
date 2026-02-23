@@ -250,6 +250,50 @@ class TestKeyParserMatch:
         assert parsed.time == dt.datetime(2024, 2, 20)
         assert parsed.tags == {'file_version': 'v1.2/build'}
 
+    def test_get_matching_keys_filters_non_matching_entries(self):
+        """Test get_matching_keys keeps only keys matching the parser pattern."""
+        key_pattern = KeyParser('root/%Y/%m/file_{tile}_%Y%m%d.tif')
+        keys = [
+            'root/2024/02/file_h18v04_20240220.tif',
+            'root/2024/02/file_h19v04_20240221.tif',
+            'root/not_a_match.tif',
+            'other/2024/02/file_h18v04_20240220.tif',
+        ]
+
+        matched = key_pattern.get_matching_keys(keys)
+
+        assert matched == [
+            'root/2024/02/file_h18v04_20240220.tif',
+            'root/2024/02/file_h19v04_20240221.tif',
+        ]
+
+    def test_get_matching_keys_returns_empty_for_no_matches(self):
+        """Test get_matching_keys returns an empty list when nothing matches."""
+        key_pattern = KeyParser('root/%Y/file_%Y%m%d.tif')
+        keys = ['root/file.tif', 'other/2024/file_20240101.tif']
+
+        matched = key_pattern.get_matching_keys(keys)
+
+        assert matched == []
+
+    def test_get_matching_keys_preserves_order_duplicates_and_file_version_paths(self):
+        """Test get_matching_keys keeps input order/duplicates and file_version path matches."""
+        key_pattern = KeyParser('root/{file_version}/file_%Y%m%d.tif')
+        keys = [
+            'root/v1.2/build/file_20240220.tif',
+            'root/not_a_match.tif',
+            'root/v2/file_20240221.tif',
+            'root/v1.2/build/file_20240220.tif',
+        ]
+
+        matched = key_pattern.get_matching_keys(keys)
+
+        assert matched == [
+            'root/v1.2/build/file_20240220.tif',
+            'root/v2/file_20240221.tif',
+            'root/v1.2/build/file_20240220.tif',
+        ]
+
 
 class TestKeyParserPrefix:
     """Test KeyParser.prefix method."""
