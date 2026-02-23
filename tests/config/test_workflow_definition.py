@@ -45,7 +45,7 @@ class TestWorkflowDefinitionCompatibility:
 
     def test_parse_forwards_build_flags(self, monkeypatch):
         """WorkflowDefinition.parse should forward workflow build flags."""
-        from d3tools.config import options as options_module
+        from d3tools.config import workflow_definition as options_module
         from d3tools.config import parsers
 
         seen = {}
