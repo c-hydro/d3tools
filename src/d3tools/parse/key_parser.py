@@ -56,6 +56,8 @@ class KeyParser:
             time: Optional[dt.datetime | TimeStep] = None,
             tags: Optional[dict[str, Any]] = None,
             time_signature: str = "end",
+            normalize_for_pattern: bool = False,
+            step_length: Optional[int] = None,
         ) -> str:
         """Render a concrete key from the pattern.
 
@@ -64,6 +66,10 @@ class KeyParser:
             tags: Optional tag values used to resolve ``{tag}`` placeholders.
             time_signature: How to map a timestep to a datetime when ``time`` is
                 a TimeStep. Must be one of ``'start'``, ``'end'``, ``'end+1'``.
+            normalize_for_pattern: Whether to normalize parsed datetime precision
+                based on directives available in this key pattern.
+            step_length: Optional timestep length used by leap-day normalization
+                logic when ``normalize_for_pattern`` is enabled.
 
         Returns:
             Rendered key string.
@@ -77,8 +83,61 @@ class KeyParser:
         if time is None:
             return raw_key
 
-        render_time = self._resolve_render_time(time, time_signature)
+        render_time = self.resolve_time(time, time_signature=time_signature)
+        if normalize_for_pattern:
+            render_time = self.normalize_time(render_time, step_length=step_length)
         return render_time.strftime(raw_key)
+
+    def resolve_time(
+            self,
+            time: Optional[dt.datetime | TimeStep],
+            time_signature: str = "end",
+        ) -> Optional[dt.datetime]:
+        """Resolve datetime from datetime/timestep input.
+
+        Args:
+            time: Datetime or timestep to resolve.
+            time_signature: Mapping for timestep inputs.
+
+        Returns:
+            Datetime used for key rendering or ``None``.
+        """
+        if time is None:
+            return None
+        return self._resolve_render_time(time, time_signature)
+
+    def normalize_time(self, time: dt.datetime, step_length: Optional[int] = None) -> dt.datetime:
+        """Normalize datetime for this key pattern using legacy Dataset rules.
+
+        Args:
+            time: Datetime already resolved for rendering.
+            step_length: Optional timestep length. If provided and ``>1``, allows
+                leap-day adjustment for non-year key patterns.
+
+        Returns:
+            Normalized datetime aligned to pattern precision.
+        """
+        key_without_tags = re.sub(r"\{[^}]*\}", "", self.raw_pattern)
+        hasyear = "%Y" in key_without_tags
+
+        # Legacy behavior: for non-year keys and multi-day windows, 29-Feb maps
+        # to 28-Feb so parameterized climatology-like paths remain resolvable.
+        if not hasyear and time.month == 2 and time.day == 29:
+            if step_length is not None and step_length > 1:
+                time = time.replace(day=28)
+
+        if "%S" not in key_without_tags:
+            time = time.replace(second=0)
+            if "%M" not in key_without_tags:
+                time = time.replace(minute=0)
+                if "%H" not in key_without_tags:
+                    time = time.replace(hour=0)
+                    if all(tag not in key_without_tags for tag in ("%d", "%j")):
+                        time = time.replace(day=1)
+                        if "%m" not in key_without_tags:
+                            time = time.replace(month=1)
+
+        return time
 
     def match(self, key: str) -> ParsedKey:
         """Parse a concrete key into time and tags.

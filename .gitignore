@@ -35,3 +35,9 @@ venv.bak/
 # IDEs and editors
 .vscode
 .idea
+
+#old stuff
+_old*
+
+# workflow logs and summaries
+_working*
