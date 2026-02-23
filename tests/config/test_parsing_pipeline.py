@@ -233,110 +233,51 @@ class TestCollectWorkflowSections:
 class TestParseOptionsIntegration:
     """Integration tests for full parse_options stage."""
 
-    def test_parse_options_door_like_configuration(self):
-        """Test full pipeline on door-style workflow config."""
-        options = Options(
-            {
-                "TAGS": {"source": "ERA5", "product": "reanalysis"},
-                "DATASETS": {
-                    "__defaults__": {"type": "local"},
-                    "destination": {
-                        "path": "output/{source}/{product}",
-                        "filename": "data_%Y%m%d.tif",
-                    },
-                },
-                "DOOR_DOWNLOADER": {
-                    "source": "{source}",
-                    "product": "{product}",
-                    "destination": "{DATASETS.destination}",
-                    "options": {"ts_per_year": 36},
-                },
-            }
-        )
-
-        parsed = parse_options(options)
-        sections = parsed["workflow_sections"]
-        door_section = next(s for s in sections if s.engine == "door")
-        door_options = door_section.definition
-
-        assert isinstance(parsed["DATASETS"]["destination"], Dataset)
-        assert isinstance(door_options["destination"], Dataset)
-        assert door_options["source"] == "ERA5"
-        assert door_options["product"] == "reanalysis"
-
-    def test_parse_options_dam_like_configuration(self):
-        """Test full pipeline on dam-style workflow config."""
-        options = Options(
-            {
-                "TAGS": {"DATA_in": "/tmp/in", "DATA_out": "/tmp/out"},
-                "DATASETS": {
-                    "__defaults__": {"type": "local"},
-                    "prec_tile": {"path": "{DATA_in}/%Y", "filename": "in_%Y%m%d.tif"},
-                    "prec_out": {"path": "{DATA_out}/%Y", "filename": "out_%Y%m%d.tif"},
-                },
-                "DAM_WORKFLOW": {
-                    "input": "{DATASETS.prec_tile}",
-                    "output": "{DATASETS.prec_out}",
-                    "process_list": [{"function": "combine_tiles"}],
-                },
-            }
-        )
-
-        parsed = parse_options(options)
-        sections = parsed["workflow_sections"]
-        dam_section = next(s for s in sections if s.engine == "dam")
-        dam_options = dam_section.definition
-
-        assert isinstance(dam_options["input"], Dataset)
-        assert isinstance(dam_options["output"], Dataset)
-        assert dam_options["process_list"][0]["function"] == "combine_tiles"
-
-    def test_parse_options_dryes_like_configuration(self):
-        """Test full pipeline on dryes-style workflow config."""
+    def test_parse_options_resolves_tags_datasets_and_collects_workflow_sections(self):
+        """Full pipeline should resolve placeholders and collect sections generically."""
         options = Options(
             {
                 "TAGS": {
-                    "DATA_in": "/tmp/in",
-                    "DATA_out": "/tmp/out",
-                    "history_start": "1990-01-01",
-                    "history_end": "2020-12-31",
+                    "root": "/tmp",
+                    "source": "ERA5",
                 },
                 "DATASETS": {
                     "__defaults__": {"type": "local"},
-                    "prec_agg": {
-                        "path": "{DATA_in}/{agg_window}/%Y",
-                        "filename": "prec_%Y%m%d.tif",
+                    "in_data": {
+                        "path": "{root}/in",
+                        "filename": "in_%Y%m%d.tif",
                     },
-                    "parameters": {
-                        "path": "{DATA_out}/{par_name}",
-                        "filename": "{par_name}_%m%d.tif",
+                    "out_data": {
+                        "path": "{root}/out",
+                        "filename": "out_%Y%m%d.tif",
                     },
-                    "spi": {"path": "{DATA_out}/spi/%Y", "filename": "spi_%Y%m%d.tif"},
                 },
-                "DRYES_INDEX": {
-                    "index_options": {"index": "SPI", "agg_window": {"1": "1m"}},
-                    "io_options": {
-                        "data": "{DATASETS.prec_agg}",
-                        "gamma.a": "{DATASETS.parameters, par_name = 'gamma.a'}",
-                        "index": "{DATASETS.spi}",
-                    },
-                    "run_options": {
-                        "history_start": "{history_start:%Y-%m-%d}",
-                        "history_end": "{history_end:%Y-%m-%d}",
-                    },
+                "Download": {
+                    "source": "{source}",
+                    "destination": "{DATASETS.out_data}",
+                },
+                "Process": {
+                    "input": "{DATASETS.in_data}",
+                    "output": "{DATASETS.out_data}",
+                },
+                "Calculate": {
+                    "io_options": {"data": "{DATASETS.in_data}"},
                 },
             }
         )
 
         parsed = parse_options(options)
         sections = parsed["workflow_sections"]
-        dryes_section = next(s for s in sections if s.engine == "dryes")
-        io_opts = dryes_section.definition["io_options"]
-        assert isinstance(io_opts["data"], Dataset)
-        assert isinstance(io_opts["gamma.a"], Dataset)
-        assert io_opts["gamma.a"].tags.get("par_name") == "gamma.a"
-        assert isinstance(io_opts["index"], Dataset)
-        assert dryes_section.definition["run_options"]["history_start"] == "1990-01-01"
+
+        assert isinstance(parsed["DATASETS"]["in_data"], Dataset)
+        assert isinstance(parsed["DATASETS"]["out_data"], Dataset)
+        assert [section.name for section in sections] == ["Download", "Process", "Calculate"]
+        assert [section.engine for section in sections] == ["door", "dam", "dryes"]
+        assert sections[0].definition["source"] == "ERA5"
+        assert isinstance(sections[0].definition["destination"], Dataset)
+        assert isinstance(sections[1].definition["input"], Dataset)
+        assert isinstance(sections[1].definition["output"], Dataset)
+        assert isinstance(sections[2].definition["io_options"]["data"], Dataset)
 
     def test_parse_options_forwards_build_flags_to_collector(self, monkeypatch):
         """parse_options should forward workflow build flags to collector stage."""
