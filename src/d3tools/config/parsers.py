@@ -134,7 +134,7 @@ def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
         This function is a placeholder for future workflow parsing logic.
         For now, use Options.parse() directly.
     """
-    from .options import Options
+    from .workflow_definition import Options
     options = Options(config)
     return options.parse()
 
