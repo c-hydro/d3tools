@@ -13,7 +13,7 @@ All operations share the same mental model: querying what exists in the catalogu
 from typing import Optional, Generator, TYPE_CHECKING
 import datetime as dt
 
-from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
+from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep
 from ..cases.utils import withcases
 from ..parse import KeyParser
 
@@ -49,6 +49,43 @@ class DataCatalogue:
     
     def __repr__(self):
         return f"DataCatalogue({self.dataset.name})"
+
+    def _to_storage_time(self, time: Optional[dt.datetime | TimeRange]) -> Optional[dt.datetime | TimeRange]:
+        """Map logical/query time into storage-domain time.
+
+        This helper delegates signature-specific conversion to ``KeyParser`` and
+        supports both scalar datetimes and ``TimeRange`` inputs.
+
+        Args:
+            time: Logical/query datetime or range supplied by caller.
+
+        Returns:
+            Storage-domain datetime/range used for key matching, or ``None``.
+        """
+        if time is None:
+            return None
+
+        key_parser = KeyParser(self.dataset.key_pattern)
+        if isinstance(time, dt.datetime):
+            return key_parser.to_storage_time(time, self.dataset.time_signature)
+        if isinstance(time, TimeRange):
+            return TimeRange(
+                key_parser.to_storage_time(time.start, self.dataset.time_signature),
+                key_parser.to_storage_time(time.end, self.dataset.time_signature),
+            )
+        return time
+
+    def _from_storage_time(self, time: dt.datetime) -> dt.datetime:
+        """Map storage-domain datetime back to logical/query datetime.
+
+        Args:
+            time: Datetime extracted from storage key/path.
+
+        Returns:
+            Logical/query datetime expected by catalogue consumers.
+        """
+        key_parser = KeyParser(self.dataset.key_pattern)
+        return key_parser.from_storage_time(time, self.dataset.time_signature)
     
     @withcases
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs) -> str:
@@ -155,12 +192,7 @@ class DataCatalogue:
                 'variable': ['temp', 'precip']
             }
         """
-        # Handle time_signature adjustment
-        if self.dataset.time_signature == 'end+1' and time is not None:
-            if isinstance(time, dt.datetime):
-                time = time + dt.timedelta(days=1)
-            elif isinstance(time, TimeRange):
-                time = TimeRange(time.start + dt.timedelta(days=1), time.end + dt.timedelta(days=1))
+        time = self._to_storage_time(time)
         
         # Get all available files
         all_keys = self.get_available_keys(time, **kwargs)
@@ -171,7 +203,7 @@ class DataCatalogue:
         all_dates = set()
         for key in all_keys:
             parsed = key_parser.match(key)
-            this_date = parsed.time
+            this_date = self._from_storage_time(parsed.time)
             this_tags = parsed.tags
             
             for tag in this_tags:
@@ -183,11 +215,7 @@ class DataCatalogue:
         # Convert sets to sorted lists
         all_tags = {tag: list(all_tags[tag]) for tag in all_tags}
         all_tags['time'] = list(all_dates)
-        
-        # Adjust times for end+1 signature
-        if self.dataset.time_signature == 'end+1':
-            all_tags['time'] = [t - dt.timedelta(days=1) for t in all_tags['time']]
-            all_tags['time'].sort()
+        all_tags['time'].sort()
         
         return all_tags
 
@@ -250,36 +278,30 @@ class DataCatalogue:
         Get a list of TimeStep objects within a time range.
         
         Converts discovered times to TimeStep objects using the dataset's
-        estimated timestep. Handles time_signature adjustments and filters
-        to ensure timesteps actually overlap with the requested range.
+        estimated timestep. Candidate discovery range is expanded through
+        ``KeyParser.expand_overlap_range`` so start/end anchor semantics are
+        applied consistently in one place.
         
         Args:
             time_range: Time range to search within
             **kwargs: Additional tag filters
             
         Returns:
-            List of TimeStep objects within the range
+            List of TimeStep objects that overlap the requested range.
             
         Example:
             >>> catalog.get_timesteps(TimeRange('2024-01-01', '2024-01-31'))
             [TimeStep('2024-01-01', freq='d', agg=1), ...]
         """
         timestep = self.estimate_timestep(**kwargs)
-        window = TimeWindow(1, timestep.unit)
-
-        # Adjust time range based on time signature
-        if self.dataset.time_signature == 'start':
-            _time_range = time_range.extend(window, before=True)
-        elif self.dataset.time_signature.startswith('end'):
-            _time_range = time_range.extend(window, before=False)
-            if self.dataset.time_signature == 'end+1':
-                _time_range = time_range.extend(TimeWindow(1, 'd'), before=False)
+        key_parser = KeyParser(self.dataset.key_pattern)
+        _time_range = key_parser.expand_overlap_range(
+            time_range=time_range,
+            timestep_unit=timestep.unit,
+            time_signature=self.dataset.time_signature,
+        )
 
         times = self.get_times(_time_range, **kwargs)
-        
-        # Adjust for end+1 signature
-        if self.dataset.time_signature == 'end+1':
-            times = [t - dt.timedelta(days=1) for t in times]
         
         # Convert to timesteps
         timesteps = [timestep.from_date(t) for t in times]
@@ -601,10 +623,8 @@ class DataCatalogue:
             if timestep is None:
                 return None
 
-        if self.dataset.time_signature == 'end+1':
-            return timestep.from_date(last_date) - 1
-        else:
-            return timestep.from_date(last_date)
+        logical_date = self._from_storage_time(last_date)
+        return timestep.from_date(logical_date)
 
     @withcases
     def get_first_ts(self, **kwargs) -> TimeStep:
@@ -637,10 +657,8 @@ class DataCatalogue:
             if timestep is None:
                 return None
 
-        if self.dataset.time_signature == 'end+1':
-            return timestep.from_date(first_date) - 1
-        else:
-            return timestep.from_date(first_date)
+        logical_date = self._from_storage_time(first_date)
+        return timestep.from_date(logical_date)
 
     @withcases
     def get_start(self, agg=False, **kwargs) -> dt.datetime | None:

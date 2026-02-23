@@ -12,6 +12,7 @@ from d3tools.timestepping import (
     Day,
     Dekad,
     Month,
+    TimeWindow,
     ViirsModisTimeStep,
     Year,
     TimeRange
@@ -144,6 +145,43 @@ class TestKeyParserTimeNormalization:
         assert parsed.day == 29
         assert parsed.month == 2
 
+    def test_to_storage_time_and_from_storage_time_for_end_plus_one(self):
+        """Test signature conversion helpers for end+1 convention."""
+        date = dt.datetime(2024, 1, 15)
+
+        storage = KeyParser.to_storage_time(date, 'end+1')
+        logical = KeyParser.from_storage_time(storage, 'end+1')
+
+        assert storage == dt.datetime(2024, 1, 16)
+        assert logical == date
+
+    def test_to_storage_time_and_from_storage_time_are_noops_for_end(self):
+        """Test signature conversion helpers are identity for non-shift signatures."""
+        date = dt.datetime(2024, 1, 15)
+
+        assert KeyParser.to_storage_time(date, 'end') == date
+        assert KeyParser.from_storage_time(date, 'end') == date
+
+    def test_expand_overlap_range_for_start_signature(self):
+        """Test overlap expansion extends before for start-anchored signatures."""
+        tr = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 31))
+        expanded = KeyParser.expand_overlap_range(tr, timestep_unit='m', time_signature='start')
+        expected = tr.extend(TimeWindow(1, 'm'), before=True)
+        assert expanded == expected
+
+    def test_expand_overlap_range_for_end_signature(self):
+        """Test overlap expansion extends by one period for end-anchored signatures."""
+        tr = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 31))
+        expanded = KeyParser.expand_overlap_range(tr, timestep_unit='m', time_signature='end')
+        expected = tr.extend(TimeWindow(1, 'm'), before=False)
+        assert expanded == expected
+
+    def test_expand_overlap_range_for_end_plus_one_signature(self):
+        """Test overlap expansion for end+1 is period-only (no extra day shift)."""
+        tr = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 31))
+        expanded = KeyParser.expand_overlap_range(tr, timestep_unit='m', time_signature='end+1')
+        expected = tr.extend(TimeWindow(1, 'm'), before=False)
+        assert expanded == expected
 
 class TestKeyParserMatch:
     """Test KeyParser.match method."""
