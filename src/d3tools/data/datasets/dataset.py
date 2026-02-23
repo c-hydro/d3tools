@@ -429,7 +429,7 @@ class Dataset(metaclass=DatasetMeta):
                 time = time.replace(day = 28)
         
         # progressively remove the non-used tags from the time
-        if '%s' not in key_without_tags:
+        if '%S' not in key_without_tags:
             time = time.replace(second = 0)
             if '%M' not in key_without_tags:
                 time = time.replace(minute = 0)

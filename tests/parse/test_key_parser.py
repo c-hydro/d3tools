@@ -8,7 +8,7 @@ import datetime as dt
 import pytest
 
 from d3tools.parse import KeyParser, ParsedKey
-from d3tools.timestepping import Day, TimeRange
+from d3tools.timestepping import Day, Month, TimeRange
 
 
 class TestParsedKey:
@@ -70,6 +70,25 @@ class TestKeyParserRender:
 
         with pytest.raises(ValueError):
             key_pattern.render(time=timestep, time_signature='invalid')
+
+    def test_render_with_datetime_ignores_time_signature_validation(self):
+        """Test datetime input does not require validating time_signature."""
+        key_pattern = KeyParser('root/file_%Y%m%d.tif')
+        rendered = key_pattern.render(
+            time=dt.datetime(2024, 2, 20),
+            time_signature='invalid'
+        )
+
+        assert rendered == 'root/file_20240220.tif'
+
+    def test_render_with_month_timestep_signatures(self):
+        """Test time_signature changes rendered day for monthly timesteps."""
+        key_pattern = KeyParser('root/file_%Y%m%d.tif')
+        timestep = Month.from_date(dt.datetime(2024, 2, 15))
+
+        assert key_pattern.render(time=timestep, time_signature='start') == timestep.start.strftime('root/file_%Y%m%d.tif')
+        assert key_pattern.render(time=timestep, time_signature='end') == timestep.end.strftime('root/file_%Y%m%d.tif')
+        assert key_pattern.render(time=timestep, time_signature='end+1') == (timestep + 1).start.strftime('root/file_%Y%m%d.tif')
 
 
 class TestKeyParserMatch:
