@@ -37,12 +37,11 @@ class RemoteDataset(Dataset):
         else:
             self.tmp_dir = tempfile.mkdtemp()
 
-        self._creation_kwargs.update({'tmp_dir': self.tmp_dir})
-
         super().__init__(**kwargs)
         rm_at_exit(self.tmp_dir)
 
         self.available_keys_are_cached = False
+        self._creation_kwargs.update({'tmp_dir': self.tmp_dir})
 
     @property
     def key_pattern(self):
@@ -123,11 +122,6 @@ class RemoteDataset(Dataset):
             key = key[1:]
         return os.path.join(self.tmp_dir, key)
 
-    def _get_recreate_kwargs(self) -> dict:
-        kwargs = super()._get_recreate_kwargs()
-        kwargs.update({'tmp_dir': self.tmp_dir})
-        return kwargs
-
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
         if self.available_keys_are_cached:
@@ -170,14 +164,14 @@ class S3Dataset(RemoteDataset):
         if S3Dataset.s3_client is None:
             S3Dataset.s3_client = self._session.client('s3')
 
-        if hasattr(self, "_creation_kwargs"):
-            self._creation_kwargs.update({'type': self.type, 'bucket_name': self.bucket_name,
-                                          'region_name': self.region_name, 'profile_name': self.profile_name})
-        else:
-            self._creation_kwargs = {'type': self.type, 'bucket_name': self.bucket_name,
-                                    'region_name': self.region_name, 'profile_name': self.profile_name}
-
         super().__init__(tmp_dir = tmp_dir, **kwargs)
+        self._creation_kwargs.update(
+            {
+                'bucket_name': self.bucket_name,
+                'region_name': self.region_name,
+                'profile_name': self.profile_name
+            }
+        )
 
 
     ## INPUT/OUTPUT METHODS
@@ -205,15 +199,6 @@ class S3Dataset(RemoteDataset):
             for file in content:
                 yield file['Key']
 
-    def _get_recreate_kwargs(self) -> dict:
-        kwargs = super()._get_recreate_kwargs()
-        kwargs.update({
-            'bucket_name': self.bucket_name,
-            'region_name': self.region_name,
-            'profile_name': self.profile_name,
-        })
-        return kwargs
-
 
 class OVHS3Dataset(S3Dataset):
 
@@ -225,9 +210,8 @@ class OVHS3Dataset(S3Dataset):
         
         self.endpoint_url = endpoint_url
 
-        self._creation_kwargs = {'endpoint_url': self.endpoint_url}
-
         super().__init__(**kwargs)
+        self._creation_kwargs.update({'endpoint_url': self.endpoint_url})
 
         self.host = urlparse(self.endpoint_url).netloc
         creds = self._session.get_credentials().get_frozen_credentials()
@@ -345,11 +329,6 @@ class OVHS3Dataset(S3Dataset):
             else:
                 break
 
-    def _get_recreate_kwargs(self) -> dict:
-        kwargs = super()._get_recreate_kwargs()
-        kwargs.update({'endpoint_url': self.endpoint_url})
-        return kwargs
-
 
 class SFTPDataset(RemoteDataset):
     type = 'sftp'
@@ -378,11 +357,17 @@ class SFTPDataset(RemoteDataset):
             self.sftp_client = self._connect()
             SFTPDataset.sftp_clients[self.hostname] = self.sftp_client
 
-        self._creation_kwargs = {'type': self.type, 'host': self.hostname, 'username': self.username,
-                                 'password': self.password, 'private_key': self.private_key,
-                                 'port': self.port}
-
         super().__init__(tmp_dir = tmp_dir, **kwargs)
+
+        self._creation_kwargs.update(
+            {
+                'host': self.hostname,
+                'username': self.username,
+                'password': self.password,
+                'private_key': self.private_key,
+                'port': self.port
+            }
+        )
 
     def _connect(self):
 
@@ -456,17 +441,6 @@ class SFTPDataset(RemoteDataset):
 
     def _delete(self, key):
         self.sftp_client.remove(key)
-
-    def _get_recreate_kwargs(self) -> dict:
-        kwargs = super()._get_recreate_kwargs()
-        kwargs.update({
-            'host': self.hostname,
-            'username': self.username,
-            'password': self.password,
-            'port': self.port,
-            'private_key': self.private_key,
-        })
-        return kwargs
 
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
