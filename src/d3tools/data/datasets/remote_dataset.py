@@ -122,18 +122,23 @@ class RemoteDataset(Dataset):
             key = key[1:]
         return os.path.join(self.tmp_dir, key)
 
-    def update(self, in_place = False, **kwargs):
-        new_self = super().update(in_place = in_place, **kwargs)
-        if self.available_keys_are_cached:
-            key_parser = KeyParser(new_self.key_pattern)
-            new_self.available_keys = key_parser.get_matching_keys(self.available_keys)
-            new_self.available_keys_are_cached = True
+    def _post_update_init(self, source_dataset, **kwargs):
+        """Handle RemoteDataset-specific attribute preservation after update.
+        
+        This filters available_keys if they were cached in the source dataset.
+        
+        Args:
+            source_dataset: The RemoteDataset being updated
+            kwargs: kwargs passed to super()._post_update_init
+        """
+        # Call parent implementation first (Dataset._post_update_init)
+        super()._post_update_init(source_dataset, **kwargs)
 
-        if in_place:
-            self = new_self
-            return self
-        else:
-            return new_self
+        # If available_keys were cached, filter them to match new pattern
+        if source_dataset.available_keys_are_cached:
+            key_parser = KeyParser(self.key_pattern)
+            self.available_keys = key_parser.get_matching_keys(source_dataset.available_keys)
+            self.available_keys_are_cached = True
 
     @cached_property
     def available_keys(self):
@@ -442,15 +447,20 @@ class SFTPDataset(RemoteDataset):
     def _delete(self, key):
         self.sftp_client.remove(key)
 
-    def update(self, in_place = False, **kwargs):
-        new_self = super().update(in_place = in_place, **kwargs)
-        new_self.sftp_client = self.sftp_client
-
-        if in_place:
-            self = new_self
-            return self
-        else:
-            return new_self
+    def _post_update_init(self, source_dataset, **kwargs):
+        """Handle RemoteDataset-specific attribute preservation after update.
+        
+        This filters available_keys if they were cached in the source dataset.
+        
+        Args:
+            source_dataset: The RemoteDataset being updated
+            kwargs: kwargs passed to super()._post_update_init
+        """
+        # Call parent implementation first (Dataset._post_update_init)
+        super()._post_update_init(source_dataset, **kwargs)
+        
+        # Preserve the shared SFTP client connection
+        self.sftp_client = source_dataset.sftp_client
 
     def _check_data(self, data_key) -> bool:
         try:
