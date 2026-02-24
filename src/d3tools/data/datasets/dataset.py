@@ -149,7 +149,7 @@ class Dataset(metaclass=DatasetMeta):
     # endregion
 
     # region: CLASS METHODS FOR FACTORY
-    def __new__(cls, **kwargs):
+    def __new__(cls, *args, **kwargs):
         """Create Dataset instance of the appropriate subclass based on type."""
         # Step 1: Detect format BEFORE creating instance
         format = kwargs.get('format', None)
@@ -158,9 +158,12 @@ class Dataset(metaclass=DatasetMeta):
             # If format not explicitly provided, try to detect from key_pattern
             key_pattern = kwargs.get('key_pattern', None)
             if key_pattern is None:
-                dir  = kwargs.get('dir', None) or kwargs.get('path', '')
-                file = kwargs.get('file', '')  or kwargs.get('filename', '')
-                key_pattern = os.path.join(dir, file)
+                if len(args) > 0:
+                    key_pattern = args[0]
+                else:
+                    dir  = kwargs.get('dir', None) or kwargs.get('path', '')
+                    file = kwargs.get('file', '')  or kwargs.get('filename', '')
+                    key_pattern = os.path.join(dir, file)
             format = get_format_from_path(key_pattern)
         
         # Step 2: Select mixin
