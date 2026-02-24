@@ -10,6 +10,11 @@ from .parsing_pipeline import (
     parse_options,
 )
 
+import sys
+# Legacy module paths -> new modules workflow definition used to be options
+from . import workflow_definition as _workflow_definition_mod
+sys.modules.setdefault(__name__ + ".options", _workflow_definition_mod)
+
 __all__ = [
     'WORKFLOW_SECTION_ALIASES',
     'WorkflowSection',
