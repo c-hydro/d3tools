@@ -5,36 +5,31 @@ from ..parse import get_unique_values
 from .parsing_pipeline import parse_options
 from .utils import load_jsons
 
+class Options(dict):
+    """
+    Enhanced mapping with compatibility helpers for config access.
 
-class WorkflowDefinition(dict):
-    """Canonical workflow configuration container.
+    ``Options`` is a non-runnable configuration container that extends plain dict behavior with:
+    - Recursive wrapping of nested mappings/lists into ``Options`` instances
+    - Attribute-style access for uniquely resolvable nested keys
+    - Compatibility helpers in :meth:`get` (case-insensitive lookup, fallback key lists, optional key return)
 
-    ``WorkflowDefinition`` is the user-facing mapping for workflow options and
-    parsed workflow state. It keeps dict semantics for backward compatibility,
-    while adding:
-
-    - recursive wrapping of nested mappings/lists into ``WorkflowDefinition``
-      instances;
-    - attribute-style access for uniquely resolvable keys;
-    - convenience parsing/loading helpers that delegate to the explicit
-      configuration parsing pipeline;
-    - basic ordered workflow execution via :meth:`run`.
+    Backward compatibility:
+        - Previously, ``Options`` was the runnable workflow container. Now, ``WorkflowDefinition`` is the canonical runnable container.
+        - ``Options.load()`` is retained for legacy code and emits a deprecation warning. Use ``WorkflowDefinition.load()`` instead.
 
     Notes:
-        - attribute access is global across nested structures and raises when a
-          key matches multiple distinct values;
-        - parsing does not mutate the receiver in-place and returns a new
-          ``WorkflowDefinition`` (or subclass) instance.
+        - This class intentionally does not provide workflow parsing/execution behavior.
+        - Use ``WorkflowDefinition`` for operational workflow execution.
     """
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         for k, v in self.items():
             if isinstance(v, dict):
-                self[k] = self.__class__(v)
+                self[k] = Options(**v)
             elif isinstance(v, list):
-                self[k] = [self.__class__(i) if isinstance(i, dict) else i for i in v]
+                self[k] = [Options(**i) if isinstance(i, dict) else i for i in v]
 
     def __getattr__(self, item):
         key_paths = self.find_keys(item, get_all = True)
@@ -62,67 +57,6 @@ class WorkflowDefinition(dict):
         except KeyError:
             raise AttributeError(f"'Options' object has no attribute '{item}'")
 
-    @classmethod
-    def load(
-            cls,
-            *paths: str,
-            build_workflow_objects: bool = False,
-            strict_workflow_imports: bool = False,
-            **kwargs,
-        ) -> dict:
-        """Load JSON configuration files and return a parsed workflow object.
-
-        Args:
-            *paths: One or more JSON file paths loaded and merged by
-                :func:`d3tools.config.utils.load_jsons`.
-            build_workflow_objects: Whether collected workflow sections should
-                be converted into runtime objects (door/dam/dryes builders).
-            strict_workflow_imports: Whether missing workflow-engine imports
-                should raise instead of falling back to raw section payloads.
-            **kwargs: Reserved for forward compatibility.
-
-        Returns:
-            A parsed instance of ``cls`` containing resolved tags, datasets, and
-            ``workflow_sections``.
-        """
-        
-        config = load_jsons(*paths)
-
-        config_options = cls(config)
-        parsed_options = config_options.parse(
-            build_workflow_objects=build_workflow_objects,
-            strict_workflow_imports=strict_workflow_imports,
-            **kwargs,
-        )
-
-        return cls(parsed_options)
-
-    def parse(
-            self,
-            build_workflow_objects: bool = False,
-            strict_workflow_imports: bool = False,
-            **kwargs,
-        ):
-        """Parse this workflow definition through the d3tools pipeline.
-
-        Args:
-            build_workflow_objects: Whether to try building runtime workflow
-                objects in collected workflow sections.
-            strict_workflow_imports: If ``True``, propagate build/import errors
-                from workflow-section object construction.
-            **kwargs: Reserved for forward compatibility.
-
-        Returns:
-            A new instance of ``self.__class__`` containing the parsed
-            configuration.
-        """
-        parsed_options = parse_options(
-            self,
-            build_workflow_objects=build_workflow_objects,
-            strict_workflow_imports=strict_workflow_imports,
-        )
-        return self.__class__(parsed_options)
-    
     def find_keys(self, key: str, get_all = False) -> list[str]:
         """Find nested key paths ending with ``key``.
 
@@ -205,6 +139,106 @@ class WorkflowDefinition(dict):
         else:
             return outvalue
 
+    @classmethod
+    def load(cls, *args, **kwargs):
+        """
+        Deprecated compatibility loader for workflow JSON files.
+
+        This method is kept only for legacy code that still calls ``Options.load(...)``.
+        Emits a deprecation warning and returns a ``WorkflowDefinition`` instance.
+
+        Returns:
+            WorkflowDefinition: Parsed workflow definition object.
+
+        Deprecated:
+            Use ``WorkflowDefinition.load`` instead. This method will be removed in a future release.
+        """
+        import warnings
+        warnings.warn(
+            "Options.load is deprecated and will be removed in a future release. "
+            "Please use WorkflowDefinition.load instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return WorkflowDefinition.load(*args, **kwargs)
+
+class WorkflowDefinition(Options):
+    """
+    Canonical workflow configuration container.
+
+    ``WorkflowDefinition`` is the user-facing mapping for workflow options and parsed workflow state.
+    It keeps dict semantics for backward compatibility, while adding:
+    - Enhanced mapping helpers inherited from ``Options``
+    - Convenience parsing/loading helpers that delegate to the explicit configuration parsing pipeline
+    - Basic ordered workflow execution via :meth:`run`
+
+    Notes:
+            - Nested mappings/lists are wrapped as ``Options`` instances and are not runnable workflow objects
+            - Parsing does not mutate the receiver in-place and always returns a ``WorkflowDefinition`` instance
+            - Use this class for operational workflow execution and configuration parsing
+    """
+
+    @classmethod
+    def load(
+            cls,
+            *paths: str,
+            build_workflow_objects: bool = False,
+            strict_workflow_imports: bool = False,
+            **kwargs,
+        ) -> dict:
+        """Load JSON configuration files and return a parsed workflow object.
+
+        Args:
+            *paths: One or more JSON file paths loaded and merged by
+                :func:`d3tools.config.utils.load_jsons`.
+            build_workflow_objects: Whether collected workflow sections should
+                be converted into runtime objects (door/dam/dryes builders).
+            strict_workflow_imports: Whether missing workflow-engine imports
+                should raise instead of falling back to raw section payloads.
+            **kwargs: Reserved for forward compatibility.
+
+        Returns:
+            A parsed ``WorkflowDefinition`` containing resolved tags, datasets,
+            and ``workflow_sections``.
+        """
+        
+        config = load_jsons(*paths)
+
+        config_options = cls(config)
+        parsed_options = config_options.parse(
+            build_workflow_objects=build_workflow_objects,
+            strict_workflow_imports=strict_workflow_imports,
+            **kwargs,
+        )
+
+        return cls(parsed_options)
+
+    def parse(
+            self,
+            build_workflow_objects: bool = False,
+            strict_workflow_imports: bool = False,
+            **kwargs,
+        ):
+        """Parse this workflow definition through the d3tools pipeline.
+
+        Args:
+            build_workflow_objects: Whether to try building runtime workflow
+                objects in collected workflow sections.
+            strict_workflow_imports: If ``True``, propagate build/import errors
+                from workflow-section object construction.
+            **kwargs: Reserved for forward compatibility.
+
+        Returns:
+            A new instance of ``WorkflowDefinition`` containing the parsed
+            configuration.
+        """
+        parsed_options = parse_options(
+            self,
+            build_workflow_objects=build_workflow_objects,
+            strict_workflow_imports=strict_workflow_imports,
+        )
+        return WorkflowDefinition(parsed_options)
+    
     def run(
             self,
             start: dt.datetime|str,
@@ -245,7 +279,3 @@ class WorkflowDefinition(dict):
                         f"Workflow section '{getattr(section, 'name', '<unknown>')}' "
                         "does not contain a runnable workflow object."
                     )
-
-class Options(WorkflowDefinition):
-    """Backward-compatible alias for ``WorkflowDefinition``."""
-    pass
