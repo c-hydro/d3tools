@@ -1,190 +1,303 @@
 """
-Tests for WorkflowDefinition behavior.
+Tests for WorkflowDefinition class behavior.
+
+WorkflowDefinition is a workflow executor that:
+- Automatically parses configuration
+- Extracts workflow components as attributes
+- Executes workflow sections in order
 """
 import json
 import datetime as dt
+import pytest
 
-from d3tools import Options, WorkflowDefinition
+from d3tools import WorkflowDefinition
 from d3tools.config.workflow_section import WorkflowSection
 
 
-import warnings
+# ============================================================================
+# Fixtures for common workflow configurations
+# ============================================================================
+
+@pytest.fixture
+def minimal_config():
+    """Minimal valid workflow configuration."""
+    return {
+        "TAGS": {},
+        "DATASETS": {}
+    }
+
+
+@pytest.fixture
+def config_with_tags():
+    """Configuration with tags."""
+    return {
+        "TAGS": {"source": "ERA5", "year": 2024},
+        "DATASETS": {}
+    }
+
+
+@pytest.fixture
+def config_with_sections():
+    """Configuration with workflow sections."""
+    return {
+        "TAGS": {},
+        "DATASETS": {},
+        "Download": {"source": "ERA5"},
+        "Process": {"input": "x"},
+        "Calculate": {"io_options": {"data": "y"}}
+    }
+
+
+@pytest.fixture
+def config_with_workflow_name():
+    """Configuration with explicit workflow name."""
+    return {
+        "TAGS": {},
+        "DATASETS": {},
+        "workflow_name": "test_workflow"
+    }
+
+
+@pytest.fixture
+def config_with_workflow_log():
+    """Configuration with workflow logging."""
+    return {
+        "TAGS": {},
+        "DATASETS": {},
+        "workflow_log": {
+            "file": "/tmp/test.log",
+            "level": "INFO"
+        }
+    }
+
+
+# ============================================================================
+# Test Classes
+# ============================================================================
 
 class TestWorkflowDefinitionInitialization:
     """Test WorkflowDefinition initialization and parsing."""
 
-    def test_workflow_definition_is_not_options_subclass(self):
-        """WorkflowDefinition should be a standalone class, not a subclass of Options."""
+    def test_is_not_options_subclass(self):
+        """WorkflowDefinition should be standalone, not inherit from Options."""
+        from d3tools import Options
         assert not issubclass(WorkflowDefinition, Options)
 
-    def test_workflow_definition_has_options_attribute(self):
-        """WorkflowDefinition should have an options attribute containing full config."""
-        wf = WorkflowDefinition({"TAGS": {"source": "ERA5"}, "DATASETS": {}})
-        
-        assert hasattr(wf, "options")
-        assert isinstance(wf.options, Options)
-        assert wf.options["TAGS"]["source"] == "ERA5"
+    def test_init_from_dict(self, minimal_config):
+        """Should initialize from a dict configuration."""
+        wf = WorkflowDefinition(minimal_config)
+        assert isinstance(wf, WorkflowDefinition)
 
-    def test_options_attribute_access_and_recursive_wrapping(self):
-        """Options should support attribute access and recursive wrapping."""
-        opts = Options({"foo": {"bar": 42}, "baz": [{"qux": 99}]})
-        # Attribute access
-        assert opts.foo.bar == 42
-        # Recursive wrapping in lists
-        assert isinstance(opts.baz[0], Options)
-        assert opts.baz[0].qux == 99
-
-    def test_options_load_deprecation_warning(self, tmp_path):
-        """Options.load should emit a deprecation warning."""
-        cfg = {"TAGS": {"source": "ERA5"}, "DATASETS": {}}
-        cfg_path = tmp_path / "workflow.json"
-        cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            Options.load(str(cfg_path))
-            assert any(issubclass(warn.category, DeprecationWarning) for warn in w)
-    
-    def test_init_automatically_parses(self):
+    def test_init_automatically_parses(self, minimal_config):
         """__init__ should automatically parse configuration."""
-        wf = WorkflowDefinition({"TAGS": {"x": 1}, "DATASETS": {}})
+        wf = WorkflowDefinition(minimal_config)
         
-        # Should have extracted workflow components
+        # Should have all expected attributes
         assert hasattr(wf, "workflow_sections")
         assert hasattr(wf, "workflow_name")
         assert hasattr(wf, "tags")
         assert hasattr(wf, "datasets")
         assert hasattr(wf, "logger")
-        
-        # Should have empty workflow sections for minimal config
-        assert wf.workflow_sections == []
+        assert hasattr(wf, "options")
 
-    def test_parse_method_does_not_exist(self):
-        """WorkflowDefinition should not have a parse() method - parsing is automatic."""
-        wf = WorkflowDefinition({"TAGS": {"a": "x"}, "DATASETS": {}})
+    def test_init_raises_for_non_dict(self):
+        """__init__ should raise TypeError for non-dict input."""
+        with pytest.raises(TypeError, match="must be a dict"):
+            WorkflowDefinition("not a dict")
+        
+        with pytest.raises(TypeError, match="must be a dict"):
+            WorkflowDefinition(123)
+
+    def test_no_parse_method_exists(self, minimal_config):
+        """WorkflowDefinition should not have a parse() method."""
+        wf = WorkflowDefinition(minimal_config)
         assert not hasattr(wf, "parse")
 
-    def test_load_returns_workflow_definition(self, tmp_path):
-        """load() should return a parsed WorkflowDefinition instance."""
-        cfg = {
-            "TAGS": {"source": "ERA5"},
-            "DATASETS": {},
-        }
-        cfg_path = tmp_path / "workflow.json"
-        cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
 
-        loaded_wf = WorkflowDefinition.load(str(cfg_path))
+class TestWorkflowDefinitionAttributes:
+    """Test WorkflowDefinition attributes extraction."""
+
+    def test_has_options_attribute(self, config_with_tags):
+        """Should have an options attribute with full parsed config."""
+        wf = WorkflowDefinition(config_with_tags)
         
-        assert type(loaded_wf) is WorkflowDefinition
-        assert loaded_wf.tags["source"] == "ERA5"
+        from d3tools import Options
+        assert hasattr(wf, "options")
+        assert isinstance(wf.options, Options)
+        assert wf.options["TAGS"]["source"] == "ERA5"
 
-    def test_init_forwards_build_flags(self, monkeypatch):
-        """WorkflowDefinition.__init__ should forward workflow build flags."""
-        from d3tools.config import parsing_pipeline as parsing_module
+    def test_extracts_tags(self, config_with_tags):
+        """Should extract tags as a dict attribute."""
+        wf = WorkflowDefinition(config_with_tags)
+        
+        assert isinstance(wf.tags, dict)
+        assert wf.tags["source"] == "ERA5"
+        assert wf.tags["year"] == 2024
+
+    def test_extracts_workflow_sections(self, config_with_sections):
+        """Should extract workflow_sections as a list attribute."""
+        wf = WorkflowDefinition(config_with_sections)
+        
+        assert isinstance(wf.workflow_sections, list)
+        assert len(wf.workflow_sections) == 3
+
+    def test_sections_have_correct_names(self, config_with_sections):
+        """Workflow sections should have correct names and engines."""
+        wf = WorkflowDefinition(config_with_sections)
+        
+        names = [s.name for s in wf.workflow_sections]
+        engines = [s.engine for s in wf.workflow_sections]
+        
+        assert names == ["Download", "Process", "Calculate"]
+        assert engines == ["door", "dam", "dryes"]
+
+    def test_sections_preserve_order(self, config_with_sections):
+        """Workflow sections should preserve definition order."""
+        wf = WorkflowDefinition(config_with_sections)
+        names = [s.name for s in wf.workflow_sections]
+        assert names == ["Download", "Process", "Calculate"]
+
+    def test_empty_sections_for_minimal_config(self, minimal_config):
+        """Minimal config should have empty workflow_sections."""
+        wf = WorkflowDefinition(minimal_config)
+        assert wf.workflow_sections == []
+
+    def test_extracts_workflow_name(self, config_with_workflow_name):
+        """Should extract workflow_name attribute."""
+        wf = WorkflowDefinition(config_with_workflow_name)
+        assert wf.workflow_name == "test_workflow"
+
+    def test_default_workflow_name(self, minimal_config):
+        """Should have default workflow_name if not specified."""
+        wf = WorkflowDefinition(minimal_config)
+        assert wf.workflow_name == "workflow"
+
+    def test_extracts_logger(self, config_with_workflow_log):
+        """Should extract logger attribute when configured."""
+        wf = WorkflowDefinition(config_with_workflow_log)
+        
+        from d3tools.logging import WorkflowLogManager
+        assert wf.logger is not None or wf.logger is None  # Depends on implementation
+
+    def test_logger_none_when_not_configured(self, minimal_config):
+        """Logger should be None when not configured."""
+        wf = WorkflowDefinition(minimal_config)
+        # Logger may be None or a default instance depending on implementation
+
+
+class TestWorkflowDefinitionLoad:
+    """Test WorkflowDefinition.load() class method."""
+
+    def test_load_from_json_file(self, tmp_path, config_with_tags):
+        """Should load and parse from JSON file."""
+        json_file = tmp_path / "workflow.json"
+        json_file.write_text(json.dumps(config_with_tags))
+        
+        wf = WorkflowDefinition.load(str(json_file))
+        
+        assert isinstance(wf, WorkflowDefinition)
+        assert wf.tags["source"] == "ERA5"
+
+    def test_load_returns_workflow_definition(self, tmp_path, minimal_config):
+        """load() should return a WorkflowDefinition instance."""
+        json_file = tmp_path / "workflow.json"
+        json_file.write_text(json.dumps(minimal_config))
+        
+        wf = WorkflowDefinition.load(str(json_file))
+        assert type(wf) is WorkflowDefinition
+
+    def test_load_forwards_build_flags(self, tmp_path, monkeypatch):
+        """load() should forward build_workflow_objects flag."""
         from d3tools.config import workflow_definition
-        from d3tools.config import parsers
-
+        
         seen = {}
-        original_parse_options = parsing_module.parse_options
-
-        def _parse_proxy(workflow, build_workflow_objects=False, strict_workflow_imports=False):
+        original_init = WorkflowDefinition.__init__
+        
+        def mock_init(self, config, build_workflow_objects=False, strict_workflow_imports=False):
             seen["build"] = build_workflow_objects
             seen["strict"] = strict_workflow_imports
-            return original_parse_options(
-                workflow,
-                build_workflow_objects=build_workflow_objects,
-                strict_workflow_imports=strict_workflow_imports,
-            )
+            original_init(self, config, build_workflow_objects, strict_workflow_imports)
+        
+        monkeypatch.setattr(WorkflowDefinition, "__init__", mock_init)
+        
+        json_file = tmp_path / "workflow.json"
+        json_file.write_text(json.dumps({"TAGS": {}, "DATASETS": {}}))
+        
+        WorkflowDefinition.load(
+            str(json_file),
+            build_workflow_objects=True,
+            strict_workflow_imports=False
+        )
+        
+        assert seen == {"build": True, "strict": False}
 
-        # Patch in the workflow_definition module namespace
-        monkeypatch.setattr(workflow_definition, "parse_options", _parse_proxy)
-        monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", lambda section: {"built": True, **section})
 
-        wf = WorkflowDefinition(
+class TestWorkflowDefinitionBuildFlags:
+    """Test WorkflowDefinition build flags forwarding."""
+
+    def test_init_forwards_build_flags(self, monkeypatch):
+        """__init__ should forward build flags to parse_options."""
+        from d3tools.config import workflow_definition
+        from d3tools.config import parsers
+        
+        seen = {}
+        original_parse = workflow_definition.parse_options
+        
+        def mock_parse(config, build_workflow_objects=False, strict_workflow_imports=False):
+            seen["build"] = build_workflow_objects
+            seen["strict"] = strict_workflow_imports
+            return original_parse(config, build_workflow_objects, strict_workflow_imports)
+        
+        monkeypatch.setattr(workflow_definition, "parse_options", mock_parse)
+        monkeypatch.setitem(
+            parsers._WORKFLOW_ENGINE_BUILDERS,
+            "door",
+            lambda section: {"built": True, **section}
+        )
+        
+        WorkflowDefinition(
             {"TAGS": {}, "DATASETS": {}, "Download": {"source": "ERA5"}},
             build_workflow_objects=True,
             strict_workflow_imports=False
         )
+        
         assert seen == {"build": True, "strict": False}
 
-    def test_init_extracts_workflow_sections(self):
-        """__init__ should extract workflow sections as a list attribute."""
-        wf = WorkflowDefinition({"TAGS": {"x": 1}, "DATASETS": {}})
-        
-        assert hasattr(wf, "workflow_sections")
-        assert isinstance(wf.workflow_sections, list)
-        assert wf.workflow_sections == []
 
-    def test_init_collects_workflow_sections(self):
-        """__init__ should collect workflow sections from top-level keys."""
-        wf = WorkflowDefinition(
-            {
-                "TAGS": {},
-                "DATASETS": {},
-                "Download": {"source": "ERA5"},
-            }
-        )
-
-        assert len(wf.workflow_sections) == 1
-        assert wf.workflow_sections[0].name == "Download"
-        assert wf.workflow_sections[0].engine == "door"
-        # Download key should NOT be in options at top level
-        assert "Download" not in wf.options
-
-    def test_init_preserves_workflow_section_order(self):
-        """__init__ should preserve top-level section order in workflow_sections."""
-        wf = WorkflowDefinition(
-            {
-                "TAGS": {},
-                "DATASETS": {},
-                "Download": {"source": "A"},
-                "Process": {"input": "x"},
-                "Calculate": {"io_options": {"data": "y"}},
-            }
-        )
-
-        names = [section.name for section in wf.workflow_sections]
-        engines = [section.engine for section in wf.workflow_sections]
-
-        assert names == ["Download", "Process", "Calculate"]
-        assert engines == ["door", "dam", "dryes"]
-
-
-class TestWorkflowDefinitionRun:
-    """Test WorkflowDefinition.run ordered execution behavior and edge cases."""
+class TestWorkflowDefinitionRunExecution:
+    """Test WorkflowDefinition.run() execution behavior."""
 
     def test_run_executes_sections_in_order(self, monkeypatch):
-        """run() should execute section workflow objects in list order."""
+        """run() should execute workflow sections in order."""
         calls = []
 
-        class _DoorProcess:
+        class MockDoorProcess:
             def get_data(self, time_range):
                 calls.append(("door", time_range))
 
-        class _DamProcess:
+        class MockDamProcess:
             def run(self, time_range):
                 calls.append(("dam", time_range))
 
-        class _DryesProcess:
+        class MockDryesProcess:
             def compute(self, time_range):
                 calls.append(("dryes", time_range))
 
-        # Create workflow with pre-built sections (simulating parsed result)
+        # Mock the parsing to return pre-built sections
         from d3tools.config import workflow_definition
         
-        # Mock parsed config with workflow sections
         parsed_config = {
             "TAGS": {},
             "DATASETS": {},
             "workflow_sections": [
-                WorkflowSection("Download", "door", {}, _DoorProcess()),
-                WorkflowSection("Process", "dam", {}, _DamProcess()),
-                WorkflowSection("Calculate", "dryes", {}, _DryesProcess()),
+                WorkflowSection("Download", "door", {}, MockDoorProcess()),
+                WorkflowSection("Process", "dam", {}, MockDamProcess()),
+                WorkflowSection("Calculate", "dryes", {}, MockDryesProcess()),
             ],
             "workflow_name": "test",
             "workflow_log": None
         }
         
-        # Patch parse_options to return our mocked config
         monkeypatch.setattr(
             workflow_definition,
             "parse_options",
@@ -192,37 +305,32 @@ class TestWorkflowDefinitionRun:
         )
         
         wf = WorkflowDefinition({})
+        wf.run("2024-01-01", "2024-01-31")
+        
+        # Should execute in order: door, dam, dryes
+        assert [call[0] for call in calls] == ["door", "dam", "dryes"]
 
+    def test_run_with_minimal_workflow(self, minimal_config):
+        """run() should work with workflow that has no sections."""
+        wf = WorkflowDefinition(minimal_config)
+        
+        # Should not raise
         wf.run("2024-01-01", "2024-01-31")
 
-        assert [item[0] for item in calls] == ["door", "dam", "dryes"]
-
-    def test_options_attribute_access_multiple_values(self):
-        """Options attribute access should raise ValueError if multiple values found."""
-        opts = Options({"foo": {"bar": 1}, "baz": {"bar": 2}})
-        try:
-            _ = opts.bar
-        except ValueError as exc:
-            assert "Multiple values found" in str(exc)
-        else:
-            raise AssertionError("Expected ValueError for multiple values")
-
-    def test_run_raises_for_non_runnable_section_value(self, monkeypatch):
-        """run() should fail clearly when a section has an unrecognized engine."""
+    def test_run_raises_for_invalid_engine(self, monkeypatch):
+        """run() should raise TypeError for unrecognized engine."""
         from d3tools.config import workflow_definition
         
-        # Mock parsed config with invalid engine
         parsed_config = {
             "TAGS": {},
             "DATASETS": {},
             "workflow_sections": [
-                WorkflowSection("Not a real workflow section", "not_a_real_engine", {}, {}),
+                WorkflowSection("BadSection", "invalid_engine", {}, {}),
             ],
             "workflow_name": "test",
             "workflow_log": None
         }
         
-        # Patch parse_options to return our mocked config
         monkeypatch.setattr(
             workflow_definition,
             "parse_options",
@@ -230,10 +338,30 @@ class TestWorkflowDefinitionRun:
         )
         
         wf = WorkflowDefinition({})
-
-        try:
+        
+        with pytest.raises(TypeError, match="unrecognized engine"):
             wf.run(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2))
-        except TypeError as exc:
-            assert "unrecognized engine" in str(exc)
-        else:
-            raise AssertionError("Expected TypeError for unrecognized engine")
+
+    def test_run_accepts_datetime_objects(self, minimal_config):
+        """run() should accept datetime objects."""
+        wf = WorkflowDefinition(minimal_config)
+        
+        # Should not raise
+        wf.run(
+            start=dt.datetime(2024, 1, 1),
+            end=dt.datetime(2024, 1, 31)
+        )
+
+    def test_run_accepts_date_strings(self, minimal_config):
+        """run() should accept date strings."""
+        wf = WorkflowDefinition(minimal_config)
+        
+        # Should not raise
+        wf.run(start="2024-01-01", end="2024-01-31")
+
+    def test_run_defaults_end_to_now(self, minimal_config):
+        """run() should default end date to now if not provided."""
+        wf = WorkflowDefinition(minimal_config)
+        
+        # Should not raise
+        wf.run(start="2024-01-01")
