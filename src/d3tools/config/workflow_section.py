@@ -59,7 +59,11 @@ class WorkflowSection:
             build_object: If ``True``, try constructing runtime objects.
             strict_imports: If ``True``, propagate build/import errors.
         """
-        engine = resolve_workflow_section_alias(name)
+        # attempt to get the `engine` keyword from the definition key
+        engine = definition.get("engine", None)
+        if engine is None or engine not in ['door', 'dam', 'dryes']:
+            # if not found, try to resolve from the section name
+            engine = resolve_workflow_section_alias(name)
         if engine is None:
             raise ValueError(f"Key '{name}' is not a recognized workflow section")
         value = workflow_section_from_config(
