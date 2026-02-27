@@ -71,9 +71,9 @@ def set_dataset(structure: Any, obj_dict: dict[str, Any]):
         possible.
     """
     if isinstance(structure, dict):
-        return {set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()}
+        return structure.__class__({set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()})
     if isinstance(structure, list):
-        return [set_dataset(value, obj_dict) for value in structure]
+        return structure.__class__([set_dataset(value, obj_dict) for value in structure])
     if isinstance(structure, str):
         pattern = r"{([\w#-\.]+)(?:\s*,\s*([\w#-\.]+\s*=\s*\'.*?\')+)?}"
         match = re.match(pattern, structure)

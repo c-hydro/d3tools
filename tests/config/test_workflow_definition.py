@@ -69,11 +69,11 @@ class TestWorkflowDefinitionCompatibility:
 
     def test_parse_forwards_build_flags(self, monkeypatch):
         """WorkflowDefinition.parse should forward workflow build flags."""
-        from d3tools.config import workflow_definition as options_module
+        from d3tools.config import parsing_pipeline as parsing_module
         from d3tools.config import parsers
 
         seen = {}
-        original_parse_options = options_module.parse_options
+        original_parse_options = parsing_module.parse_options
 
         def _parse_proxy(workflow, build_workflow_objects=False, strict_workflow_imports=False):
             seen["build"] = build_workflow_objects
@@ -84,7 +84,7 @@ class TestWorkflowDefinitionCompatibility:
                 strict_workflow_imports=strict_workflow_imports,
             )
 
-        monkeypatch.setattr(options_module, "parse_options", _parse_proxy)
+        monkeypatch.setattr(parsing_module, "parse_options", _parse_proxy)
         monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", lambda section: {"built": True, **section})
 
         wf = WorkflowDefinition({"TAGS": {}, "DATASETS": {}, "Download": {"source": "ERA5"}})
