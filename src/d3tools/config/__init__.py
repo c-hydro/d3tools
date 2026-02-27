@@ -1,4 +1,5 @@
-from .workflow_definition import *
+from .workflow_definition import WorkflowDefinition
+from .options import Options
 from .parsers import dataset_from_config, workflow_from_config
 from .workflow_section import WORKFLOW_SECTION_ALIASES, WorkflowSection
 from .parsing_pipeline import (
@@ -9,11 +10,6 @@ from .parsing_pipeline import (
     collect_workflow_sections,
     parse_options,
 )
-
-import sys
-# Legacy module paths -> new modules workflow definition used to be options
-from . import workflow_definition as _workflow_definition_mod
-sys.modules.setdefault(__name__ + ".options", _workflow_definition_mod)
 
 __all__ = [
     'WORKFLOW_SECTION_ALIASES',

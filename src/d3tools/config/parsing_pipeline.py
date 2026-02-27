@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..data import Dataset
-from ..config.workflow_definition import Options
+from ..config.options import Options
 from ..parse import flatten_dict, set_dataset, set_env, substitute_values
 from .workflow_section import WorkflowSection, resolve_workflow_section_alias
 

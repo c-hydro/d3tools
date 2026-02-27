@@ -38,7 +38,7 @@ class TestStringSubstitution:
 class TestStructureUtils:
     
     def test_make_hashable_and_transform_back_options(self):
-        from d3tools.config.workflow_definition import Options
+        from d3tools.config.options import Options
         obj = Options({'a': [1, 2], 'b': {'c': 3}})
         hashable = make_hashable(obj)
         restored = transform_back(hashable)
