@@ -5,7 +5,6 @@ import pytest
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
-    normalize_section_alias,
     resolve_workflow_section_alias,
 )
 
@@ -19,12 +18,6 @@ class TestWorkflowSectionAliases:
         assert WORKFLOW_SECTION_ALIASES["calculate"] == "dryes"
         assert WORKFLOW_SECTION_ALIASES["process"] == "dam"
         assert WORKFLOW_SECTION_ALIASES["publish"] == "dam"
-
-    def test_normalize_section_alias_standardizes_tokens(self):
-        """Alias normalization should ignore case, spaces and dashes."""
-        assert normalize_section_alias("Door Downloader") == "door_downloader"
-        assert normalize_section_alias("DOOR-DOWNLOADER") == "door_downloader"
-        assert normalize_section_alias("  Process ") == "process"
 
     def test_resolve_workflow_section_alias(self):
         """Alias resolver should return known engines or None."""

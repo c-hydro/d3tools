@@ -38,7 +38,7 @@ def config_with_logging(tmp_path):
 @pytest.fixture
 def config_with_sections_and_logging(tmp_path, monkeypatch):
     """Configuration with workflow sections and logging."""
-    from d3tools.config import workflow_definition
+    from d3tools.config import parsing_pipeline
     
     log_file = tmp_path / "workflow.log"
     
@@ -66,7 +66,7 @@ def config_with_sections_and_logging(tmp_path, monkeypatch):
     }
     
     monkeypatch.setattr(
-        workflow_definition,
+        parsing_pipeline,
         "parse_options",
         lambda config, **kwargs: parsed_config
     )

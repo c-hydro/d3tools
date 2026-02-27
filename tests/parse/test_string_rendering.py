@@ -2,7 +2,7 @@
 
 import datetime as dt
 
-from d3tools.parse.string_rendering import substitute_string, substitute_values
+from d3tools.parse.string_rendering import substitute_string, substitute_values, normalise_string
 
 
 class TestSubstituteString:
@@ -59,3 +59,25 @@ class TestSubstituteValues:
     def test_substitute_values_preserves_scalars(self):
         """Keep non-container non-string values unchanged."""
         assert substitute_values(42, {"x": "y"}) == 42
+
+class TestNormaliseString:
+    """Test string normalization behavior."""
+
+    def test_normalise_string_strips_whitespace(self):
+        """Normalisation should remove leading/trailing whitespace."""
+        assert normalise_string("  example  ") == "example"
+
+    def test_normalise_string_replaces_internal_whitespace_with_underscore(self):
+        """Normalisation should convert internal whitespace to underscores."""
+        assert normalise_string("example string") == "example_string"
+        assert normalise_string("example-string") == "example_string"
+
+    def test_normalise_removes_multiple_underscores(self):
+        """Normalisation should not return multiple consecutive underscores."""
+        assert normalise_string("example   string") == "example_string"
+        assert normalise_string("example- -string") == "example_string"
+
+    def test_normalise_string_converts_to_lowercase(self):
+        """Normalisation should convert all characters to lowercase."""
+        assert normalise_string("ExampleString") == "examplestring"
+        assert normalise_string("EXAMPLESTRING") == "examplestring"
