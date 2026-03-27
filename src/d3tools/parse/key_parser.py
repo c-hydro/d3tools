@@ -12,7 +12,7 @@ import os
 import re
 from typing import Any, Optional
 
-from ..timestepping import TimeStep
+from ..timestepping import TimeRange, TimeStep, TimeWindow
 from .string_rendering import substitute_string
 
 
@@ -93,21 +93,30 @@ class KeyParser:
             time: Optional[dt.datetime | TimeStep],
             time_signature: str = "end",
         ) -> Optional[dt.datetime]:
-        """Resolve datetime from datetime/timestep input.
+        """Resolve a rendering datetime from datetime/timestep input.
 
         Args:
-            time: Datetime or timestep to resolve.
-            time_signature: Mapping for timestep inputs.
+            time: Datetime, timestep, or ``None``.
+            time_signature: Mapping applied only when ``time`` is a ``TimeStep``.
+                Supported values are ``'start'``, ``'end'``, and ``'end+1'``.
 
         Returns:
-            Datetime used for key rendering or ``None``.
+            Datetime used for rendering, or ``None`` if ``time`` is ``None``.
+
+        Raises:
+            ValueError: If ``time`` is a ``TimeStep`` and ``time_signature`` is
+                not supported.
         """
         if time is None:
             return None
         return self._resolve_render_time(time, time_signature)
 
     def normalize_time(self, time: dt.datetime, step_length: Optional[int] = None) -> dt.datetime:
-        """Normalize datetime for this key pattern using legacy Dataset rules.
+        """Normalize a datetime according to this pattern's temporal precision.
+
+        Normalization preserves legacy Dataset behavior:
+        - leap-day fallback for non-year patterns when ``step_length > 1``
+        - truncation of unsupported precision (seconds/minutes/hours/day/month)
 
         Args:
             time: Datetime already resolved for rendering.
@@ -115,7 +124,7 @@ class KeyParser:
                 leap-day adjustment for non-year key patterns.
 
         Returns:
-            Normalized datetime aligned to pattern precision.
+            Normalized datetime aligned to the directives in ``self.raw_pattern``.
         """
         key_without_tags = re.sub(r"\{[^}]*\}", "", self.raw_pattern)
         hasyear = "%Y" in key_without_tags
@@ -138,6 +147,72 @@ class KeyParser:
                             time = time.replace(month=1)
 
         return time
+
+    @staticmethod
+    def to_storage_time(time: dt.datetime, time_signature: str) -> dt.datetime:
+        """Convert logical/query datetime to storage datetime.
+
+        Args:
+            time: Logical/query datetime used by external callers.
+            time_signature: Dataset temporal signature.
+
+        Returns:
+            Storage datetime used in file naming conventions.
+            For ``'end+1'`` this is ``time + 1 day``; otherwise unchanged.
+        """
+        if time_signature == "end+1":
+            return time + dt.timedelta(days=1)
+        return time
+
+    @staticmethod
+    def from_storage_time(time: dt.datetime, time_signature: str) -> dt.datetime:
+        """Convert storage datetime to logical/query datetime.
+
+        Args:
+            time: Datetime parsed from storage key/path.
+            time_signature: Dataset temporal signature.
+
+        Returns:
+            Logical/query datetime expected by callers.
+            For ``'end+1'`` this is ``time - 1 day``; otherwise unchanged.
+        """
+        if time_signature == "end+1":
+            return time - dt.timedelta(days=1)
+        return time
+
+    @staticmethod
+    def expand_overlap_range(
+            time_range: TimeRange,
+            timestep_unit: str,
+            time_signature: str,
+        ) -> TimeRange:
+        """Expand query range to discover overlapping anchored timesteps.
+
+        This handles anchor semantics:
+        - ``start``: include one period before range start
+        - ``end``  : include one period after range end
+        - ``end+1``: include one period after range end
+
+        Storage/logical shifts (e.g. ``end+1`` +/-1 day) are handled only
+        by ``to_storage_time`` / ``from_storage_time``.
+
+        Args:
+            time_range: Logical/query range requested by the caller.
+            timestep_unit: Unit used to build a one-step expansion window.
+            time_signature: Anchor convention controlling expansion direction.
+
+        Returns:
+            Expanded ``TimeRange`` suitable for candidate timestamp collection.
+
+        Raises:
+            ValueError: If ``time_signature`` is not supported.
+        """
+        window = TimeWindow(1, timestep_unit)
+        if time_signature == "start":
+            return time_range.extend(window, before=True)
+        if time_signature in ("end", "end+1"):
+            return time_range.extend(window, before=False)
+        raise ValueError(f"Invalid time signature: {time_signature}")
 
     def match(self, key: str) -> ParsedKey:
         """Parse a concrete key into time and tags.

@@ -556,6 +556,25 @@ class TestGetTimesteps:
         
         assert catalog_result == dataset_result
 
+    def test_get_timesteps_end_plus_one_daily(self, tmp_path):
+        """Test get_timesteps handles end+1 signature without double-shifting."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif",
+            time_signature="end+1"
+        )
+
+        # Storage keys are one day ahead of logical timesteps.
+        (tmp_path / "data_20240102.tif").touch()  # logical 2024-01-01
+        (tmp_path / "data_20240103.tif").touch()  # logical 2024-01-02
+
+        time_range = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2))
+        result = dataset.get_timesteps(time_range, now=dt.datetime(2024, 1, 4))
+
+        assert len(result) == 2
+        assert result[0].start == dt.datetime(2024, 1, 1)
+        assert result[1].start == dt.datetime(2024, 1, 2)
+
 
 class TestEstimateTimestep:
     """Test suite for estimate_timestep method."""

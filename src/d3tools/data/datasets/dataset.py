@@ -386,11 +386,39 @@ class Dataset(metaclass=DatasetMeta):
 
     # region: METHODS TO PARSE KEY PATTERN WITH TIME AND TAGS
     def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
+        """Render dataset key/path from time and tag values.
+
+        This method delegates rendering to ``KeyParser`` and keeps Dataset-level
+        compatibility by resolving/normalizing time through
+        ``get_time_signature()`` first.
+
+        Args:
+            time: Optional datetime or timestep input.
+            **kwargs: Tag substitutions for placeholders in ``self.key_pattern``.
+
+        Returns:
+            Concrete key/path string.
+        """
         key_parser = KeyParser(self.key_pattern)
         parsed_time = self.get_time_signature(time)
         return key_parser.render(time=parsed_time, tags=kwargs)
 
     def get_time_signature(self, timestep: Optional[TimeStep | dt.datetime]) -> dt.datetime:
+        """Resolve and normalize time according to dataset signature/pattern.
+
+        Behavior:
+        - Resolve datetime anchor from ``self.time_signature`` when input is a
+          ``TimeStep``.
+        - Infer an effective step length for datetime inputs using either
+          ``self.timestep`` or ``previous_requested_time`` (legacy fallback).
+        - Normalize precision/leap-day handling against ``self.key_pattern``.
+
+        Args:
+            timestep: Datetime, timestep, or ``None``.
+
+        Returns:
+            Normalized datetime aligned to dataset key semantics, or ``None``.
+        """
         if timestep is None:
             return None
         
