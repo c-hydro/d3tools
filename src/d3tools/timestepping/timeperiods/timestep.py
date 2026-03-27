@@ -1,3 +1,11 @@
+"""Timestep base classes and estimation utilities.
+
+This module provides the abstract TimeStep class, which represents time periods
+that support sequential navigation (previous/next timesteps). It includes a
+metaclass system for registering different timestep types and a utility function
+for estimating timestep types from datetime samples.
+"""
+
 from abc import ABC, ABCMeta, abstractmethod
 
 from .timerange import TimeRange, TimePeriod
@@ -5,6 +13,7 @@ from ..time_utils import find_unit_of_time
 from ..timewindow import TimeWindow
 
 class TimeStepMeta(ABCMeta):
+    """Metaclass for TimeStep to register subclasses by their time unit."""
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
         if not hasattr(cls, 'subclasses'):
@@ -14,16 +23,55 @@ class TimeStepMeta(ABCMeta):
 
 class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
     """
-    A timestep is a TimePeriod that supports addition and subtraction of integers.
-    (i.e. there is previous and next timesteps)
+    Abstract base class for time periods with sequential navigation.
+
+    A TimeStep is a TimeRange that supports arithmetic operations for navigating
+    to previous/next timesteps. Different subclasses implement fixed-number-per-year
+    (months, dekads, years), fixed-length (days, hours), and fixed-DOY (VIIRS/MODIS)
+    timesteps.
+
+    TimeSteps can also carry aggregation windows, specifying a lookback period for
+    data aggregation (e.g., \"calculate using the past 7 days\").
+
+    Examples:
+        >>> from d3tools.timestepping import Month
+        >>> jan_2024 = Month(2024, 1)
+        >>> feb_2024 = jan_2024 + 1  # Next month
+        >>> dec_2023 = jan_2024 - 1  # Previous month\n
     """
 
     @classmethod
     def from_unit(cls, unit: str):
+        """Get the appropriate TimeStep subclass for a given time unit.
+        
+        Args:
+            unit (str): Time unit code ('d', 'h', 'm', 'y', 't', 'v') or name 
+                ('daily', 'monthly', etc.).
+        
+        Returns:
+            Type[TimeStep]: The TimeStep subclass for the unit.
+        
+        Examples:
+            >>> TimeStep.from_unit('m')
+            <class 'Month'>
+            >>> TimeStep.from_unit('daily')
+            <class 'Day'>
+        """
         return cls.get_subclass(unit)
 
     @classmethod
     def get_subclass(cls, unit: str):
+        """Get the TimeStep subclass registered for a specific unit.
+        
+        Args:
+            unit (str): Time unit identifier.
+        
+        Returns:
+            Type[TimeStep]: The registered TimeStep subclass.
+        
+        Raises:
+            ValueError: If no subclass is registered for the unit.
+        """
         unit = find_unit_of_time(unit)
         Subclass: 'TimeStep' = cls.subclasses.get(unit)
         if Subclass is None:
@@ -32,6 +80,24 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
 
     @classmethod
     def with_agg(cls, agg_window: str|tuple|None|TimeWindow):
+        """Create a TimeStep subclass with a default aggregation window.
+        
+        This returns a modified version of the timestep class where each instance
+        has an associated aggregation window for computing rolling statistics.
+        
+        Args:
+            agg_window (str|tuple|TimeWindow): Aggregation window specification.
+                Can be a string like '7days', a tuple like (7, 'd'), or a TimeWindow.
+        
+        Returns:
+            Type[TimeStep]: Modified TimeStep class with aggregation window.
+        
+        Examples:
+            >>> MonthWith7Days = Month.with_agg('7days')
+            >>> jan = MonthWith7Days(2024, 1)
+            >>> jan.agg_window
+            TimeWindow(7, d)
+        """
         
         class AggTimeStep(cls):
 
@@ -102,15 +168,40 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         return self + (-n)
 
     def set_year(self, year: int):
-        """
-        Change the year of the timestep. Returns a new timestep.
+        """Create a new timestep in a different year with the same step number.
+        
+        Args:
+            year (int): Target year.
+        
+        Returns:
+            TimeStep: New timestep instance with the specified year.
+        
+        Examples:
+            >>> month = Month(2024, 3)  # March 2024
+            >>> month.set_year(2025)    # March 2025
+            Month (20250301 - 20250331)
         """
         new_timestep = self.__class__(year, self.step)
         return new_timestep
 
     def get_history_timesteps(self, history:TimePeriod):
-        """
-        Returns a list of all the timesteps in the history period with the same .step as timestep
+        """Get all timesteps matching this step number within a historical period.
+        
+        This is useful for extracting climatological data - for example, getting
+        all January months or all dekad 15s within a historical time range.
+        
+        Args:
+            history (TimePeriod): Historical time period to search within.
+        
+        Returns:
+            list[TimeStep]: All timesteps with the same step number that fall
+                within the history period.
+        
+        Examples:
+            >>> jan_2024 = Month(2024, 1)
+            >>> history = TimePeriod(datetime(2020, 1, 1), datetime(2024, 12, 31))
+            >>> jan_months = jan_2024.get_history_timesteps(history)
+            # Returns [Jan 2020, Jan 2021, Jan 2022, Jan 2023, Jan 2024]
         """
 
         history_years = range(history.start.year, history.end.year + 1)
@@ -119,6 +210,32 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         return [ts for ts in all_timesteps if ts.start >= history.start and ts.end <= history.end]
     
 def estimate_timestep(sample) -> TimeStep:
+        """Estimate the timestep type from a sample of datetime values.
+        
+        Analyzes the differences between consecutive dates to determine the most
+        likely timestep frequency (hourly, daily, 8-day, dekadly, monthly, yearly).
+        
+        Args:
+            sample (list[datetime.datetime]): List of at least 2 datetime objects.
+        
+        Returns:
+            Type[TimeStep] | None: The estimated TimeStep class, or None if the
+                pattern cannot be determined.
+        
+        Examples:
+            >>> dates = [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)]
+            >>> estimate_timestep(dates)
+            <class 'Month'>
+            
+            >>> dates = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
+            >>> estimate_timestep(dates)
+            <class 'Day'>
+        
+        Note:
+            - Requires at least 2 samples
+            - Uses mode of time differences to identify pattern
+            - Returns None for irregular or unrecognized patterns
+        """
         import numpy as np
 
         from .fixed_num_timestep import Year, Month, Dekad
