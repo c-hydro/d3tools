@@ -2,8 +2,10 @@
 Tests for WorkflowDefinition/Options compatibility behavior.
 """
 import json
+import datetime as dt
 
 from d3tools import Options, WorkflowDefinition
+from d3tools.config.workflow_section import WorkflowSection
 
 
 class TestWorkflowDefinitionCompatibility:
@@ -109,3 +111,54 @@ class TestWorkflowDefinitionCompatibility:
 
         assert names == ["Download", "Process", "Calculate"]
         assert engines == ["door", "dam", "dryes"]
+
+
+class TestWorkflowDefinitionRun:
+    """Test WorkflowDefinition.run ordered execution behavior."""
+
+    def test_run_executes_sections_in_order(self):
+        """run() should execute section workflow objects in list order."""
+        calls = []
+
+        class _DoorProcess:
+            def get_data(self, time_range):
+                calls.append(("door", time_range))
+
+        class _DamProcess:
+            def run(self, time_range):
+                calls.append(("dam", time_range))
+
+        class _DryesProcess:
+            def compute(self, time_range):
+                calls.append(("dryes", time_range))
+
+        wf = WorkflowDefinition(
+            {
+                "workflow_sections": [
+                    WorkflowSection("Download", "door", {}, _DoorProcess()),
+                    WorkflowSection("Process", "dam", {}, _DamProcess()),
+                    WorkflowSection("Calculate", "dryes", {}, _DryesProcess()),
+                ]
+            }
+        )
+
+        wf.run("2024-01-01", "2024-01-31")
+
+        assert [item[0] for item in calls] == ["door", "dam", "dryes"]
+
+    def test_run_raises_for_non_runnable_section_value(self):
+        """run() should fail clearly when a section has no runnable object."""
+        wf = WorkflowDefinition(
+            {
+                "workflow_sections": [
+                    WorkflowSection("Download", "door", {"source": "ERA5"}, {"source": "ERA5"}),
+                ]
+            }
+        )
+
+        try:
+            wf.run(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2))
+        except TypeError as exc:
+            assert "does not contain a runnable workflow object" in str(exc)
+        else:
+            raise AssertionError("Expected TypeError for non-runnable section")

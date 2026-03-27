@@ -1,3 +1,6 @@
+import datetime as dt
+
+from ..timestepping import TimeRange
 from ..parse import get_unique_values
 from .parsing_pipeline import parse_options
 from .utils import load_jsons
@@ -149,6 +152,33 @@ class WorkflowDefinition(dict):
         else:
             return outvalue
 
+    def run(
+            self,
+            start: dt.datetime|str,
+            end: dt.datetime|str = dt.datetime.now()
+        ):
+        """Run parsed workflow sections in their collected order.
+
+        This method expects sections to be already parsed and, when execution is
+        desired, built as runtime objects (``section.value``).
+        """
+        workflow_sections = self.get("workflow_sections", [])
+        time_range = TimeRange.from_any([start, end])
+
+        for section in workflow_sections:
+            process = getattr(section, "value", section)
+
+            if hasattr(process, "get_data"):
+                process.get_data(time_range)
+            elif hasattr(process, "run"):
+                process.run(time_range)
+            elif hasattr(process, "compute"):
+                process.compute(time_range)
+            else:
+                raise TypeError(
+                    f"Workflow section '{getattr(section, 'name', '<unknown>')}' "
+                    "does not contain a runnable workflow object."
+                )
 
 class Options(WorkflowDefinition):
     """Backward-compatible alias for ``WorkflowDefinition``."""
