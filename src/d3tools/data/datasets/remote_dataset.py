@@ -23,7 +23,7 @@ import stat
 import posixpath
 
 from .dataset import Dataset
-from ...parse import extract_date_and_tags
+from ...parse import KeyParser
 from ...exit import rm_at_exit
 
 class RemoteDataset(Dataset):
@@ -131,14 +131,8 @@ class RemoteDataset(Dataset):
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
         if self.available_keys_are_cached:
-            new_self.available_keys = []
-            for key in self.available_keys:
-                try:
-                    extract_date_and_tags(key, new_self.key_pattern)
-                    new_self.available_keys.append(key)
-                except ValueError:
-                    pass
-
+            key_parser = KeyParser(new_self.key_pattern)
+            new_self.available_keys = key_parser.get_matching_keys(self.available_keys)
             new_self.available_keys_are_cached = True
 
         if in_place:
