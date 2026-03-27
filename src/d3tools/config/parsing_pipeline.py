@@ -42,7 +42,11 @@ def resolve_dataset_refs(options: Any):
     flat_dsoptions = flatten_dict({ds_key: dataset_options})
     return set_dataset(options, flat_dsoptions)
 
-def collect_workflow_sections(options: Any):
+def collect_workflow_sections(
+        options: Any,
+        build_workflow_objects: bool = False,
+        strict_workflow_imports: bool = False,
+    ):
     """Collect ordered workflow sections recognized by alias mapping.
 
     This stage scans top-level keys in insertion order, recognizes workflow
@@ -55,6 +59,11 @@ def collect_workflow_sections(options: Any):
 
     Collected workflow section keys are removed from top-level options so
     downstream code uses ``workflow_sections`` as the single access path.
+
+    Args:
+        options: Parsed options mapping.
+        build_workflow_objects: Whether to build runtime objects for sections.
+        strict_workflow_imports: If ``True``, propagate build/import failures.
     """
     collected = []
     collected_keys = []
@@ -67,9 +76,23 @@ def collect_workflow_sections(options: Any):
 
         if isinstance(value, list):
             for item in value:
-                collected.append(WorkflowSection.from_config(name=key, definition=item))
+                collected.append(
+                    WorkflowSection.from_config(
+                        name=key,
+                        definition=item,
+                        build_object=build_workflow_objects,
+                        strict_imports=strict_workflow_imports,
+                    )
+                )
         else:
-            collected.append(WorkflowSection.from_config(name=key, definition=value))
+            collected.append(
+                WorkflowSection.from_config(
+                    name=key,
+                    definition=value,
+                    build_object=build_workflow_objects,
+                    strict_imports=strict_workflow_imports,
+                )
+            )
 
     options["workflow_sections"] = collected
     for key in collected_keys:
@@ -78,13 +101,28 @@ def collect_workflow_sections(options: Any):
     return options
 
 
-def parse_options(options: Any):
-    """Run the full phase-1 parsing pipeline."""
+def parse_options(
+        options: Any,
+        build_workflow_objects: bool = False,
+        strict_workflow_imports: bool = False,
+    ):
+    """Run the full parsing pipeline.
+
+    Args:
+        options: Workflow options mapping.
+        build_workflow_objects: Whether to build runtime objects for collected
+            workflow sections.
+        strict_workflow_imports: If ``True``, propagate build/import failures.
+    """
     parsed = resolve_env(options)
     parsed = resolve_tags(parsed)
     parsed = build_datasets(parsed)
     parsed = resolve_dataset_refs(parsed)
-    parsed = collect_workflow_sections(parsed)
+    parsed = collect_workflow_sections(
+        parsed,
+        build_workflow_objects=build_workflow_objects,
+        strict_workflow_imports=strict_workflow_imports,
+    )
     return parsed
 
 __all__ = [

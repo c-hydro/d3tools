@@ -44,10 +44,28 @@ class WorkflowSection:
     value: Any
 
     @classmethod
-    def from_config(cls, name: str, definition: Any) -> "WorkflowSection":
-        """Build a workflow section from raw top-level key/value."""
+    def from_config(
+            cls,
+            name: str,
+            definition: Any,
+            build_object: bool = False,
+            strict_imports: bool = False,
+        ) -> "WorkflowSection":
+        """Build a workflow section from raw top-level key/value.
+
+        Args:
+            name: Original top-level workflow key.
+            definition: Parsed section payload.
+            build_object: If ``True``, try constructing runtime objects.
+            strict_imports: If ``True``, propagate build/import errors.
+        """
         engine = resolve_workflow_section_alias(name)
         if engine is None:
             raise ValueError(f"Key '{name}' is not a recognized workflow section")
-        value = workflow_section_from_config(engine, definition)
+        value = workflow_section_from_config(
+            engine,
+            definition,
+            build_object=build_object,
+            strict_imports=strict_imports,
+        )
         return cls(name=name, engine=engine, definition=definition, value=value)

@@ -55,3 +55,47 @@ class TestWorkflowSection:
         """from_config should reject unrecognized top-level keys."""
         with pytest.raises(ValueError):
             WorkflowSection.from_config(name="TAGS", definition={"a": "b"})
+
+
+class TestWorkflowSectionBuildFlags:
+    """Test WorkflowSection build/strict flags behavior."""
+
+    def test_from_config_build_false_keeps_definition_as_value(self):
+        """Default behavior should keep section value as raw definition."""
+        definition = {"source": "ERA5"}
+        section = WorkflowSection.from_config(name="Download", definition=definition)
+        assert section.value is definition
+
+    def test_from_config_build_true_non_strict_falls_back_on_import_error(self, monkeypatch):
+        """build_object=True should fallback to definition when strict is False."""
+        from d3tools.config import parsers
+
+        def _raise_import(_):
+            raise ModuleNotFoundError("door")
+
+        monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", _raise_import)
+        definition = {"source": "ERA5"}
+        section = WorkflowSection.from_config(
+            name="Download",
+            definition=definition,
+            build_object=True,
+            strict_imports=False,
+        )
+        assert section.value is definition
+
+    def test_from_config_build_true_strict_raises_on_import_error(self, monkeypatch):
+        """build_object=True should raise when strict_imports is True."""
+        from d3tools.config import parsers
+
+        def _raise_import(_):
+            raise ModuleNotFoundError("door")
+
+        monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", _raise_import)
+
+        with pytest.raises(ModuleNotFoundError):
+            WorkflowSection.from_config(
+                name="Download",
+                definition={"source": "ERA5"},
+                build_object=True,
+                strict_imports=True,
+            )

@@ -47,7 +47,13 @@ class WorkflowDefinition(dict):
             raise AttributeError(f"'Options' object has no attribute '{item}'")
 
     @classmethod
-    def load(cls, *paths: str, **kwargs) -> dict:
+    def load(
+            cls,
+            *paths: str,
+            build_workflow_objects: bool = False,
+            strict_workflow_imports: bool = False,
+            **kwargs,
+        ) -> dict:
         """
         Load and parse workflow configuration from one or more JSON files.
         """
@@ -55,16 +61,34 @@ class WorkflowDefinition(dict):
         config = load_jsons(*paths)
 
         config_options = cls(config)
-        parsed_options = config_options.parse(**kwargs)
+        parsed_options = config_options.parse(
+            build_workflow_objects=build_workflow_objects,
+            strict_workflow_imports=strict_workflow_imports,
+            **kwargs,
+        )
 
         return cls(parsed_options)
 
-    def parse(self, **kwargs):
+    def parse(
+            self,
+            build_workflow_objects: bool = False,
+            strict_workflow_imports: bool = False,
+            **kwargs,
+        ):
         """
-        Parse the options, using the tags.
-        And parse the datasets in the options.
+        Parse workflow options through the d3tools parsing pipeline.
+
+        Args:
+            build_workflow_objects: Whether to try building runtime workflow
+                objects in collected workflow sections.
+            strict_workflow_imports: If ``True``, propagate build/import errors
+                from workflow-section object construction.
         """
-        parsed_options = parse_options(self)
+        parsed_options = parse_options(
+            self,
+            build_workflow_objects=build_workflow_objects,
+            strict_workflow_imports=strict_workflow_imports,
+        )
         return self.__class__(parsed_options)
     
     def find_keys(self, key: str, get_all = False) -> list[str]:

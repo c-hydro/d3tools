@@ -40,3 +40,27 @@ class TestWorkflowDefinitionCompatibility:
 
         assert type(loaded_wf) is WorkflowDefinition
         assert type(loaded_opts) is Options
+
+    def test_parse_forwards_build_flags(self, monkeypatch):
+        """WorkflowDefinition.parse should forward workflow build flags."""
+        from d3tools.config import options as options_module
+        from d3tools.config import parsers
+
+        seen = {}
+        original_parse_options = options_module.parse_options
+
+        def _parse_proxy(workflow, build_workflow_objects=False, strict_workflow_imports=False):
+            seen["build"] = build_workflow_objects
+            seen["strict"] = strict_workflow_imports
+            return original_parse_options(
+                workflow,
+                build_workflow_objects=build_workflow_objects,
+                strict_workflow_imports=strict_workflow_imports,
+            )
+
+        monkeypatch.setattr(options_module, "parse_options", _parse_proxy)
+        monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", lambda section: {"built": True, **section})
+
+        wf = WorkflowDefinition({"TAGS": {}, "DATASETS": {}, "Download": {"source": "ERA5"}})
+        wf.parse(build_workflow_objects=True, strict_workflow_imports=False)
+        assert seen == {"build": True, "strict": False}
