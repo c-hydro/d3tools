@@ -15,6 +15,7 @@ from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWi
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
 from ..exit import run_at_exit_first, rm_at_exit
+from .template_manager import TemplateManager
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -91,12 +92,22 @@ class Dataset(ABC, metaclass=DatasetMeta):
         else:
             self.nan_value = None
 
-        self._template = {}
+        self.template_manager = TemplateManager()
         self.options = kwargs
         self.tags = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
+    
+    @property
+    def _template(self) -> dict:
+        """Backward compatibility property for accessing templates."""
+        return self.template_manager._templates
+    
+    @_template.setter
+    def _template(self, value: dict):
+        """Backward compatibility property for setting templates."""
+        self.template_manager._templates = value
 
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
@@ -117,7 +128,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
             new_dataset = self.__class__(**new_options)
 
-            new_dataset._template = self._template
+            new_dataset.template_manager = self.template_manager
             if hasattr(self, '_tile_names'):
                 new_dataset._tile_names = self._tile_names
 
@@ -140,7 +151,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
     def copy(self, template = False):
         new_dataset = self.update()
         if template:
-            new_dataset._template = self._template
+            new_dataset.template_manager = self.template_manager
         if hasattr(self, 'log_opts'):
             new_dataset.log_opts = self.log_opts
         if hasattr(self, 'thumb_opts'):
@@ -915,7 +926,7 @@ class Dataset(ABC, metaclass=DatasetMeta):
             else:
                 tile = '__tile__'
 
-        template_dict = self._template.get(tile, None)
+        template_dict = self.template_manager.get(tile)
         if template_dict is None and make_it:
             if not self.has_time:
                 data = self.get_data(as_is = True, **kwargs)
@@ -939,89 +950,19 @@ class Dataset(ABC, metaclass=DatasetMeta):
     
     def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
         tile = kwargs.get('tile', '__tile__')
-
-        if isinstance(templatearray, xr.Dataset):
-            vars = list(templatearray.data_vars)
-            templatearray = templatearray[vars[0]]
-        else:
-            vars = None
-
-        # Extract template metadata directly from the DataArray
-        # Note: Previous write/read roundtrip was removed as it loaded entire arrays 
-        # into memory causing crashes on large files, and the result was never used
-        
-        # Get the CRS and the nodata value, these are the same for all tiles
-        crs = templatearray.attrs.get('crs', templatearray.rio.crs)
-
-        if crs is not None:
-            crs_wkt = crs.to_wkt()
-        elif hasattr(templatearray, 'spatial_ref') and hasattr(templatearray.spatial_ref, 'crs_wkt'):
-            crs_wkt = templatearray.spatial_ref.crs_wkt
-        elif hasattr(templatearray, 'crs') and hasattr(templatearray.crs, 'crs_wkt'):
-            crs_wkt = templatearray.crs.crs_wkt
-        else: # if all fails, assume EPSG:4326
-            from pyproj import CRS
-            crs_wkt = CRS.from_epsg(4326).to_wkt()
-
-        self._template[tile] = {'crs': crs_wkt,
-                                '_FillValue' : templatearray.attrs.get('_FillValue'),
-                                'dims_names' : templatearray.dims,
-                                'spatial_dims' : (templatearray.rio.x_dim, templatearray.rio.y_dim),
-                                'dims_starts': {},
-                                'dims_ends': {},
-                                'dims_lengths': {}}
-        
-        if vars is not None:
-            self._template[tile]['variables'] = vars
-
-        for dim in templatearray.dims:
-            this_dim_values = templatearray[dim].data
-            start = this_dim_values[0]
-            end = this_dim_values[-1]
-            length = len(this_dim_values)
-            self._template[tile]['dims_starts'][dim] = float(start)
-            self._template[tile]['dims_ends'][dim] = float(end)
-            self._template[tile]['dims_lengths'][dim] = length
+        self.template_manager.set(templatearray, spatial_key=tile)
 
     @staticmethod
     def build_templatearray(template_dict: dict, data = None) -> xr.DataArray|xr.Dataset:
         """
         Build a template xarray.DataArray from a dictionary.
         """
-
-        shape = [template_dict['dims_lengths'][dim] for dim in template_dict['dims_names']]
-        if data is None:
-            data = np.full(shape, template_dict['_FillValue'])
-        else:
-            data = data.reshape(shape)
-        template = xr.DataArray(data, dims = template_dict['dims_names'])
-        
-        for dim in template_dict['dims_names']:
-            start  = template_dict['dims_starts'][dim]
-            end    = template_dict['dims_ends'][dim]
-            length = template_dict['dims_lengths'][dim]
-            template[dim] = np.linspace(start, end, length)
-
-        template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
-        template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_crs(template_dict['crs']).rio.write_coordinate_system()
-
-        return template
+        return TemplateManager.build_array(template_dict, data)
 
     @staticmethod
     def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
                              template_dict: dict) -> xr.DataArray|xr.Dataset:
-        
-        if isinstance(data, xr.DataArray):
-            #data = straighten_data(data)
-            data = Dataset.build_templatearray(template_dict, data.values)
-        elif isinstance(data, np.ndarray):
-            data = Dataset.build_templatearray(template_dict, data)
-        elif isinstance(data, xr.Dataset):
-            vars = template_dict['variables']
-            template = Dataset.build_templatearray(template_dict, data[vars[0]].values)
-            data = xr.Dataset({var: template.copy(data = data[var]) for var in vars})
-        
-        return set_type(data, read = True)
+        return TemplateManager.apply_to_data(data, template_dict)
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
