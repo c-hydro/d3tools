@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .special_substitutions import (
+from .parse_utils import (
     set_dataset as _legacy_set_dataset,
     set_env as _legacy_set_env,
 )

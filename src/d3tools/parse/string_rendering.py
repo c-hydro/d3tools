@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .string_substitution import (
+from .parse_utils import (
     substitute_string as _legacy_substitute_string,
     substitute_values as _legacy_substitute_values,
 )
