@@ -229,6 +229,24 @@ class KeyParser:
         parsed_time, parsed_tags = self._extract_date_and_tags(key)
         return ParsedKey(key = key, time=parsed_time, tags=parsed_tags)
 
+    def get_matching_keys(self, keys: list[str]) -> list[str]:
+        """Filter a list of concrete keys keeping only pattern matches.
+
+        Args:
+            keys: Candidate key/path strings.
+
+        Returns:
+            Subset of ``keys`` that match this parser pattern.
+        """
+        matched = []
+        for key in keys:
+            try:
+                self.match(key)
+                matched.append(key)
+            except ValueError:
+                pass
+        return matched
+
     def prefix(self, time: Optional[Any] = None, tags: Optional[dict[str, Any]] = None) -> str:
         """Compute a directory prefix suitable for data discovery.
 
