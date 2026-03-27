@@ -138,7 +138,6 @@ def substitute_values(structure, tag_dict, **kwargs):
     else:
         return structure
 
-
 def substitute_string(string, tag_dict, rec=False):
     """
     Substitute placeholders in a string with values from a tag dictionary.

@@ -10,6 +10,8 @@ Separating parsing logic here makes it reusable across d3tools, door, dryes, and
 import os
 from typing import Optional, Dict, Any, Callable
 
+from ..errors import WorkflowEngineImportError
+
 def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any]] = None):
     """
     Create a Dataset from a configuration dictionary.
@@ -173,7 +175,9 @@ def workflow_section_from_config(
         engine: Normalized workflow engine keyword ('door', 'dam', 'dryes')
         section_options: Configuration options for the section
         build_object: If ``True``, try building runtime objects from options.
-        strict_imports: If ``True``, raise on build/import errors. If ``False``,
+        strict_imports: Controls handling for missing-engine imports.
+            If ``True``, import failures are raised as
+            ``WorkflowEngineImportError``. If ``False``, import failures
             fallback to returning ``section_options`` unchanged.
         
     Returns:
@@ -188,7 +192,7 @@ def workflow_section_from_config(
     builder = _WORKFLOW_ENGINE_BUILDERS[engine]
     try:
         return builder(section_options)
-    except Exception:
+    except ImportError as exc:
         if strict_imports:
-            raise
+            raise WorkflowEngineImportError(engine, exc) from exc
         return section_options

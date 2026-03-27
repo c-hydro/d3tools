@@ -4,6 +4,7 @@ Tests for workflow-section aliasing and WorkflowSection behavior.
 
 import pytest
 
+from d3tools.errors import WorkflowEngineImportError
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
@@ -92,10 +93,29 @@ class TestWorkflowSectionBuildFlags:
 
         monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", _raise_import)
 
-        with pytest.raises(ModuleNotFoundError):
+        with pytest.raises(WorkflowEngineImportError) as exc_info:
             WorkflowSection.from_config(
                 name="Download",
                 definition={"source": "ERA5"},
                 build_object=True,
                 strict_imports=True,
+            )
+        assert exc_info.value.engine == "door"
+        assert isinstance(exc_info.value.original_error, ImportError)
+
+    def test_from_config_non_import_errors_are_not_silenced(self, monkeypatch):
+        """Non-import build errors should always propagate."""
+        from d3tools.config import parsers
+
+        def _raise_runtime(_):
+            raise ValueError("invalid section payload")
+
+        monkeypatch.setitem(parsers._WORKFLOW_ENGINE_BUILDERS, "door", _raise_runtime)
+
+        with pytest.raises(ValueError, match="invalid section payload"):
+            WorkflowSection.from_config(
+                name="Download",
+                definition={"source": "ERA5"},
+                build_object=True,
+                strict_imports=False,
             )
