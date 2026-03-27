@@ -1,12 +1,12 @@
 """
 Tests for Dataset key/time parsing behavior.
 
-Focuses on Dataset.get_time_signature() and Dataset.get_key() semantics,
-including legacy adjustments that are currently outside KeyParser.
+Focuses on Dataset-specific responsibilities after logic centralization
+in KeyParser:
+- step-length inference in Dataset.get_time_signature()
+- integration wiring in Dataset.get_key()
 """
 import datetime as dt
-
-import pytest
 
 from d3tools.data import LocalDataset
 from d3tools.timestepping import Day, Dekad
@@ -20,46 +20,8 @@ class TestDatasetGetTimeSignature:
         dataset = LocalDataset(path='/data', file='output_%Y%m%d.tif')
         assert dataset.get_time_signature(None) is None
 
-    @pytest.mark.parametrize(
-        "signature, expected_resolver",
-        [
-            ('start', lambda ts: ts.start),
-            ('end', lambda ts: ts.end),
-            ('end+1', lambda ts: (ts + 1).start),
-        ],
-    )
-    def test_get_time_signature_from_timestep_uses_configured_signature(self, signature, expected_resolver):
-        """Test signature mapping for TimeStep input."""
-        dataset = LocalDataset(
-            path='/data',
-            file='output_%Y%m%d_%H%M%S.tif',
-            time_signature=signature
-        )
-        timestep = Dekad.from_date(dt.datetime(2024, 2, 20))
-
-        parsed_time = dataset.get_time_signature(timestep)
-        assert parsed_time == expected_resolver(timestep)
-
-    @pytest.mark.parametrize(
-        "key_pattern, expected",
-        [
-            ('output_%Y%m%d_%H%M%S.tif', dt.datetime(2024, 7, 19, 13, 45, 27)),
-            ('output_%Y%m%d_%H%M.tif', dt.datetime(2024, 7, 19, 13, 45, 0)),
-            ('output_%Y%m%d_%H.tif', dt.datetime(2024, 7, 19, 13, 0, 0)),
-            ('output_%Y%m%d.tif', dt.datetime(2024, 7, 19, 0, 0, 0)),
-            ('output_%Y%m.tif', dt.datetime(2024, 7, 1, 0, 0, 0)),
-            ('output_%Y.tif', dt.datetime(2024, 1, 1, 0, 0, 0)),
-        ],
-    )
-    def test_get_time_signature_progressively_removes_unused_datetime_components(self, key_pattern, expected):
-        """Test datetime normalization based on placeholders present in key pattern."""
-        dataset = LocalDataset(path='/data', file=key_pattern)
-
-        parsed_time = dataset.get_time_signature(dt.datetime(2024, 7, 19, 13, 45, 27))
-        assert parsed_time == expected
-
-    def test_get_time_signature_leap_day_is_adjusted_without_year_for_multiday_length(self):
-        """Test Feb-29 is converted to Feb-28 for non-year patterns and multiday steps."""
+    def test_get_time_signature_uses_dataset_timestep_to_derive_length(self):
+        """Test datetime branch uses dataset.timestep-derived length for normalization."""
         dataset = LocalDataset(
             path='/data',
             file='output_%m%d.tif',
@@ -69,29 +31,42 @@ class TestDatasetGetTimeSignature:
         parsed_time = dataset.get_time_signature(dt.datetime(2024, 2, 29))
         assert parsed_time == dt.datetime(2024, 2, 28)
 
-    def test_get_time_signature_leap_day_kept_when_year_present(self):
-        """Test Feb-29 is preserved when year is part of key pattern."""
+    def test_get_time_signature_first_datetime_call_without_length_keeps_leap_day(self):
+        """Test first datetime call keeps leap-day when no length can be inferred."""
+        dataset = LocalDataset(
+            path='/data',
+            file='output_%m%d.tif'
+        )
+
+        parsed_time = dataset.get_time_signature(dt.datetime(2024, 2, 29))
+        assert parsed_time.day == 29
+        assert parsed_time.month == 2
+
+    def test_get_time_signature_uses_previous_requested_time_when_timestep_missing(self):
+        """Test datetime branch falls back to previous_requested_time length inference."""
+        dataset = LocalDataset(
+            path='/data',
+            file='output_%m%d.tif'
+        )
+
+        # First call seeds previous_requested_time; no length info yet.
+        dataset.get_time_signature(dt.datetime(2024, 1, 30))
+
+        # Second call infers a multi-day length from previous_requested_time.
+        parsed_time = dataset.get_time_signature(dt.datetime(2024, 2, 29))
+        assert parsed_time == dt.datetime(2024, 2, 28)
+
+    def test_get_time_signature_timestep_still_uses_dataset_time_signature(self):
+        """Test timestep branch still honors dataset time_signature setting."""
         dataset = LocalDataset(
             path='/data',
             file='output_%Y%m%d.tif',
-            timestep='m'
+            time_signature='end+1'
         )
+        timestep = Dekad.from_date(dt.datetime(2024, 2, 20))
 
-        parsed_time = dataset.get_time_signature(dt.datetime(2024, 2, 29))
-        assert parsed_time.day == 29
-        assert parsed_time.month == 2
-
-    def test_get_time_signature_leap_day_kept_for_daily_length_without_year(self):
-        """Test Feb-29 is preserved for daily timesteps even if year is not in pattern."""
-        dataset = LocalDataset(
-            path='/data',
-            file='output_%m%d.tif',
-            timestep='daily'
-        )
-
-        parsed_time = dataset.get_time_signature(dt.datetime(2024, 2, 29))
-        assert parsed_time.day == 29
-        assert parsed_time.month == 2
+        parsed_time = dataset.get_time_signature(timestep)
+        assert parsed_time == (timestep + 1).start
 
 
 class TestDatasetGetKey:
@@ -109,8 +84,18 @@ class TestDatasetGetKey:
         key = dataset.get_key(timestep, tile='h18v04')
         assert key == '/data/output_20240102_h18v04.tif'
 
-    def test_get_key_applies_leap_day_adjustment_from_get_time_signature(self):
-        """Test get_key keeps legacy leap-day adjustment behavior."""
+    def test_get_key_uses_inferred_length_from_previous_requested_time(self):
+        """Test get_key uses Dataset's previous_requested_time-based length fallback."""
+        dataset = LocalDataset(path='/data', file='output_%m%d.tif')
+
+        # Seed previous_requested_time through a first call.
+        dataset.get_key(dt.datetime(2024, 1, 30))
+        key = dataset.get_key(dt.datetime(2024, 2, 29))
+
+        assert key == '/data/output_0228.tif'
+
+    def test_get_key_applies_leap_day_adjustment_from_dataset_timestep(self):
+        """Test get_key applies leap-day adjustment when dataset timestep is set."""
         dataset = LocalDataset(
             path='/data',
             file='output_%m%d.tif',

@@ -4,10 +4,9 @@ import xarray as xr
 
 from abc import ABCMeta, abstractmethod
 import os
-import re
 
 from ...timestepping import TimeRange, TimeStep, TimeWindow
-from ...parse import substitute_string, extract_date_and_tags
+from ...parse import substitute_string, extract_date_and_tags, KeyParser
 from ..io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format, read_from_file
 from ..data_catalogue import DataCatalogue
 
@@ -387,17 +386,18 @@ class Dataset(metaclass=DatasetMeta):
 
     # region: METHODS TO PARSE KEY PATTERN WITH TIME AND TAGS
     def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
-        
-        time = self.get_time_signature(time)
-        raw_key = substitute_string(self.key_pattern, kwargs)
-        key = time.strftime(raw_key) if time is not None else raw_key
-        return key
+        key_parser = KeyParser(self.key_pattern)
+        parsed_time = self.get_time_signature(time)
+        return key_parser.render(time=parsed_time, tags=kwargs)
 
     def get_time_signature(self, timestep: Optional[TimeStep | dt.datetime]) -> dt.datetime:
         if timestep is None:
             return None
+        
+        key_parser = KeyParser(self.key_pattern)
+        time = key_parser.resolve_time(timestep, time_signature=self.time_signature)
+
         if isinstance(timestep, dt.datetime):
-            time = timestep
             # calculating the length in this way is not perfect,
             # but should work given that timesteps are always requested in order
             if hasattr(self, 'timestep') and self.timestep is not None: 
@@ -408,39 +408,10 @@ class Dataset(metaclass=DatasetMeta):
                 length = None
             self.previous_requested_time = time
         else:
-            time_signature = self.time_signature
-            if time_signature == 'start':
-                time = timestep.start
-            elif time_signature == 'end':
-                time = timestep.end
-            elif time_signature == 'end+1':
-                time = (timestep+1).start
             length = timestep.get_length()
             self.previous_requested_time = time
 
-        key_without_tags = re.sub(r'\{[^}]*\}', '', self.key_pattern)
-        hasyear = '%Y' in key_without_tags
-
-        # change the date to 28th of February if it is the 29th of February,
-        # but only if no year is present in the path (i.e. this is a parameter)
-        # and the length is greater than 1 (i.e. not a daily timestep)
-        if not hasyear and time.month == 2 and time.day == 29:
-            if length is not None and length > 1:
-                time = time.replace(day = 28)
-        
-        # progressively remove the non-used tags from the time
-        if '%S' not in key_without_tags:
-            time = time.replace(second = 0)
-            if '%M' not in key_without_tags:
-                time = time.replace(minute = 0)
-                if '%H' not in key_without_tags:
-                    time = time.replace(hour = 0)
-                    if all(tag not in key_without_tags for tag in ('%d', '%j')):
-                        time = time.replace(day = 1)
-                        if '%m' not in key_without_tags:
-                            time = time.replace(month = 1)
-
-        return time
+        return key_parser.normalize_time(time, step_length=length)
     # endregion
 
     # region: INPUT/OUTPUT METHODS

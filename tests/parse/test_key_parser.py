@@ -8,7 +8,14 @@ import datetime as dt
 import pytest
 
 from d3tools.parse import KeyParser, ParsedKey
-from d3tools.timestepping import Day, Month, TimeRange
+from d3tools.timestepping import (
+    Day,
+    Dekad,
+    Month,
+    ViirsModisTimeStep,
+    Year,
+    TimeRange
+)
 
 
 class TestParsedKey:
@@ -89,6 +96,53 @@ class TestKeyParserRender:
         assert key_pattern.render(time=timestep, time_signature='start') == timestep.start.strftime('root/file_%Y%m%d.tif')
         assert key_pattern.render(time=timestep, time_signature='end') == timestep.end.strftime('root/file_%Y%m%d.tif')
         assert key_pattern.render(time=timestep, time_signature='end+1') == (timestep + 1).start.strftime('root/file_%Y%m%d.tif')
+
+
+class TestKeyParserTimeNormalization:
+    """Test KeyParser time-resolution and normalization helpers."""
+
+    @pytest.mark.parametrize(
+        "timestep",
+        [Day,Dekad,Month,ViirsModisTimeStep,Year]
+    )
+    def test_resolve_time_from_timestep(self, timestep):
+        """Test resolve_time maps timestep according to signature."""
+        key_pattern = KeyParser('root/file_%Y%m%d.tif')
+        ts = timestep.from_date(dt.datetime(2024, 2, 15))
+
+        assert key_pattern.resolve_time(ts, time_signature='start') == ts.start
+        assert key_pattern.resolve_time(ts, time_signature='end')   == ts.end
+        assert key_pattern.resolve_time(ts, time_signature='end+1') == (ts + 1).start
+
+    @pytest.mark.parametrize(
+        "pattern, expected",
+        [
+            ('root/file_%Y%m%d_%H%M%S.tif', dt.datetime(2024, 7, 19, 13, 45, 27)),
+            ('root/file_%Y%m%d_%H%M.tif', dt.datetime(2024, 7, 19, 13, 45, 0)),
+            ('root/file_%Y%m%d_%H.tif', dt.datetime(2024, 7, 19, 13, 0, 0)),
+            ('root/file_%Y%m%d.tif', dt.datetime(2024, 7, 19, 0, 0, 0)),
+            ('root/file_%Y%m.tif', dt.datetime(2024, 7, 1, 0, 0, 0)),
+            ('root/file_%Y.tif', dt.datetime(2024, 1, 1, 0, 0, 0)),
+        ]
+    )
+    def test_normalize_time_progressively_removes_unused_components(self, pattern, expected):
+        """Test normalize_time drops unsupported datetime precision."""
+        key_pattern = KeyParser(pattern)
+        parsed = key_pattern.normalize_time(dt.datetime(2024, 7, 19, 13, 45, 27))
+        assert parsed == expected
+
+    def test_normalize_time_adjusts_leap_day_without_year_for_multiday_length(self):
+        """Test normalize_time applies leap-day legacy adjustment."""
+        key_pattern = KeyParser('root/file_%m%d.tif')
+        parsed = key_pattern.normalize_time(dt.datetime(2024, 2, 29), step_length=30)
+        assert parsed == dt.datetime(2024, 2, 28)
+
+    def test_normalize_time_keeps_leap_day_without_year_for_daily_length(self):
+        """Test normalize_time keeps leap-day for daily lengths."""
+        key_pattern = KeyParser('root/file_%m%d.tif')
+        parsed = key_pattern.normalize_time(dt.datetime(2024, 2, 29), step_length=1)
+        assert parsed.day == 29
+        assert parsed.month == 2
 
 
 class TestKeyParserMatch:
