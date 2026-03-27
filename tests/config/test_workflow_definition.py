@@ -8,28 +8,50 @@ from d3tools import Options, WorkflowDefinition
 from d3tools.config.workflow_section import WorkflowSection
 
 
-class TestWorkflowDefinitionCompatibility:
-    """Ensure new canonical name keeps backward-compatible behavior."""
+import warnings
 
-    def test_options_is_workflow_definition_subclass(self):
-        """Options should remain usable as compatibility subclass."""
-        assert issubclass(Options, WorkflowDefinition)
+class TestWorkflowDefinitionCompatibility:
+    """Ensure new canonical name keeps backward-compatible behavior and features."""
+
+    def test_workflow_definition_is_options_subclass(self):
+        """WorkflowDefinition is a subclass of Options."""
+        assert issubclass(WorkflowDefinition, Options)
+
+    def test_options_load_deprecation_warning(self, tmp_path):
+        """Options.load should emit a deprecation warning."""
+        cfg = {"TAGS": {"source": "ERA5"}, "DATASETS": {}}
+        cfg_path = tmp_path / "workflow.json"
+        cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            Options.load(str(cfg_path))
+            assert any(issubclass(warn.category, DeprecationWarning) for warn in w)
+
+    def test_options_attribute_access_and_recursive_wrapping(self):
+        """Options should support attribute access and recursive wrapping."""
+        opts = Options({"foo": {"bar": 42}, "baz": [{"qux": 99}]})
+        # Attribute access
+        assert opts.foo.bar == 42
+        # Recursive wrapping in lists
+        assert isinstance(opts.baz[0], Options)
+        assert opts.baz[0].qux == 99
 
     def test_parse_preserves_concrete_class(self):
         """parse() should return the same concrete class as the receiver."""
         wf = WorkflowDefinition({"TAGS": {"a": "x"}, "DATASETS": {}})
-        opts = Options({"TAGS": {"a": "x"}, "DATASETS": {}})
 
         parsed_wf = wf.parse()
-        parsed_opts = opts.parse()
 
         assert isinstance(parsed_wf, WorkflowDefinition)
         assert type(parsed_wf) is WorkflowDefinition
-        assert isinstance(parsed_opts, Options)
-        assert type(parsed_opts) is Options
 
-    def test_load_preserves_concrete_class(self, tmp_path):
-        """load() should instantiate parsed result with the calling class."""
+    def test_parse_not_in_options(self):
+        """WorkflowDefinition.parse should not be available on Options instances."""
+        opts = Options({"TAGS": {"a": "x"}, "DATASETS": {}})
+        assert not hasattr(opts, "parse")
+
+    def test_load_returns_workflow_definition(self, tmp_path):
+        """load() should instantiate parsed result within a WorkflowDefinition."""
         cfg = {
             "TAGS": {"source": "ERA5"},
             "DATASETS": {},
@@ -38,10 +60,12 @@ class TestWorkflowDefinitionCompatibility:
         cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
 
         loaded_wf = WorkflowDefinition.load(str(cfg_path))
-        loaded_opts = Options.load(str(cfg_path))
+        with warnings.catch_warnings(record=False) as w:
+            warnings.simplefilter("always")
+            loaded_opts = Options.load(str(cfg_path))
 
         assert type(loaded_wf) is WorkflowDefinition
-        assert type(loaded_opts) is Options
+        assert type(loaded_opts) is WorkflowDefinition
 
     def test_parse_forwards_build_flags(self, monkeypatch):
         """WorkflowDefinition.parse should forward workflow build flags."""
@@ -114,7 +138,7 @@ class TestWorkflowDefinitionCompatibility:
 
 
 class TestWorkflowDefinitionRun:
-    """Test WorkflowDefinition.run ordered execution behavior."""
+    """Test WorkflowDefinition.run ordered execution behavior and edge cases."""
 
     def test_run_executes_sections_in_order(self):
         """run() should execute section workflow objects in list order."""
@@ -146,12 +170,22 @@ class TestWorkflowDefinitionRun:
 
         assert [item[0] for item in calls] == ["door", "dam", "dryes"]
 
+    def test_options_attribute_access_multiple_values(self):
+        """Options attribute access should raise ValueError if multiple values found."""
+        opts = Options({"foo": {"bar": 1}, "baz": {"bar": 2}})
+        try:
+            _ = opts.bar
+        except ValueError as exc:
+            assert "Multiple values found" in str(exc)
+        else:
+            raise AssertionError("Expected ValueError for multiple values")
+
     def test_run_raises_for_non_runnable_section_value(self):
-        """run() should fail clearly when a section has no runnable object."""
+        """run() should fail clearly when a section doesn't contain a runnable workflow object."""
         wf = WorkflowDefinition(
             {
                 "workflow_sections": [
-                    WorkflowSection("Download", "door", {"source": "ERA5"}, {"source": "ERA5"}),
+                    WorkflowSection("Not a real workflow section", "not a real engine", {}, {}),
                 ]
             }
         )
