@@ -1,336 +1,138 @@
 """
-Integration tests for WorkflowDefinition.run() with logging.
+Integration tests for WorkflowDefinition logging.
 
-Tests cover:
-- WorkflowDefinition execution with logging enabled
-- Logging disabled (None config)
-- Log file creation and content
-- Integration with workflow sections
-- Error handling with logging
+These tests verify that WorkflowDefinition properly integrates with
+WorkflowLogManager during workflow execution.
 
-NOTE: These tests need to be refactored to work with the new Work FlowDefinition architecture
-that no longer accepts named parameters but instead requires a config dict.
-All tests are temporarily marked as skipped pending refactoring.
+NOTE: Detailed logging functionality (file handlers, directory creation,
+log content formatting, etc.) is tested in tests/logging/.
+These tests focus ONLY on the WorkflowDefinition integration layer.
 """
-
-import os
 import pytest
-import tempfile
-from datetime import datetime
 
-from d3tools.config.workflow_definition import WorkflowDefinition
+from d3tools import WorkflowDefinition
 from d3tools.config.workflow_section import WorkflowSection
-from d3tools.timestepping import FixedLenTimeStep
+from d3tools.logging import WorkflowLogManager
 
 
-# Mark all tests in this module as skip pending refactoring
-pytestmark = pytest.mark.skip(reason="Needs refactoring for new WorkflowDefinition dict-based API")
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+@pytest.fixture
+def config_with_logging(tmp_path):
+    """Configuration with logging enabled."""
+    log_file = tmp_path / "workflow.log"
+    return {
+        "TAGS": {},
+        "DATASETS": {},
+        "workflow_name": "test_workflow",
+        "workflow_log": {
+            "file": str(log_file),
+            "level": "INFO",
+            "console": False
+        }
+    }, log_file
 
 
-class TestWorkflowDefinitionWithLogging:
-    """Test WorkflowDefinition.run() with logging enabled."""
+@pytest.fixture
+def config_with_sections_and_logging(tmp_path, monkeypatch):
+    """Configuration with workflow sections and logging."""
+    from d3tools.config import workflow_definition
     
-    def test_run_with_logging_disabled(self):
-        """Test workflow execution with logging disabled."""
-        workflow = WorkflowDefinition(
-            name='test_workflow',
-            time=FixedLenTimeStep(num_steps=1),
-            workflow_sections=[],
-            workflow_log=None
-        )
+    log_file = tmp_path / "workflow.log"
+    
+    class MockDoorProcess:
+        def get_data(self, time_range):
+            pass
+    
+    class MockDamProcess:
+        def run(self, time_range):
+            pass
+    
+    parsed_config = {
+        "TAGS": {},
+        "DATASETS": {},
+        "workflow_name": "test_workflow",
+        "workflow_log": {
+            "file": str(log_file),
+            "level": "INFO",
+            "console": False
+        },
+        "workflow_sections": [
+            WorkflowSection("Download", "door", {}, MockDoorProcess()),
+            WorkflowSection("Process", "dam", {}, MockDamProcess()),
+        ]
+    }
+    
+    monkeypatch.setattr(
+        workflow_definition,
+        "parse_options",
+        lambda config, **kwargs: parsed_config
+    )
+    
+    return {}, log_file
+
+
+# ============================================================================
+# Integration Tests
+# ============================================================================
+
+class TestWorkflowDefinitionLoggingIntegration:
+    """Test WorkflowDefinition integration with WorkflowLogManager."""
+
+    def test_logger_initialized_from_config(self, config_with_logging):
+        """WorkflowDefinition should initialize logger from workflow_log config."""
+        config, log_file = config_with_logging
+        wf = WorkflowDefinition(config)
         
-        # Should run without creating log files
-        workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-    
-    def test_run_with_logging_enabled(self):
-        """Test workflow execution with logging enabled."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            # Run workflow
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # Log file should be created
-            assert os.path.exists(log_file)
-            
-            # Log should contain workflow execution messages
-            with open(log_file, 'r') as f:
-                content = f.read()
-            
-            assert 'Starting workflow' in content or 'test_workflow' in content
-    
-    def test_run_with_sections_and_logging(self):
-        """Test workflow execution with sections and logging."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow_sections.log')
-            
-            # Create mock sections
-            section1 = WorkflowSection(
-                name='section1',
-                parallel=False,
-                processes=[]
-            )
-            section2 = WorkflowSection(
-                name='section2',
-                parallel=False,
-                processes=[]
-            )
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[section1, section2],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            # Run workflow
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # Log should contain section execution messages
-            with open(log_file, 'r') as f:
-                content = f.read()
-            
-            # Check for section mentions
-            # (exact format depends on implementation)
-            assert 'section1' in content or 'section2' in content
-    
-    def test_run_creates_log_directory(self):
-        """Test that run() creates log directory if it doesn't exist."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'logs', 'subdir', 'workflow.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            # Directory should not exist yet
-            assert not os.path.exists(os.path.dirname(log_file))
-            
-            # Run workflow
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # Directory and file should be created
-            assert os.path.exists(log_file)
-    
-    def test_run_with_placeholder_substitution(self):
-        """Test that {now:...} placeholders are substituted in run()."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_pattern = os.path.join(tmpdir, 'workflow_{now:%Y%m%d_%H%M%S}.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_pattern,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            # Run workflow
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # A log file with timestamp should be created
-            log_files = [f for f in os.listdir(tmpdir) if f.startswith('workflow_')]
-            assert len(log_files) > 0
-            
-            # The placeholder should be replaced with actual timestamp
-            log_file = log_files[0]
-            assert '{now:' not in log_file
-            assert 'workflow_' in log_file
-            assert '.log' in log_file
-    
-    def test_multiple_runs_with_same_workflow(self):
-        """Test multiple runs with same workflow object."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            # First run
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # Read log content after first run
-            with open(log_file, 'r') as f:
-                content1 = f.read()
-            
-            # Second run
-            workflow.run(start=datetime(2024, 2, 1), end=datetime(2024, 2, 2))
-            
-            # Read log content after second run
-            with open(log_file, 'r') as f:
-                content2 = f.read()
-            
-            # Both runs should be logged (append mode)
-            assert len(content2) > len(content1)
-    
-    def test_run_with_custom_log_level(self):
-        """Test workflow execution with custom log level."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow_debug.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'DEBUG',
-                    'console': False
-                }
-            )
-            
-            # Run workflow
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # Log file should exist
-            assert os.path.exists(log_file)
-    
-    def test_run_with_console_logging(self, capsys):
-        """Test workflow execution with console logging."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': True
-                }
-            )
-            
-            # Run workflow
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            # Check console output
-            captured = capsys.readouterr()
-            
-            # Should have some output (either stdout or stderr)
-            assert captured.out or captured.err
+        assert wf.logger is not None
+        assert isinstance(wf.logger, WorkflowLogManager)
+        assert wf.logger.log_file == str(log_file)
 
+    def test_logger_none_when_disabled(self):
+        """Logger should be None when workflow_log is None."""
+        config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_log": None
+        }
+        wf = WorkflowDefinition(config)
+        assert wf.logger is None
 
-class TestWorkflowDefinitionLoggingErrorHandling:
-    """Test error handling in WorkflowDefinition with logging."""
-    
-    def test_run_with_invalid_log_config(self):
-        """Test that invalid log config is handled gracefully."""
-        # Invalid config (missing required keys, etc.)
-        workflow = WorkflowDefinition(
-            name='test_workflow',
-            time=FixedLenTimeStep(num_steps=1),
-            workflow_sections=[],
-            workflow_log={}  # Empty dict - no file specified
-        )
+    def test_run_uses_logger_for_workflow_execution(self, config_with_logging):
+        """run() should use logger to log workflow execution."""
+        config, log_file = config_with_logging
+        config["workflow_name"] = "my_test_workflow"
         
-        # Should handle gracefully (either skip logging or use defaults)
-        # Exact behavior depends on implementation
-        try:
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-        except Exception as e:
-            # If it raises, should be a clear error about config
-            assert 'log' in str(e).lower() or 'config' in str(e).lower()
-    
-    def test_run_with_unwritable_log_path(self):
-        """Test handling of unwritable log paths."""
-        # Try to write to root (should fail without permissions)
-        workflow = WorkflowDefinition(
-            name='test_workflow',
-            time=FixedLenTimeStep(num_steps=1),
-            workflow_sections=[],
-            workflow_log={
-                'file': '/root/test.log',
-                'level': 'INFO',
-                'console': False
-            }
-        )
+        wf = WorkflowDefinition(config)
+        wf.run(start="2024-01-01", end="2024-01-02")
         
-        # Should raise PermissionError or handle gracefully
-        with pytest.raises((PermissionError, OSError)):
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
+        # Verify log file was created and contains workflow execution logs
+        assert log_file.exists()
+        content = log_file.read_text()
+        assert "'my_test_workflow' starting" in content
 
+    def test_run_uses_logger_for_section_execution(self, config_with_sections_and_logging):
+        """run() should use logger to log section execution."""
+        config, log_file = config_with_sections_and_logging
+        
+        wf = WorkflowDefinition(config)
+        wf.run(start="2024-01-01", end="2024-01-02")
+        
+        # Verify sections are logged
+        content = log_file.read_text()
+        assert "Download" in content
+        assert "Process" in content
 
-class TestWorkflowDefinitionLoggingContent:
-    """Test the content of log messages."""
-    
-    def test_log_contains_workflow_name(self):
-        """Test that log contains workflow name."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow.log')
-            
-            workflow = WorkflowDefinition(
-                name='my_custom_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            with open(log_file, 'r') as f:
-                content = f.read()
-            
-            assert 'my_custom_workflow' in content
-    
-    def test_log_contains_timestamps(self):
-        """Test that log contains timestamp information."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, 'workflow.log')
-            
-            workflow = WorkflowDefinition(
-                name='test_workflow',
-                time=FixedLenTimeStep(num_steps=1),
-                workflow_sections=[],
-                workflow_log={
-                    'file': log_file,
-                    'level': 'INFO',
-                    'console': False
-                }
-            )
-            
-            workflow.run(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
-            
-            with open(log_file, 'r') as f:
-                content = f.read()
-            
-            # Should contain timestamp patterns
-            # (format depends on log format configuration)
-            assert any(char.isdigit() for char in content)
+    def test_run_without_logger_works(self):
+        """run() should work when logger is None."""
+        config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_log": None
+        }
+        wf = WorkflowDefinition(config)
+        
+        # Should not raise
+        wf.run(start="2024-01-01", end="2024-01-02")
