@@ -2,8 +2,9 @@ import datetime as dt
 import re
 import os
 
-from ..timestepping.time_utils import get_date_from_str
+# backward compatibility, these functions used to be in this module
 from .string_substitution import substitute_string, substitute_values
+from .structure_utils import flatten_dict, make_hashable, transform_back, get_unique_values, format_dict
 
 def set_env(structure):
     """
@@ -57,64 +58,6 @@ def set_dataset(structure, obj_dict):
                     structure = structure.update(**tags)
 
     return structure
-
-def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
-    """
-    Flatten a nested dictionary into a single level dictionary.
-    for each nested key, it creates as many key:value pairs to ensure all combinations of the parent keys are present.
-    parent keys are separated by '.' in the new key.
-    e.g. {'a': {'b': 1, 'c': 2}} -> {'a.b': 1, 'b': 1, 'a.c': 2, 'c': 2}
-    """
-    items = []
-    for k, v in nested_dict.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, sep, new_key).items())
-            # Include the current key without parent prefix for combinations
-            items.extend(flatten_dict(v, sep=sep).items())
-        else:
-            items.append((new_key, v))
-
-    flat_dict = {}
-    for key, value in items:
-        if key in flat_dict:
-            if flat_dict[key] != value:
-                if not isinstance(flat_dict[key], list):
-                    flat_dict[key] = [flat_dict[key]].append(value)
-                else:
-                    flat_dict[key].append(value)
-        else:
-            flat_dict[key] = value
-        
-    return flat_dict
-
-def make_hashable(obj):
-    """
-    Convert a nested dictionary to a hashable object.
-    """
-    if isinstance(obj, dict):
-        return ('dict',) + tuple((k, make_hashable(v)) for k, v in obj.items())
-    elif isinstance(obj, list):
-        return ('list',) +  tuple(make_hashable(v) for v in obj)
-    else:
-        return obj
-
-def transform_back(obj):
-    """
-    Transform the hashable object back to its original form (list or dict).
-    """
-    if obj[0] == 'dict':
-        return {k: transform_back(v) if isinstance(v, tuple) else v for k, v in obj[1:]}
-    elif obj[0] == 'list':
-        return [transform_back(v) if isinstance(v, tuple) else v for v in obj[1:]]
-    else:
-        return obj
-
-def get_unique_values(values):
-    unique_values = set()
-    for value in values:
-        unique_values.add(make_hashable(value))
-    return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
 
 def extract_date_and_tags(string: str, string_pattern: str):
     import copy
@@ -191,14 +134,3 @@ def extract_date_and_tags(string: str, string_pattern: str):
             raise ValueError(f"Duplicate values for tag {value} in the string")
 
     return date, tags
-
-def format_dict(dict):
-    str_list = []
-    for key, value in dict.items():
-        if type(value) == float:
-            str_list.append(f'{key}={value:.2f}')
-        elif type(value) == dt.datetime:
-            str_list.append(f'{key}={value:%Y-%m-%d}')
-        else:
-            str_list.append(f'{key}={value}')
-    return ', '.join(str_list)
