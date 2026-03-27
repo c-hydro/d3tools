@@ -133,8 +133,10 @@ class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
         # Setup optional features
         self._set_optional_attributes(kwargs)
         
-        # Initialize raster-specific properties (template manager)
-        self._init_raster_properties()
+        # Initialize format-specific properties (e.g., template manager for raster)
+        # This will call the appropriate mixin's _init_format_properties via MRO
+        if hasattr(self, '_init_format_properties'):
+            self._init_format_properties()
         
         # Store remaining options and initialize tags
         self.options = kwargs
