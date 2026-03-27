@@ -1,52 +1,52 @@
 """
-Tests for DataCatalog class.
+Tests for DataCatalogue class.
 
-Tests the data catalog manager that handles discovery and enumeration
-of available dataset files.
+Tests the data catalogue manager that handles discovery, enumeration,
+and validation of available dataset files.
 """
 import pytest
 import datetime as dt
 from d3tools.data.local_dataset import LocalDataset
-from d3tools.data.data_catalog import DataCatalog
+from d3tools.data.data_catalogue import DataCatalogue
 from d3tools.timestepping import TimeRange, TimeStep
 
 
-class TestDataCatalogInitialization:
-    """Test DataCatalog initialization and integration with Dataset."""
+class TestDataCatalogueInitialization:
+    """Test DataCatalogue initialization and integration with Dataset."""
     
-    def test_catalog_created_on_dataset_init(self, tmp_path):
-        """Test that catalog is automatically created when Dataset is initialized."""
+    def test_catalogue_created_on_dataset_init(self, tmp_path):
+        """Test that catalogue is automatically created when Dataset is initialized."""
         dataset = LocalDataset(
             path=str(tmp_path),
             file='test.tif'
         )
         
-        assert hasattr(dataset, 'catalog')
-        assert isinstance(dataset.catalog, DataCatalog)
+        assert hasattr(dataset, 'catalogue')
+        assert isinstance(dataset.catalogue, DataCatalogue)
     
-    def test_catalog_has_dataset_reference(self, tmp_path):
-        """Test that catalog has reference to parent dataset."""
+    def test_catalogue_has_dataset_reference(self, tmp_path):
+        """Test that catalogue has reference to parent dataset."""
         dataset = LocalDataset(
             path=str(tmp_path),
             file='test.tif'
         )
         
-        assert dataset.catalog.dataset is dataset
+        assert dataset.catalogue.dataset is dataset
     
-    def test_catalog_repr(self, tmp_path):
-        """Test catalog string representation."""
+    def test_catalogue_repr(self, tmp_path):
+        """Test catalogue string representation."""
         dataset = LocalDataset(
             path=str(tmp_path),
             file='test_data.tif'
         )
         
-        assert repr(dataset.catalog) == "DataCatalog(test_data)"
+        assert repr(dataset.catalogue) == "DataCatalogue(test_data)"
     
-    def test_catalog_created_for_different_dataset_types(self, tmp_path):
-        """Test that catalog is created for all dataset types."""
+    def test_catalogue_created_for_different_dataset_types(self, tmp_path):
+        """Test that catalogue is created for all dataset types."""
         # LocalDataset
         local_ds = LocalDataset(path=str(tmp_path), file='test.tif')
-        assert hasattr(local_ds, 'catalog')
+        assert hasattr(local_ds, 'catalogue')
         
         # Could add more dataset types here as we test them
         # S3Dataset, MemoryDataset, etc.
@@ -63,7 +63,7 @@ class TestGetPrefix:
         )
         
         time = dt.datetime(2021, 3, 15)
-        prefix = dataset.catalog.get_prefix(time=time)
+        prefix = dataset.catalogue.get_prefix(time=time)
         
         # Should return the directory part only
         assert prefix == str(tmp_path / '2021' / '03')
@@ -79,7 +79,7 @@ class TestGetPrefix:
             dt.datetime(2021, 3, 1),
             dt.datetime(2021, 3, 31)
         )
-        prefix = dataset.catalog.get_prefix(time=time_range)
+        prefix = dataset.catalogue.get_prefix(time=time_range)
         
         # Should resolve year and month
         assert prefix == str(tmp_path / '2021' / '03')
@@ -95,7 +95,7 @@ class TestGetPrefix:
             dt.datetime(2021, 3, 15, 0, 0),
             dt.datetime(2021, 3, 15, 23, 59)
         )
-        prefix = dataset.catalog.get_prefix(time=time_range)
+        prefix = dataset.catalogue.get_prefix(time=time_range)
         
         # Should resolve year, month, and day
         assert prefix == str(tmp_path / '2021' / '03' / '15')
@@ -111,7 +111,7 @@ class TestGetPrefix:
             dt.datetime(2021, 3, 1),
             dt.datetime(2021, 5, 31)
         )
-        prefix = dataset.catalog.get_prefix(time=time_range)
+        prefix = dataset.catalogue.get_prefix(time=time_range)
         
         # Should only resolve year (not month, since they differ)
         assert prefix == str(tmp_path / '2021')
@@ -124,7 +124,7 @@ class TestGetPrefix:
         )
         
         # No time provided - patterns should be stripped
-        prefix = dataset.catalog.get_prefix()
+        prefix = dataset.catalogue.get_prefix()
         
         # Should go up until no more date patterns
         assert prefix == str(tmp_path)
@@ -139,7 +139,7 @@ class TestGetPrefix:
         )
         
         time = dt.datetime(2021, 3, 15)
-        prefix = dataset.catalog.get_prefix(time=time, region='EU')
+        prefix = dataset.catalogue.get_prefix(time=time, region='EU')
         
         # Should substitute tag and resolve year
         assert prefix == str(tmp_path / 'EU' / '2021')
@@ -154,7 +154,7 @@ class TestGetPrefix:
         time = dt.datetime(2021, 3, 15)
         
         # Both should return same result
-        catalog_result = dataset.catalog.get_prefix(time=time)
+        catalog_result = dataset.catalogue.get_prefix(time=time)
         dataset_result = dataset.get_prefix(time=time)
         
         assert catalog_result == dataset_result
@@ -170,7 +170,7 @@ class TestGetAvailableKeys:
             file='file_%Y%m%d.tif'
         )
         
-        keys = dataset.catalog.get_available_keys()
+        keys = dataset.catalogue.get_available_keys()
         assert keys == []
     
     def test_get_available_keys_with_files(self, tmp_path):
@@ -188,7 +188,7 @@ class TestGetAvailableKeys:
             file='file_%Y%m%d.tif'
         )
         
-        keys = dataset.catalog.get_available_keys()
+        keys = dataset.catalogue.get_available_keys()
         
         assert len(keys) == 3
         assert str(data_dir / 'file_20210101.tif') in keys
@@ -213,7 +213,7 @@ class TestGetAvailableKeys:
         
         # Filter to only January
         time_range = TimeRange(dt.datetime(2021, 1, 1), dt.datetime(2021, 1, 31))
-        keys = dataset.catalog.get_available_keys(time=time_range)
+        keys = dataset.catalogue.get_available_keys(time=time_range)
         
         assert len(keys) == 2
         assert str(data_dir / 'file_20210101.tif') in keys
@@ -234,7 +234,7 @@ class TestGetAvailableKeys:
         )
         
         # Query specific date
-        keys = dataset.catalog.get_available_keys(time=dt.datetime(2021, 1, 1))
+        keys = dataset.catalogue.get_available_keys(time=dt.datetime(2021, 1, 1))
         
         assert len(keys) == 1
         assert str(data_dir / 'file_20210101.tif') in keys
@@ -253,7 +253,7 @@ class TestGetAvailableKeys:
             file='file_%Y%m%d.tif'
         )
         
-        keys = dataset.catalog.get_available_keys()
+        keys = dataset.catalogue.get_available_keys()
         
         # Only the properly formatted file should be found
         assert len(keys) == 1
@@ -280,7 +280,7 @@ class TestGetAvailableKeys:
         
         # Query spanning both months
         time_range = TimeRange(dt.datetime(2021, 1, 1), dt.datetime(2021, 2, 28))
-        keys = dataset.catalog.get_available_keys(time=time_range)
+        keys = dataset.catalogue.get_available_keys(time=time_range)
         
         assert len(keys) == 2
     
@@ -303,14 +303,14 @@ class TestGetAvailableKeys:
         )
         
         # Query with region tag
-        keys = dataset.catalog.get_available_keys(region='EU')
+        keys = dataset.catalogue.get_available_keys(region='EU')
         
         assert len(keys) == 2
         assert all('EU' in key for key in keys)
         assert not any('US' in key for key in keys)
         
         # Query different region
-        keys_us = dataset.catalog.get_available_keys(region='US')
+        keys_us = dataset.catalogue.get_available_keys(region='US')
         assert len(keys_us) == 1
         assert 'US' in keys_us[0]
     
@@ -326,7 +326,7 @@ class TestGetAvailableKeys:
         )
         
         # Both should return same result
-        catalog_result = dataset.catalog.get_available_keys()
+        catalog_result = dataset.catalogue.get_available_keys()
         dataset_result = dataset.get_available_keys()
         
         assert catalog_result == dataset_result
@@ -511,7 +511,7 @@ class TestGetTimes:
         time_range = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 1))
         
         # Both should return same result
-        catalog_result = dataset.catalog.get_times(time_range)
+        catalog_result = dataset.catalogue.get_times(time_range)
         dataset_result = dataset.get_times(time_range)
         
         assert catalog_result == dataset_result
@@ -551,7 +551,7 @@ class TestGetTimesteps:
         time_range = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 3))
         
         # Both should return same result
-        catalog_result = dataset.catalog.get_timesteps(time_range, now = dt.datetime(2024, 1, 6))
+        catalog_result = dataset.catalogue.get_timesteps(time_range, now = dt.datetime(2024, 1, 6))
         dataset_result = dataset.get_timesteps(time_range, now = dt.datetime(2024, 1, 6))
         
         assert catalog_result == dataset_result
@@ -620,7 +620,7 @@ class TestEstimateTimestep:
             (tmp_path / f"data_202401{day:02d}.tif").touch()
         
         # Both should return same result
-        catalog_result = dataset.catalog.estimate_timestep(now = dt.datetime(2024, 1, 31))
+        catalog_result = dataset.catalogue.estimate_timestep(now = dt.datetime(2024, 1, 31))
         dataset_result = dataset.estimate_timestep(now = dt.datetime(2024, 1, 31))
         
         assert catalog_result == dataset_result
@@ -654,7 +654,7 @@ class TestGetLastDate:
         (tmp_path / "data_20240101.tif").touch()
         
         now = dt.datetime(2024, 1, 31)
-        catalog_result = dataset.catalog.get_last_date(now=now)
+        catalog_result = dataset.catalogue.get_last_date(now=now)
         dataset_result = dataset.get_last_date(now=now)
         
         assert catalog_result == dataset_result
@@ -688,7 +688,7 @@ class TestGetFirstTs:
         for day in range(1, 6):
             (tmp_path / f"data_202401{day:02d}.tif").touch()
         
-        catalog_result = dataset.catalog.get_first_ts()
+        catalog_result = dataset.catalogue.get_first_ts()
         dataset_result = dataset.get_first_ts()
         
         assert catalog_result == dataset_result
@@ -731,7 +731,7 @@ class TestGetAnyDate:
         (tmp_path / "data_20240101.tif").touch()
         
         
-        catalog_result = dataset.catalog.get_any_date()
+        catalog_result = dataset.catalogue.get_any_date()
         dataset_result = dataset.get_any_date()
         
         assert catalog_result == dataset_result
@@ -781,7 +781,7 @@ class TestGetFirstDate:
         
         (tmp_path / "data_20240101.tif").touch()
         
-        catalog_result = dataset.catalog.get_first_date()
+        catalog_result = dataset.catalogue.get_first_date()
         dataset_result = dataset.get_first_date()
         
         assert catalog_result == dataset_result
@@ -816,7 +816,7 @@ class TestGetLastTs:
             (tmp_path / f"data_202401{day:02d}.tif").touch()
         
         now = dt.datetime(2024, 1, 31)
-        catalog_result = dataset.catalog.get_last_ts(now=now)
+        catalog_result = dataset.catalogue.get_last_ts(now=now)
         dataset_result = dataset.get_last_ts(now=now)
         
         assert catalog_result == dataset_result
@@ -850,8 +850,398 @@ class TestGetStart:
         for day in range(1, 6):
             (tmp_path / f"data_202401{day:02d}.tif").touch()
         
-        catalog_result = dataset.catalog.get_start()
+        catalog_result = dataset.catalogue.get_start()
         dataset_result = dataset.get_start()
         
         assert catalog_result == dataset_result
 
+
+class TestCheckData:
+    """Test suite for check_data method."""
+    
+    def test_check_data_file_exists(self, tmp_path):
+        """Test check_data returns True when file exists."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        
+        result = dataset.check_data(dt.datetime(2024, 1, 1))
+        assert result is True
+    
+    def test_check_data_file_missing(self, tmp_path):
+        """Test check_data returns False when file doesn't exist."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        result = dataset.check_data(dt.datetime(2024, 1, 1))
+        assert result is False
+    
+    def test_check_data_with_tile(self, tmp_path):
+        """Test check_data with specific tile."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        
+        # Specific tile exists
+        assert dataset.check_data(dt.datetime(2024, 1, 1), tile='h18v04') is True
+        
+        # Other tile doesn't exist
+        assert dataset.check_data(dt.datetime(2024, 1, 1), tile='h19v04') is False
+    
+    def test_check_data_all_tiles(self, tmp_path):
+        """Test check_data without tile checks all tiles."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        # Only one tile exists
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        
+        # Should return False since not all tiles exist
+        result = dataset.check_data(dt.datetime(2024, 1, 1))
+        assert result is False
+        
+        # Create second tile
+        (tmp_path / "data_20240101_h19v04.tif").touch()
+        
+        # Now should return True
+        result = dataset.check_data(dt.datetime(2024, 1, 1))
+        assert result is True
+    
+    def test_check_data_with_versioned_file(self, tmp_path):
+        """Test check_data selects latest version when not specified."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{file_version}.tif"
+        )
+        
+        (tmp_path / "data_20240101_v1.tif").touch()
+        (tmp_path / "data_20240101_v2.tif").touch()
+        (tmp_path / "data_20240101_v3.tif").touch()
+        
+        # Should check for latest version (v3)
+        result = dataset.check_data(dt.datetime(2024, 1, 1))
+        assert result is True
+    
+    def test_check_data_with_specific_version(self, tmp_path):
+        """Test check_data with explicit version specification."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{file_version}.tif"
+        )
+        
+        (tmp_path / "data_20240101_v2.tif").touch()
+        
+        # Check for specific version
+        assert dataset.check_data(dt.datetime(2024, 1, 1), file_version='v2') is True
+        assert dataset.check_data(dt.datetime(2024, 1, 1), file_version='v1') is False
+    
+    def test_check_data_delegates_to_catalogue(self, tmp_path):
+        """Test that Dataset.check_data delegates to catalogue."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        
+        # Both should return same result
+        catalogue_result = dataset.catalogue.check_data(dt.datetime(2024, 1, 1))
+        dataset_result = dataset.check_data(dt.datetime(2024, 1, 1))
+        
+        assert catalogue_result == dataset_result
+
+
+class TestFindTimes:
+    """Test suite for find_times method."""
+    
+    def test_find_times_filters_available(self, tmp_path):
+        """Test find_times returns only times that exist."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        # Create some files
+        (tmp_path / "data_20240101.tif").touch()
+        (tmp_path / "data_20240103.tif").touch()
+        (tmp_path / "data_20240105.tif").touch()
+        
+        # Query for range including missing dates
+        times_to_check = [
+            dt.datetime(2024, 1, 1),
+            dt.datetime(2024, 1, 2),  # Missing
+            dt.datetime(2024, 1, 3),
+            dt.datetime(2024, 1, 4),  # Missing
+            dt.datetime(2024, 1, 5),
+        ]
+        
+        result = dataset.find_times(times_to_check)
+        
+        assert len(result) == 3
+        assert dt.datetime(2024, 1, 1) in result
+        assert dt.datetime(2024, 1, 3) in result
+        assert dt.datetime(2024, 1, 5) in result
+        assert dt.datetime(2024, 1, 2) not in result
+        assert dt.datetime(2024, 1, 4) not in result
+    
+    def test_find_times_returns_indices(self, tmp_path):
+        """Test find_times can return indices instead of times."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        (tmp_path / "data_20240103.tif").touch()
+        
+        times_to_check = [
+            dt.datetime(2024, 1, 1),  # Index 0
+            dt.datetime(2024, 1, 2),  # Index 1 - missing
+            dt.datetime(2024, 1, 3),  # Index 2
+        ]
+        
+        result = dataset.find_times(times_to_check, id=True)
+        
+        assert result == [0, 2]
+    
+    def test_find_times_reverse_filter(self, tmp_path):
+        """Test find_times with rev=True returns missing times."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        (tmp_path / "data_20240103.tif").touch()
+        
+        times_to_check = [
+            dt.datetime(2024, 1, 1),
+            dt.datetime(2024, 1, 2),
+            dt.datetime(2024, 1, 3),
+        ]
+        
+        result = dataset.find_times(times_to_check, rev=True)
+        
+        # Should return only the missing time
+        assert len(result) == 1
+        assert dt.datetime(2024, 1, 2) in result
+    
+    def test_find_times_reverse_with_indices(self, tmp_path):
+        """Test find_times with both rev=True and id=True."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        
+        times_to_check = [
+            dt.datetime(2024, 1, 1),  # Index 0 - exists
+            dt.datetime(2024, 1, 2),  # Index 1 - missing
+            dt.datetime(2024, 1, 3),  # Index 2 - missing
+        ]
+        
+        result = dataset.find_times(times_to_check, id=True, rev=True)
+        
+        # Should return indices of missing times
+        assert result == [1, 2]
+    
+    def test_find_times_with_tags(self, tmp_path):
+        """Test find_times with tag filters."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        (tmp_path / "data_20240102_h18v04.tif").touch()
+        # 20240103 missing for h18v04
+        
+        times_to_check = [
+            dt.datetime(2024, 1, 1),
+            dt.datetime(2024, 1, 2),
+            dt.datetime(2024, 1, 3),
+        ]
+        
+        result = dataset.find_times(times_to_check, tile='h18v04')
+        
+        assert len(result) == 2
+        assert dt.datetime(2024, 1, 1) in result
+        assert dt.datetime(2024, 1, 2) in result
+        assert dt.datetime(2024, 1, 3) not in result
+    
+    def test_find_times_empty_list(self, tmp_path):
+        """Test find_times with empty input list."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        result = dataset.find_times([])
+        assert result == []
+    
+    def test_find_times_all_missing(self, tmp_path):
+        """Test find_times when all times are missing."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        # No files created
+        times_to_check = [
+            dt.datetime(2024, 1, 1),
+            dt.datetime(2024, 1, 2),
+        ]
+        
+        result = dataset.find_times(times_to_check)
+        assert result == []
+    
+    def test_find_times_delegates_to_catalogue(self, tmp_path):
+        """Test that Dataset.find_times delegates to catalogue."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        
+        times_to_check = [dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2)]
+        
+        # Both should return same result
+        catalogue_result = dataset.catalogue.find_times(times_to_check)
+        dataset_result = dataset.find_times(times_to_check)
+        
+        assert catalogue_result == dataset_result
+
+
+class TestFindTiles:
+    """Test suite for find_tiles method."""
+    
+    def test_find_tiles_returns_available(self, tmp_path):
+        """Test find_tiles returns only tiles that exist."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04', 'h20v04']
+        
+        # Create files for only some tiles
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        (tmp_path / "data_20240101_h20v04.tif").touch()
+        
+        result = dataset.find_tiles(dt.datetime(2024, 1, 1))
+        
+        assert len(result) == 2
+        assert 'h18v04' in result
+        assert 'h20v04' in result
+        assert 'h19v04' not in result
+    
+    def test_find_tiles_reverse_filter(self, tmp_path):
+        """Test find_tiles with rev=True returns missing tiles."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04', 'h20v04']
+        
+        # Create files for only some tiles
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        
+        result = dataset.find_tiles(dt.datetime(2024, 1, 1), rev=True)
+        
+        # Should return missing tiles
+        assert len(result) == 2
+        assert 'h19v04' in result
+        assert 'h20v04' in result
+        assert 'h18v04' not in result
+    
+    def test_find_tiles_all_available(self, tmp_path):
+        """Test find_tiles when all tiles exist."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        (tmp_path / "data_20240101_h19v04.tif").touch()
+        
+        result = dataset.find_tiles(dt.datetime(2024, 1, 1))
+        
+        assert len(result) == 2
+        assert 'h18v04' in result
+        assert 'h19v04' in result
+    
+    def test_find_tiles_none_available(self, tmp_path):
+        """Test find_tiles when no tiles exist."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        # No files created
+        result = dataset.find_tiles(dt.datetime(2024, 1, 1))
+        
+        assert result == []
+    
+    def test_find_tiles_with_additional_tags(self, tmp_path):
+        """Test find_tiles with additional tag filters."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}_{variable}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        # Create files for specific variable
+        (tmp_path / "data_20240101_h18v04_temp.tif").touch()
+        (tmp_path / "data_20240101_h19v04_precip.tif").touch()
+        
+        # Query for specific variable
+        result = dataset.find_tiles(dt.datetime(2024, 1, 1), variable='temp')
+        
+        assert len(result) == 1
+        assert 'h18v04' in result
+        assert 'h19v04' not in result
+    
+    def test_find_tiles_without_time(self, tmp_path):
+        """Test find_tiles can work without specific time."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        (tmp_path / "data_h18v04.tif").touch()
+        
+        result = dataset.find_tiles()
+        
+        assert len(result) == 1
+        assert 'h18v04' in result
+    
+    def test_find_tiles_delegates_to_catalogue(self, tmp_path):
+        """Test that Dataset.find_tiles delegates to catalogue."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04']
+        
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        
+        # Both should return same result
+        catalogue_result = dataset.catalogue.find_tiles(dt.datetime(2024, 1, 1))
+        dataset_result = dataset.find_tiles(dt.datetime(2024, 1, 1))
+        
+        assert catalogue_result == dataset_result

@@ -9,7 +9,7 @@ import re
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format
-from .data_catalog import DataCatalog
+from .data_catalogue import DataCatalogue
 
 # Cache for dynamically created classes (avoids recreating same class combinations)
 _CLASS_CACHE = {}
@@ -138,8 +138,8 @@ class Dataset(metaclass=DatasetMeta):
         # Initialize format-specific properties (e.g., template manager for raster)
         self._init_format_properties()
         
-        # Initialize data catalog for discovery operations
-        self.catalog = DataCatalog(self)
+        # Initialize data catalogue for query and validation operations
+        self.catalogue = DataCatalogue(self)
         
         # Store remaining options and initialize tags
         self.options = kwargs
@@ -377,60 +377,85 @@ class Dataset(metaclass=DatasetMeta):
         return self.get_available_tags()
     # endregion
 
-    # region METHODS DELEGATED TO CATALOG
+    # region METHODS TO QUERY THE CATALOGUE FOR AVAILABLE DATA AND TIMES [DELEGATED TO CATALOGUE]
     def get_prefix(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        """Get the directory prefix for file discovery. Delegates to catalog."""
-        return self.catalog.get_prefix(time=time, **kwargs)
+        """Get the directory prefix for file discovery. Delegates to catalogue."""
+        return self.catalogue.get_prefix(time=time, **kwargs)
     
     def get_available_keys(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        """Get list of available file keys/paths. Delegates to catalog."""
-        return self.catalog.get_available_keys(time=time, **kwargs)
+        """Get list of available file keys/paths. Delegates to catalogue."""
+        return self.catalogue.get_available_keys(time=time, **kwargs)
 
     def get_available_tags(self, time: Optional[dt.datetime|TimeRange] = None, **kwargs):
-        """Extract all unique tags and times from available files. Delegates to catalog."""
-        return self.catalog.get_available_tags(time=time, **kwargs)
+        """Extract all unique tags and times from available files. Delegates to catalogue."""
+        return self.catalogue.get_available_tags(time=time, **kwargs)
 
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[dt.datetime, None, None]:
-        """Generate times within a time range. Delegates to catalog."""
-        return self.catalog._get_times(time_range, **kwargs)
+        """Generate times within a time range. Delegates to catalogue."""
+        return self.catalogue._get_times(time_range, **kwargs)
 
     def estimate_timestep(self, date_sample = None, **kwargs) -> TimeStep:
-        """Estimate the dataset's timestep from a sample of dates. Delegates to catalog."""
-        return self.catalog.estimate_timestep(date_sample, **kwargs)
+        """Estimate the dataset's timestep from a sample of dates. Delegates to catalogue."""
+        return self.catalogue.estimate_timestep(date_sample, **kwargs)
 
     @withcases
     def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
-        """Get a list of times between two dates. Delegates to catalog."""
-        return self.catalog.get_times(time_range, **kwargs)
+        """Get a list of times between two dates. Delegates to catalogue."""
+        return self.catalogue.get_times(time_range, **kwargs)
 
     @withcases
     def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
-        """Get a list of TimeStep objects within a time range. Delegates to catalog."""
-        return self.catalog.get_timesteps(time_range, **kwargs)
+        """Get a list of TimeStep objects within a time range. Delegates to catalogue."""
+        return self.catalogue.get_timesteps(time_range, **kwargs)
 
     def get_any_date(self, now=None, lim=None, **kwargs) -> dt.datetime|None:
-        """Find ANY available date quickly. Delegates to catalog."""
-        return self.catalog.get_any_date(now=now, lim=lim, **kwargs) 
+        """Find ANY available date quickly. Delegates to catalogue."""
+        return self.catalogue.get_any_date(now=now, lim=lim, **kwargs) 
 
     def get_last_date(self, now = None, n = 1, lim = None, **kwargs) -> dt.datetime|list[dt.datetime]|None:
-        """Find the most recent available date(s). Delegates to catalog."""
-        return self.catalog.get_last_date(now=now, n=n, lim=lim, **kwargs)
+        """Find the most recent available date(s). Delegates to catalogue."""
+        return self.catalogue.get_last_date(now=now, n=n, lim=lim, **kwargs)
 
     def get_last_ts(self, **kwargs) -> TimeStep:
-        """Get the most recent timestep. Delegates to catalog."""
-        return self.catalog.get_last_ts(**kwargs)
+        """Get the most recent timestep. Delegates to catalogue."""
+        return self.catalogue.get_last_ts(**kwargs)
 
     def get_first_date(self, start = None, n = 1, **kwargs) -> dt.datetime|list[dt.datetime]|None:
-        """Find the earliest available date(s). Delegates to catalog."""
-        return self.catalog.get_first_date(start=start, n=n, **kwargs)
+        """Find the earliest available date(s). Delegates to catalogue."""
+        return self.catalogue.get_first_date(start=start, n=n, **kwargs)
 
     def get_first_ts(self, **kwargs) -> TimeStep:
-        """Get the earliest timestep. Delegates to catalog."""
-        return self.catalog.get_first_ts(**kwargs)
+        """Get the earliest timestep. Delegates to catalogue."""
+        return self.catalogue.get_first_ts(**kwargs)
 
     def get_start(self, agg=True, **kwargs) -> dt.datetime:
-        """Get the start of the available data. Delegates to catalog."""
-        return self.catalog.get_start(agg=agg, **kwargs)
+        """Get the start of the available data. Delegates to catalogue."""
+        return self.catalogue.get_start(agg=agg, **kwargs)
+    
+    @withcases
+    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
+        """Check if data is available for a given time. Delegates to catalogue."""
+        return self.catalogue.check_data(time, **kwargs)
+    
+    @withcases
+    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
+        """Find the times for which data is available. Delegates to catalogue."""
+        return self.catalogue.find_times(times, id=id, rev=rev, **kwargs)
+
+    @withcases
+    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False, **kwargs) -> list[str]:
+        """Find the tiles for which data is available. Delegates to catalogue."""
+        return self.catalogue.find_tiles(time, rev=rev, **kwargs)
+    
+    # _walk is implemented in the subclasses to match the directory structure for discovery operations.
+    @abstractmethod
+    def _walk(self, prefix: str) -> Generator[str, None, None]:
+        raise NotImplementedError
+
+    # _check_data is implemented in the subclasses to match the directory structure for discovery operations.
+    @abstractmethod
+    def _check_data(self, data_key) -> bool:
+        raise NotImplementedError
     # endregion
 
     def is_subdataset(self, other: 'Dataset') -> bool:
@@ -519,11 +544,6 @@ class Dataset(metaclass=DatasetMeta):
 
     @abstractmethod
     def _rm_data(self, key: str):
-        raise NotImplementedError
-    
-    # _walk is implemented in the subclasses to handle the actual walking of the directory structure for discovery operations.
-    @abstractmethod
-    def _walk(self, prefix: str) -> Generator[str, None, None]:
         raise NotImplementedError
 
     # These are the main methods for getting and writing data, which handle the logic of checking availability,
@@ -682,73 +702,7 @@ class Dataset(metaclass=DatasetMeta):
         if self.type != 'memory':
             self.write_data(data, time, **kwargs)
         return data
-
     # endregion
-
-    @withcases
-    def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
-        """
-        Check if data is available for a given time.
-        """
-        # if this is a versioned file, and the version is not specified, get the latest version
-        if self.has_version and 'file_version' not in kwargs:
-            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
-            if available_versions is not None:
-                available_versions.sort()
-                kwargs['file_version'] = available_versions[-1]
-
-        if 'tile' in kwargs:
-            full_key = self.get_key(time, **kwargs)
-            if self._check_data(full_key):
-                return True
-            elif hasattr(self, 'parents') and self.parents is not None:
-                return all([parent.check_data(time, **kwargs) for parent in self.parents.values()])
-            else:
-                return False
-
-        for tile in self.tile_names:
-            if not self.check_data(time, tile = tile, **kwargs):
-                return False
-        else:
-            return True
-    
-    @withcases
-    def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
-        """
-        Find the times for which data is available.
-        """
-        all_ids = list(range(len(times)))
-
-        time_signatures = [self.get_time_signature(t) for t in times]
-        tr = TimeRange(min(time_signatures), max(time_signatures))
-
-        all_times = self.get_available_tags(tr, **kwargs).get('time', [])
-
-        ids = [i for i in all_ids if time_signatures[i] in all_times] or []
-        if rev:
-            ids = [i for i in all_ids if i not in ids] or []
-
-        if id:
-            return ids
-        else:
-            return [times[i] for i in ids]
-
-    @withcases
-    def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False, **kwargs) -> list[str]:
-        """
-        Find the tiles for which data is available.
-        """
-        all_tiles = self.tile_names
-        available_tiles = self.get_available_tags(time, **kwargs).get('tile', [])
-        
-        if not rev:
-            return [tile for tile in all_tiles if tile in available_tiles]
-        else:
-            return [tile for tile in all_tiles if tile not in available_tiles]
-
-    @abstractmethod
-    def _check_data(self, data_key) -> bool:
-        raise NotImplementedError
 
     ## METHODS TO MANIPULATE THE DATASET
     def get_key(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs):
