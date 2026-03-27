@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .parsers import workflow_section_from_config
+from ..parse.string_rendering import normalise_string
 
 WORKFLOW_SECTION_ALIASES = {
     "door_downloader": "door",
@@ -18,13 +19,9 @@ WORKFLOW_SECTION_ALIASES = {
     "calculate": "dryes",
 }
 
-def normalize_section_alias(value: str) -> str:
-    """Normalize alias tokens to a stable lookup key."""
-    return value.strip().lower().replace("-", "_").replace(" ", "_")
-
 def resolve_workflow_section_alias(section: str) -> str | None:
     """Resolve a workflow-section alias to an engine keyword."""
-    return WORKFLOW_SECTION_ALIASES.get(normalize_section_alias(section), None)
+    return WORKFLOW_SECTION_ALIASES.get(normalise_string(section), None)
 
 @dataclass
 class WorkflowSection:

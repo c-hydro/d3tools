@@ -4,7 +4,6 @@ from typing import Optional
 from ..timestepping import TimeRange
 from ..logging import WorkflowLogManager
 
-from .parsing_pipeline import parse_options
 from .utils import load_jsons
 from .options import Options
 
@@ -35,6 +34,9 @@ class WorkflowDefinition:
             wf = WorkflowDefinition.load("workflow.json", build_workflow_objects=True)
             wf.run(start="2024-01-01", end="2024-12-31")
     """
+
+    RESERVED_TOP_LEVEL_KEYS = {"workflow_name", "tags", "datasets", "workflow_log", "workflow_sections"}
+
     def __init__(
         self, 
         config: dict | Options,
@@ -61,6 +63,7 @@ class WorkflowDefinition:
             )
         
         # Parse configuration through the pipeline
+        from .parsing_pipeline import parse_options
         parsed = parse_options(
             config,
             build_workflow_objects=build_workflow_objects,
@@ -71,13 +74,13 @@ class WorkflowDefinition:
         self.options = Options(parsed)
         
         # Extract workflow components as proper attributes
-        self.workflow_sections: list = self.options.get("workflow_sections", [])
-        self.workflow_name: str = self.options.get("workflow_name", "workflow")
-        self.tags: dict = self.options.get("TAGS", {})
-        self.datasets: dict = self.options.get("DATASETS", {})
+        self.workflow_sections: list = self.options.get("workflow_sections", [], ignore_case=True)
+        self.workflow_name: str = self.options.get("workflow_name", "workflow", ignore_case=True)
+        self.tags: dict = self.options.get("tags", {}, ignore_case=True)
+        self.datasets: dict = self.options.get("datasets", {}, ignore_case=True)
         
         # Initialize logger if configured
-        workflow_log_config = self.options.get("workflow_log")
+        workflow_log_config = self.options.get("workflow_log", {}, ignore_case=True)
         self.logger: Optional[WorkflowLogManager] = WorkflowLogManager.from_dict(workflow_log_config)
 
     @classmethod

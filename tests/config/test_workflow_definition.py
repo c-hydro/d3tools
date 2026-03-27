@@ -54,7 +54,7 @@ def config_with_workflow_name():
     return {
         "TAGS": {},
         "DATASETS": {},
-        "workflow_name": "test_workflow"
+        "workflow-name": "test_workflow"
     }
 
 
@@ -62,9 +62,9 @@ def config_with_workflow_name():
 def config_with_workflow_log():
     """Configuration with workflow logging."""
     return {
-        "TAGS": {},
-        "DATASETS": {},
-        "workflow_log": {
+        "tags": {},
+        "Datasets": {},
+        "workflow log": {
             "file": "/tmp/test.log",
             "level": "INFO"
         }
@@ -237,18 +237,18 @@ class TestWorkflowDefinitionBuildFlags:
 
     def test_init_forwards_build_flags(self, monkeypatch):
         """__init__ should forward build flags to parse_options."""
-        from d3tools.config import workflow_definition
+        from d3tools.config import parsing_pipeline
         from d3tools.config import parsers
         
         seen = {}
-        original_parse = workflow_definition.parse_options
+        original_parse = parsing_pipeline.parse_options
         
         def mock_parse(config, build_workflow_objects=False, strict_workflow_imports=False):
             seen["build"] = build_workflow_objects
             seen["strict"] = strict_workflow_imports
             return original_parse(config, build_workflow_objects, strict_workflow_imports)
         
-        monkeypatch.setattr(workflow_definition, "parse_options", mock_parse)
+        monkeypatch.setattr(parsing_pipeline, "parse_options", mock_parse)
         monkeypatch.setitem(
             parsers._WORKFLOW_ENGINE_BUILDERS,
             "door",
@@ -284,7 +284,7 @@ class TestWorkflowDefinitionRunExecution:
                 calls.append(("dryes", time_range))
 
         # Mock the parsing to return pre-built sections
-        from d3tools.config import workflow_definition
+        from d3tools.config import parsing_pipeline
         
         parsed_config = {
             "TAGS": {},
@@ -299,7 +299,7 @@ class TestWorkflowDefinitionRunExecution:
         }
         
         monkeypatch.setattr(
-            workflow_definition,
+            parsing_pipeline,
             "parse_options",
             lambda config, **kwargs: parsed_config
         )
@@ -319,7 +319,7 @@ class TestWorkflowDefinitionRunExecution:
 
     def test_run_raises_for_invalid_engine(self, monkeypatch):
         """run() should raise TypeError for unrecognized engine."""
-        from d3tools.config import workflow_definition
+        from d3tools.config import parsing_pipeline
         
         parsed_config = {
             "TAGS": {},
@@ -332,7 +332,7 @@ class TestWorkflowDefinitionRunExecution:
         }
         
         monkeypatch.setattr(
-            workflow_definition,
+            parsing_pipeline,
             "parse_options",
             lambda config, **kwargs: parsed_config
         )

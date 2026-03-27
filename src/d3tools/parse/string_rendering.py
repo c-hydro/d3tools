@@ -12,6 +12,12 @@ from typing import Any
 
 from ..timestepping.time_utils import get_date_from_str
 
+def normalise_string(value: str) -> str:
+    """Normalize alias tokens to a stable lookup key."""
+    normalised = value.strip().lower().replace("-", "_").replace(" ", "_")
+    while "__" in normalised:
+        normalised = normalised.replace("__", "_")
+    return normalised
 
 def substitute_string(string: Any, tag_dict: dict[str, Any], rec: bool = False):
     """Render placeholders in a template string.

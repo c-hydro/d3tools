@@ -1,4 +1,4 @@
-from ..parse import get_unique_values
+from ..parse import get_unique_values, normalise_string
 
 class Options(dict):
     """
@@ -109,10 +109,10 @@ class Options(dict):
         """
         if isinstance(key, str):
             if ignore_case:
-                key = key.lower()
+                key = normalise_string(key)
 
             for k, v in self.items():
-                _key = k.lower() if ignore_case else k
+                _key = normalise_string(k) if ignore_case else k
                 if _key == key:
                     outvalue, outkey = v, k
                     break

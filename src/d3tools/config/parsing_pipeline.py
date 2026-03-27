@@ -10,8 +10,9 @@ from typing import Any
 
 from ..data import Dataset
 from ..config.options import Options
-from ..parse import flatten_dict, set_dataset, set_env, substitute_values
-from .workflow_section import WorkflowSection, resolve_workflow_section_alias
+from ..parse import flatten_dict, set_dataset, set_env, substitute_values, normalise_string
+from .workflow_section import WorkflowSection
+from .workflow_definition import WorkflowDefinition
 
 
 def resolve_env(options: Any):
@@ -145,7 +146,9 @@ def collect_workflow_sections(
     for key, value in options.items():
         if key == "workflow_sections":
             continue
-        if resolve_workflow_section_alias(key) is None:
+        # all the keys that are not recognised as
+        # reserved top-level keys are considered workflow sections
+        if normalise_string(key) in WorkflowDefinition.RESERVED_TOP_LEVEL_KEYS:
             continue
         collected_keys.append(key)
 
