@@ -15,12 +15,14 @@ import pytest
 from d3tools.config.options import Options
 from d3tools.config.parsing_pipeline import (
     build_datasets,
+    collect_workflow_sections,
     parse_options,
     resolve_dataset_refs,
     resolve_env,
     resolve_tags,
 )
 from d3tools.data import Dataset
+from d3tools.config.workflow_section import WorkflowSection
 
 
 class TestResolveEnv:
@@ -155,6 +157,52 @@ class TestResolveDatasetRefs:
         assert gamma_ds.tags.get("par_name") == "gamma.a"
 
 
+class TestCollectWorkflowSections:
+    """Test collect_workflow_sections stage."""
+
+    def test_collect_workflow_sections_preserves_order_and_keywords(self):
+        """Collect sections in top-level insertion order with engine keywords."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Download": {"source": "ERA5"},
+                "Process": {"process_list": [{"function": "a"}]},
+                "Calculate": {"index_options": {"index": "SPI"}},
+                "Publish": {"process_list": [{"function": "b"}]},
+            }
+        )
+
+        collected = collect_workflow_sections(options)
+        sections = collected["workflow_sections"]
+
+        assert all(isinstance(s, WorkflowSection) for s in sections)
+        assert [s.name for s in sections] == ["Download", "Process", "Calculate", "Publish"]
+        assert [s.engine for s in sections] == ["door", "dam", "dryes", "dam"]
+
+    def test_collect_workflow_sections_flattens_list_values(self):
+        """List-valued workflow sections should be expanded into multiple entries."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Publish": [
+                    {"process_list": [{"function": "a"}]},
+                    {"process_list": [{"function": "b"}]},
+                ],
+            }
+        )
+
+        collected = collect_workflow_sections(options)
+        sections = collected["workflow_sections"]
+
+        assert len(sections) == 2
+        assert sections[0].name == "Publish"
+        assert sections[1].name == "Publish"
+        assert sections[0].definition["process_list"][0]["function"] == "a"
+        assert sections[1].definition["process_list"][0]["function"] == "b"
+
+
 class TestParseOptionsIntegration:
     """Integration tests for full parse_options stage."""
 
@@ -180,11 +228,14 @@ class TestParseOptionsIntegration:
         )
 
         parsed = parse_options(options)
+        sections = parsed["workflow_sections"]
+        door_section = next(s for s in sections if s.engine == "door")
+        door_options = door_section.definition
 
         assert isinstance(parsed["DATASETS"]["destination"], Dataset)
-        assert isinstance(parsed["DOOR_DOWNLOADER"]["destination"], Dataset)
-        assert parsed["DOOR_DOWNLOADER"]["source"] == "ERA5"
-        assert parsed["DOOR_DOWNLOADER"]["product"] == "reanalysis"
+        assert isinstance(door_options["destination"], Dataset)
+        assert door_options["source"] == "ERA5"
+        assert door_options["product"] == "reanalysis"
 
     def test_parse_options_dam_like_configuration(self):
         """Test full pipeline on dam-style workflow config."""
@@ -205,10 +256,13 @@ class TestParseOptionsIntegration:
         )
 
         parsed = parse_options(options)
+        sections = parsed["workflow_sections"]
+        dam_section = next(s for s in sections if s.engine == "dam")
+        dam_options = dam_section.definition
 
-        assert isinstance(parsed["DAM_WORKFLOW"]["input"], Dataset)
-        assert isinstance(parsed["DAM_WORKFLOW"]["output"], Dataset)
-        assert parsed["DAM_WORKFLOW"]["process_list"][0]["function"] == "combine_tiles"
+        assert isinstance(dam_options["input"], Dataset)
+        assert isinstance(dam_options["output"], Dataset)
+        assert dam_options["process_list"][0]["function"] == "combine_tiles"
 
     def test_parse_options_dryes_like_configuration(self):
         """Test full pipeline on dryes-style workflow config."""
@@ -248,10 +302,11 @@ class TestParseOptionsIntegration:
         )
 
         parsed = parse_options(options)
-
-        io_opts = parsed["DRYES_INDEX"]["io_options"]
+        sections = parsed["workflow_sections"]
+        dryes_section = next(s for s in sections if s.engine == "dryes")
+        io_opts = dryes_section.definition["io_options"]
         assert isinstance(io_opts["data"], Dataset)
         assert isinstance(io_opts["gamma.a"], Dataset)
         assert io_opts["gamma.a"].tags.get("par_name") == "gamma.a"
         assert isinstance(io_opts["index"], Dataset)
-        assert parsed["DRYES_INDEX"]["run_options"]["history_start"] == "1990-01-01"
+        assert dryes_section.definition["run_options"]["history_start"] == "1990-01-01"
