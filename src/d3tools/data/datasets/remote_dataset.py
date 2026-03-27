@@ -123,6 +123,11 @@ class RemoteDataset(Dataset):
             key = key[1:]
         return os.path.join(self.tmp_dir, key)
 
+    def _get_recreate_kwargs(self) -> dict:
+        kwargs = super()._get_recreate_kwargs()
+        kwargs.update({'tmp_dir': self.tmp_dir})
+        return kwargs
+
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)
         if self.available_keys_are_cached:
@@ -206,15 +211,15 @@ class S3Dataset(RemoteDataset):
             for file in content:
                 yield file['Key']
 
-    def update(self, in_place = False, **kwargs):
-        self.options.update({'bucket_name': self.bucket_name, 'region_name': self.region_name, 'profile_name': self.profile_name, 'tmp_dir': self.tmp_dir})
-        new_self = super().update(in_place = in_place, **kwargs)
+    def _get_recreate_kwargs(self) -> dict:
+        kwargs = super()._get_recreate_kwargs()
+        kwargs.update({
+            'bucket_name': self.bucket_name,
+            'region_name': self.region_name,
+            'profile_name': self.profile_name,
+        })
+        return kwargs
 
-        if in_place:
-            self = new_self
-            return self
-        else:
-            return new_self
 
 class OVHS3Dataset(S3Dataset):
 
@@ -346,15 +351,10 @@ class OVHS3Dataset(S3Dataset):
             else:
                 break
 
-    def update(self, in_place = False, **kwargs):
-        self.options.update({'endpoint_url': self.endpoint_url})
-        new_self = super().update(in_place = in_place, **kwargs)
-
-        if in_place:
-            self = new_self
-            return self
-        else:
-            return new_self
+    def _get_recreate_kwargs(self) -> dict:
+        kwargs = super()._get_recreate_kwargs()
+        kwargs.update({'endpoint_url': self.endpoint_url})
+        return kwargs
 
 
 class SFTPDataset(RemoteDataset):
@@ -463,9 +463,18 @@ class SFTPDataset(RemoteDataset):
     def _delete(self, key):
         self.sftp_client.remove(key)
 
+    def _get_recreate_kwargs(self) -> dict:
+        kwargs = super()._get_recreate_kwargs()
+        kwargs.update({
+            'host': self.hostname,
+            'username': self.username,
+            'password': self.password,
+            'port': self.port,
+            'private_key': self.private_key,
+        })
+        return kwargs
+
     def update(self, in_place = False, **kwargs):
-        self.options.update({'host': self.hostname, 'username': self.username, 'tmp_dir': self.tmp_dir,
-                             'port': self.port, 'private_key': self.private_key, 'password': self.password})
         new_self = super().update(in_place = in_place, **kwargs)
         new_self.sftp_client = self.sftp_client
 
