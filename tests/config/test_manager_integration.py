@@ -5,11 +5,7 @@ Tests the integration of manager classes with config parsing and Dataset class.
 """
 import pytest
 from unittest import mock
-import json
-import tempfile
-import os
 
-from d3tools.config.options import Options
 from d3tools.data import Dataset
 from d3tools.data.local_dataset import LocalDataset
 from d3tools.thumbnails import DatasetThumbnailManager
@@ -21,7 +17,7 @@ def basic_dataset_config():
     """Basic dataset configuration without managers."""
     return {
         'name': 'test_dataset',
-        'format': 'local',
+        'type': 'local',
         'path': '/path/to/data',
         'file': 'output_{tile}.tif'
     }
