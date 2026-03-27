@@ -36,6 +36,15 @@ class TestStringSubstitution:
         assert substitute_values(structure, tags) == [["tile_A", "tile_B"], ["other_A", "other_B"]]
 
 class TestStructureUtils:
+    
+    def test_make_hashable_and_transform_back_options(self):
+        from d3tools.config.workflow_definition import Options
+        obj = Options({'a': [1, 2], 'b': {'c': 3}})
+        hashable = make_hashable(obj)
+        restored = transform_back(hashable)
+        assert isinstance(restored, Options)
+        assert restored == obj
+
     def test_flatten_dict_simple(self):
         d = {'a': {'b': 1, 'c': 2}}
         flat = flatten_dict(d)
@@ -121,8 +130,8 @@ class TestStructureUtils:
         assert make_hashable('x') == 'x'
 
     def test_transform_back_edge_cases(self):
-        assert transform_back(('dict',)) == {}
-        assert transform_back(('list',)) == []
+        assert transform_back((dict,)) == {}
+        assert transform_back((list,)) == []
 
 
 class TestSpecialSubstitutions:

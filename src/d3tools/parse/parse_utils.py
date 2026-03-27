@@ -103,24 +103,27 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
 
 def make_hashable(obj: dict|list|Any) -> tuple|Any:
     """
-    Convert a nested dictionary or list to a hashable object (tuple).
+    Convert a nested dictionary or list (including subclasses like Options) to a hashable object (tuple).
 
     Useful for deduplication and storing complex structures in sets.
 
     Args:
-        obj (dict, list, or other): The object to convert.
+        obj (dict, list, or subclass, or other): The object to convert.
 
     Returns:
-        tuple or original object: Hashable representation.
+        tuple or original object: Hashable representation. If the input is a custom dict/list subclass (e.g., Options),
+        the class type is preserved and will be restored by transform_back.
 
     Example:
         >>> make_hashable({'a': [1, 2]})
-        ('dict', ('a', ('list', 1, 2)))
+        (<class 'dict'>, ('a', (<class 'list'>, 1, 2)))
+        >>> make_hashable(Options({'a': [1, 2]}))
+        (<class 'Options'>, ('a', (<class 'list'>, 1, 2)))
     """
     if isinstance(obj, dict):
-        return ('dict',) + tuple((k, make_hashable(v)) for k, v in obj.items())
+        return (obj.__class__,) + tuple((k, make_hashable(v)) for k, v in obj.items())
     elif isinstance(obj, list):
-        return ('list',) +  tuple(make_hashable(v) for v in obj)
+        return (obj.__class__,) +  tuple(make_hashable(v) for v in obj)
     else:
         return obj
 
@@ -128,22 +131,27 @@ def transform_back(obj: tuple) -> dict|list|Any:
     """
     Transform a hashable tuple (created by make_hashable) back to its original form.
 
+    If the tuple was created from a custom dict/list subclass (e.g., Options),
+    the returned object will be of the same subclass type.
+
     Args:
         obj (tuple): Hashable object.
 
     Returns:
-        dict, list, or original value: Original structure.
+        dict, list, custom subclass, or original value: Original structure, preserving custom types.
 
     Example:
-        >>> transform_back(('dict', ('a', ('list', 1, 2))))
+        >>> transform_back((dict, ('a', (list, 1, 2))))
         {'a': [1, 2]}
+        >>> transform_back((Options, ('a', (list, 1, 2))))
+        Options({'a': [1, 2]})
     """
-    if obj[0] == 'dict':
-        return {k: transform_back(v) if isinstance(v, tuple) else v for k, v in obj[1:]}
-    elif obj[0] == 'list':
-        return [transform_back(v) if isinstance(v, tuple) else v for v in obj[1:]]
-    else:
-        return obj
+    if type(obj[0]) == type:
+        if issubclass(obj[0], dict):
+            return obj[0]({k: transform_back(v) if isinstance(v, tuple) else v for k, v in obj[1:]})
+        elif issubclass(obj[0], list):
+            return obj[0]([transform_back(v) if isinstance(v, tuple) else v for v in obj[1:]])
+    return obj
 
 def get_unique_values(values: list) -> list:
     """
