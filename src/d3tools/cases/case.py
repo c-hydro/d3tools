@@ -1,7 +1,4 @@
-try:
-    from .utils import permutate_options
-except ImportError:
-    from utils import permutate_options
+from .utils import permutate_options
 
 class Case():
 

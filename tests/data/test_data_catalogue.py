@@ -1245,3 +1245,185 @@ class TestFindTiles:
         dataset_result = dataset.find_tiles(dt.datetime(2024, 1, 1))
         
         assert catalogue_result == dataset_result
+
+
+class TestCatalogueWithCases:
+    """Integration tests for @withcases decorator on catalogue methods."""
+    
+    def test_find_times_with_cases(self, tmp_path):
+        """Test find_times expands cases correctly for multiple tiles."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        # Create files for different tiles
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        (tmp_path / "data_20240102_h18v04.tif").touch()
+        (tmp_path / "data_20240101_h19v04.tif").touch()
+        # 20240102 missing for h19v04
+        
+        times_to_check = [
+            dt.datetime(2024, 1, 1),
+            dt.datetime(2024, 1, 2),
+        ]
+        
+        # Define cases for different tiles
+        cases = [
+            {'tags': {'tile': 'h18v04'}},
+            {'tags': {'tile': 'h19v04'}},
+        ]
+        
+        # Use cases to check times for both tiles
+        result = dataset.find_times(times_to_check, cases=cases)
+        
+        # Should return list of results, one per case
+        assert isinstance(result, list)
+        assert len(result) == 2
+        
+        # h18v04 has both times
+        assert len(result[0]) == 2
+        
+        # h19v04 has only first time
+        assert len(result[1]) == 1
+        assert result[1][0] == dt.datetime(2024, 1, 1)
+    
+    def test_check_data_with_cases(self, tmp_path):
+        """Test check_data expands cases correctly."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{tile}.tif"
+        )
+        
+        (tmp_path / "data_20240101_h18v04.tif").touch()
+        # h19v04 missing
+        
+        cases = [
+            {'tags': {'tile': 'h18v04'}},
+            {'tags': {'tile': 'h19v04'}},
+        ]
+        
+        result = dataset.check_data(dt.datetime(2024, 1, 1), cases=cases)
+        
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0] is True   # h18v04 exists
+        assert result[1] is False  # h19v04 missing
+    
+    def test_find_tiles_with_cases(self, tmp_path):
+        """Test find_tiles expands cases correctly for different times."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{variable}_{tile}.tif"
+        )
+        dataset._tile_names = ['h18v04', 'h19v04']
+        
+        # Different tiles available for different dates/variables
+        (tmp_path / "data_20240101_temp_h18v04.tif").touch()
+        (tmp_path / "data_20240101_temp_h19v04.tif").touch()
+        (tmp_path / "data_20240102_temp_h18v04.tif").touch()
+        (tmp_path / "data_20240102_prec_h19v04.tif").touch()
+        (tmp_path / "data_20240102_prec_h18v04.tif").touch()
+        # h19v04 missing for 20240102
+        
+        # Use cases to check different times
+        cases = [
+            {'tags': {'variable': 'temp'}},
+            {'tags': {'variable': 'prec'}},
+        ]
+        
+        # Check tiles for Jan 1 (both exist)
+        result_jan1 = dataset.find_tiles(dt.datetime(2024, 1, 1), cases=cases)
+        assert 'h18v04' in result_jan1[0]
+        assert 'h19v04' in result_jan1[0]
+        assert len(result_jan1[1]) == 0  # No prec tiles on Jan 1
+        
+        # Check tiles for Jan 2 (only h18v04 exists)
+        result_jan2 = dataset.find_tiles(dt.datetime(2024, 1, 2), cases=cases)
+        assert 'h18v04' in result_jan2[0]
+        assert len(result_jan2[1]) == 2  # both tiles for prec on Jan 2
+    
+    def test_get_times_with_cases(self, tmp_path):
+        """Test get_times expands cases correctly for different tags."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{variable}.tif"
+        )
+        
+        # Create files for different variables
+        (tmp_path / "data_20240101_temp.tif").touch()
+        (tmp_path / "data_20240102_temp.tif").touch()
+        (tmp_path / "data_20240101_prec.tif").touch()
+        # precip missing for 20240102
+        
+        time_range = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2))
+        
+        cases = [
+            {'tags': {'variable': 'temp'}},
+            {'tags': {'variable': 'prec'}},
+        ]
+        
+        result = dataset.get_times(time_range, cases=cases)
+        
+        assert isinstance(result, list)
+        assert len(result) == 2
+        
+        # temp has both times
+        assert len(result[0]) == 2
+        
+        # precip has only first time
+        assert len(result[1]) == 1
+    
+    def test_get_timesteps_with_cases(self, tmp_path):
+        """Test get_timesteps expands cases correctly."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d_{variable}.tif"
+        )
+        
+        # Create files for different variables
+        for day in range(1, 4):
+            (tmp_path / f"data_202401{day:02d}_temp.tif").touch()
+            (tmp_path / f"data_202401{day:02d}_prec.tif").touch()
+        
+        time_range = TimeRange(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 3))
+        
+        cases = [
+            {'tags': {'variable': 'temp'}},
+            {'tags': {'variable': 'prec'}},
+        ]
+        
+        result = dataset.get_timesteps(time_range, cases=cases, now=dt.datetime(2024, 1, 10))
+        
+        assert isinstance(result, list)
+        assert len(result) == 2
+        
+        # Both variables should have timesteps
+        assert all(len(ts_list) > 0 for ts_list in result)
+        assert all(all(isinstance(ts, TimeStep) for ts in ts_list) for ts_list in result)
+    
+    def test_cases_none_behaves_normally(self, tmp_path):
+        """Test that cases=None doesn't change method behavior."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+        
+        (tmp_path / "data_20240101.tif").touch()
+        (tmp_path / "data_20240103.tif").touch()
+        
+        times_to_check = [
+            dt.datetime(2024, 1, 1),
+            dt.datetime(2024, 1, 2),
+            dt.datetime(2024, 1, 3),
+        ]
+        
+        # With cases=None should behave like normal call
+        result = dataset.find_times(times_to_check, cases=None)
+        
+        # Should return list of times (not list of lists)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert dt.datetime(2024, 1, 1) in result
+        assert dt.datetime(2024, 1, 3) in result

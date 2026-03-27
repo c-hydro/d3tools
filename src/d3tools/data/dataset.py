@@ -14,16 +14,6 @@ from .data_catalogue import DataCatalogue
 # Cache for dynamically created classes (avoids recreating same class combinations)
 _CLASS_CACHE = {}
 
-def withcases(func):
-    def wrapper(*args, **kwargs):
-        if 'cases' in kwargs:
-            cases = kwargs.pop('cases')
-            if cases is not None:
-                return [func(*args, **case['tags'], **kwargs) for case in cases]
-        else:
-            return func(*args, **kwargs)
-    return wrapper
-
 class DatasetMeta(ABCMeta):
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
@@ -398,12 +388,10 @@ class Dataset(metaclass=DatasetMeta):
         """Estimate the dataset's timestep from a sample of dates. Delegates to catalogue."""
         return self.catalogue.estimate_timestep(date_sample, **kwargs)
 
-    @withcases
     def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
         """Get a list of times between two dates. Delegates to catalogue."""
         return self.catalogue.get_times(time_range, **kwargs)
 
-    @withcases
     def get_timesteps(self, time_range: TimeRange, **kwargs) -> list[TimeStep]:
         """Get a list of TimeStep objects within a time range. Delegates to catalogue."""
         return self.catalogue.get_timesteps(time_range, **kwargs)
@@ -432,17 +420,14 @@ class Dataset(metaclass=DatasetMeta):
         """Get the start of the available data. Delegates to catalogue."""
         return self.catalogue.get_start(agg=agg, **kwargs)
     
-    @withcases
     def check_data(self, time: Optional[TimeStep|dt.datetime] = None, **kwargs) -> bool:
         """Check if data is available for a given time. Delegates to catalogue."""
         return self.catalogue.check_data(time, **kwargs)
     
-    @withcases
     def find_times(self, times: list[TimeStep|dt.datetime], id = False, rev = False, **kwargs) -> list[TimeStep] | list[int]:
         """Find the times for which data is available. Delegates to catalogue."""
         return self.catalogue.find_times(times, id=id, rev=rev, **kwargs)
 
-    @withcases
     def find_tiles(self, time: Optional[TimeStep|dt.datetime] = None, rev = False, **kwargs) -> list[str]:
         """Find the tiles for which data is available. Delegates to catalogue."""
         return self.catalogue.find_tiles(time, rev=rev, **kwargs)
