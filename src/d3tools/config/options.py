@@ -64,10 +64,11 @@ class Options(dict):
         tags = substitute_values(tags, tags, rec=True)
         parsed_options = Options(substitute_values(self, tags, rec=True))
 
-        # parse datasets
+        # parse datasets - now Dataset.from_options() handles manager parsing
         dataset_options, ds_key = parsed_options.get('datasets', {}, ignore_case=True, get_key=True)
         defaults = dataset_options.pop('__defaults__', None)
         for dsname, dsopt in dataset_options.items():
+            # Dataset.from_options() now handles parsing thumbnail/log configs
             dataset_options[dsname] = Dataset.from_options(dsopt, defaults)
 
         flat_dsoptions = flatten_dict({ds_key: dataset_options})
