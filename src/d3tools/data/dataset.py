@@ -902,6 +902,9 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
     ## METHODS TO MANIPULATE THE TEMPLATE
     def get_template_dict(self, make_it:bool = True, **kwargs):
+        # frop the file_version if it exists
+        kwargs.pop('file_version', None)
+        
         tile = kwargs.pop('tile', None)
         if tile is None:
             if self.has_tiles:
