@@ -53,3 +53,20 @@ class TestWorkflowSection:
         """from_config should reject unrecognized top-level keys."""
         with pytest.raises(ValueError):
             WorkflowSection.from_config(name="TAGS", definition={"a": "b"})
+
+    def test_from_config_with_engine_in_definition(self):
+        """from_config should use engine from definition if provided."""
+        section = WorkflowSection.from_config(
+            name="not_an_alias",
+            definition={"engine": "door", "source": "ERA5", "options": {"ts_per_year": 36}},
+        )
+        assert section.engine == "door"
+        assert section.name   == "not_an_alias"
+
+    def test_from_config_raises_with_invalid_engine(self):
+        """from_config should raise ValueError for invalid engine."""
+        with pytest.raises(ValueError):
+            WorkflowSection.from_config(
+                name="not_an_alias",
+                definition={"engine": "invalid_engine", "source": "ERA5", "options": {"ts_per_year": 36}},
+            )
