@@ -204,9 +204,9 @@ class TestLocalDatasetUpdateInPlace:
         )
         original_id = id(ds)
 
-        result = ds.update(in_place=True, region='eu')
+        none = ds.update(in_place=True, region='eu')
 
-        assert id(result) == original_id
+        assert none is None
         assert id(ds) == original_id
         assert ds.key_pattern == '/data/eu/output.tif'
         assert ds.tags['region'] == 'eu'
@@ -303,7 +303,6 @@ class TestMemoryDatasetUpdate:
         assert len(updated.data_dict) == 0
         assert updated.key_pattern == 'data_t1.txt'
 
-    @pytest.mark.xfail(reason="BUG: MemoryDataset.update(in_place=True) doesn't filter data_dict - 'self = new_self' doesn't work in Python")
     def test_update_in_place_updates_data_dict(self):
         """Test that in_place=True updates data_dict correctly."""
         ds = MemoryDataset(
@@ -492,7 +491,6 @@ class TestUpdateEdgeCases:
 
         assert updated.key_pattern == '/data/tp/daily/output.tif'
 
-    @pytest.mark.xfail(reason="BUG: update() doesn't preserve options dict - options not in _creation_kwargs")
     def test_update_preserves_options_dict(self):
         """Test that options dict is preserved through update."""
         ds = LocalDataset(

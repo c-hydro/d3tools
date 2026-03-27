@@ -70,29 +70,6 @@ class TestDatasetTemplateManagerIntegration:
         # Modifying one affects the other
         updated_ds.template_manager._templates['new_tile'] = {}
         assert 'new_tile' in sample_dataset.template_manager._templates
-    
-    def test_copy_with_template_flag(self, sample_dataset, sample_dataarray):
-        """Test that copy(template=True) preserves template_manager."""
-        # Set a template
-        sample_dataset.set_template(sample_dataarray)
-        
-        # Copy with template=True
-        copied_ds = sample_dataset.copy(template=True)
-        
-        # Should preserve template_manager reference
-        assert copied_ds.template_manager is sample_dataset.template_manager
-    
-    def test_copy_without_template_flag(self, sample_dataset, sample_dataarray):
-        """Test that copy(template=False) creates fresh template_manager."""
-        # Set a template
-        sample_dataset.set_template(sample_dataarray)
-        
-        # Copy with template=False
-        copied_ds = sample_dataset.copy(template=False)
-        
-        # Should have fresh template_manager from update()
-        # But update() also shares reference, so this will have templates
-        assert copied_ds.template_manager is sample_dataset.template_manager
 
 
 class TestSetTemplate:

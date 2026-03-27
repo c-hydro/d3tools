@@ -140,8 +140,9 @@ class Dataset(metaclass=DatasetMeta):
             'name': self.name,
             'format': self.format,
             'time_signature': self.time_signature,
-            'nan_value': self.nan_value
+            'nan_value': self.nan_value,
         }
+        self._creation_kwargs.update(self.options)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
@@ -233,56 +234,104 @@ class Dataset(metaclass=DatasetMeta):
     # endregion
 
     # region: METHODS TO COPY, UPDATE AND COMPARE DATASETS
-    def update(self, in_place = False, **kwargs):
+    def update(self, in_place=False, preserve_temporal=True, preserve_spatial=True, **kwargs):
+        """Create an updated copy of this dataset with substituted placeholders.
+        
+        Args:
+            in_place: If True, mutate self instead of creating new instance
+            preserve_temporal: If True, preserve timestep and aggregation attributes
+            preserve_spatial: If True, preserve spatial attributes (only used by RasterMixin)
+            **kwargs: Placeholder substitutions for key_pattern, name, and tags
+            
+        Returns:
+            Updated Dataset instance (or None if in_place=True)
+        """
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
 
         if in_place:
+            # Minimal in-place update: just mutate key attributes
             self.name = new_name
-            self.key_pattern = self.get_key(**kwargs)
-            self.tags.update(kwargs)
+            self.key_pattern = new_key_pattern
 
-            if hasattr(self, 'parents') and self.parents is not None:
-                new_parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
-                self.parents = new_parents
+            self._post_update_init(self, preserve_temporal=preserve_temporal, preserve_spatial=preserve_spatial, update_kwargs=kwargs)
+            return None  # Explicitly return None to indicate mutation
+        
+        # Create new instance from _creation_kwargs
+        new_options = self._creation_kwargs.copy()
+        new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
+        
+        # Use original storage class, not the dynamic class (avoids MRO conflicts)
+        original_class = getattr(self, '_original_class', self.__class__)
+        new_dataset = original_class(**new_options)
+        
+        # Call post-update initialization hook (handles subclass & mixin-specific logic)
+        new_dataset._post_update_init(
+            source_dataset=self,
+            preserve_temporal=preserve_temporal,
+            preserve_spatial=preserve_spatial,
+            update_kwargs=kwargs
+        )
+        
+        return new_dataset
+    
+    def _post_update_init(self, source_dataset: 'Dataset', 
+                         preserve_temporal: bool = True,
+                         preserve_spatial: bool = True,
+                         update_kwargs: dict = None):
+        """Hook called after update() creates new instance.
+        
+        Subclasses and mixins should override this to handle their specific
+        attributes. Always call super()._post_update_init() first to ensure
+        proper MRO handling.
+        
+        Args:
+            source_dataset: The original dataset being updated
+            preserve_temporal: Whether to preserve temporal attributes
+            preserve_spatial: Whether to preserve spatial attributes (only relevant for RasterMixin)
+            update_kwargs: The kwargs passed to update() for substitution
+        """
+        update_kwargs = update_kwargs or {}
+        
+        # Preserve temporal attributes if requested
+        if preserve_temporal:
+            if hasattr(source_dataset, 'timestep') and source_dataset.timestep is not None:
+                self.timestep = source_dataset.timestep
+            if hasattr(source_dataset, 'agg'):
+                self.agg = source_dataset.agg
+        
+        # Preserve derived dataset relationships
+        if hasattr(source_dataset, 'parents') and source_dataset.parents is not None:
+            self.parents = {k: p.update(**update_kwargs) for k, p in source_dataset.parents.items()}
+            if hasattr(source_dataset, 'fn'):
+                self.fn = source_dataset.fn
+        
+        # Always preserve/copy tags (merged with update_kwargs)
+        new_tags = source_dataset.tags.copy()
+        new_tags.update(update_kwargs)
+        self.tags = new_tags
 
-            return self
-        else:
-            new_options = self._creation_kwargs.copy()
-            new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
-            # Use original storage class, not the dynamic class (avoids MRO conflicts)
-            original_class = getattr(self, '_original_class', self.__class__)
-            new_dataset = original_class(**new_options)
-
-            if hasattr(self, 'template_manager'):
-                new_dataset.template_manager = self.template_manager
-            if hasattr(self, '_tile_names'):
-                new_dataset._tile_names = self._tile_names
-
-            new_dataset.time_signature = self.time_signature
-            if hasattr(self, 'timestep') and self.timestep is not None:
-                new_dataset.timestep = self.timestep
-            if hasattr(self, 'agg'):
-                new_dataset.agg = self.agg
-
-            if hasattr(self, 'parents') and self.parents is not None:
-                new_dataset.parents = {k:p.update(**kwargs) for k,p in self.parents.items()}
-                new_dataset.fn = self.fn
+    def copy(self, preserve_temporal=True, preserve_spatial=True):
+        """Create an independent copy sharing managers but with separate tags.
+        
+        Args:
+            preserve_temporal: If True, preserve timestep and aggregation
+            preserve_spatial: If True, preserve spatial attributes
             
-            new_tags = self.tags.copy()
-            new_tags.update(kwargs)
-            new_dataset.tags = new_tags
-            new_dataset.nan_value = self.nan_value
-            return new_dataset
-
-    def copy(self, template = False):
-        new_dataset = self.update()
-        if template:
-            new_dataset.template_manager = self.template_manager
+        Returns:
+            New Dataset instance
+        """
+        new_dataset = self.update(
+            preserve_temporal=preserve_temporal,
+            preserve_spatial=preserve_spatial
+        )
+        
+        # Share log and thumbnail managers (copy-specific behavior)
         if hasattr(self, 'log'):
             new_dataset.log = self.log
         if hasattr(self, 'thumbnail'):
             new_dataset.thumbnail = self.thumbnail
+        
         return new_dataset
 
     def is_subdataset(self, other: 'Dataset') -> bool:

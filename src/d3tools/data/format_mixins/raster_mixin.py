@@ -31,6 +31,28 @@ class RasterMixin(FormatMixin):
         """Initialize raster-specific properties. Call from __init__."""
         self.template_manager = TemplateManager()
     
+    def _post_update_init(self, source_dataset, preserve_spatial=True,**kwargs):
+        """Handle raster-specific attribute preservation after update.
+        
+        This method preserves template_manager and tile_names when preserve_spatial=True.
+        Always calls super() first to ensure proper MRO handling with Dataset base class.
+        
+        Args:
+            source_dataset: The dataset being updated
+            preserve_spatial: Whether to preserve spatial attributes
+            kwargs: kwargs passed to super()._post_update_init
+        """
+        # Call parent implementation first (Dataset._post_update_init)
+        super()._post_update_init(source_dataset, **kwargs)
+        
+        # Preserve spatial/raster attributes if requested
+        if preserve_spatial:
+            if hasattr(source_dataset, 'template_manager'):
+                self.template_manager = source_dataset.template_manager
+            
+            if hasattr(source_dataset, '_tile_names'):
+                self._tile_names = source_dataset._tile_names
+    
     def _read_from_file(self, path: str, chunk_threshold: int = 500, **kwargs) -> xr.DataArray | xr.Dataset:
         """Read raster data from a file using xarray or rioxarray.
         Args:

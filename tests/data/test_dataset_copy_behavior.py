@@ -249,44 +249,6 @@ class TestCopySharedManagers:
         assert 'new_template' in c2.template_manager._templates
 
 
-class TestCopyTemplateParameter:
-    """Test copy(template=True/False) parameter behavior."""
-
-    def test_copy_template_false_shares_template_manager(self):
-        """Test that copy(template=False) shares template_manager (default)."""
-        ds = LocalDataset(
-            path='/data',
-            filename='output.tif'
-        )
-
-        copied = ds.copy(template=False)
-
-        assert copied.template_manager is ds.template_manager
-
-    def test_copy_template_true_shares_template_manager(self):
-        """Test that copy(template=True) also shares template_manager."""
-        ds = LocalDataset(
-            path='/data',
-            filename='output.tif'
-        )
-
-        copied = ds.copy(template=True)
-
-        # Based on implementation, template=True still shares (redundant with default behavior)
-        assert copied.template_manager is ds.template_manager
-
-    def test_copy_default_shares_template_manager(self):
-        """Test that copy() without parameter shares template_manager."""
-        ds = LocalDataset(
-            path='/data',
-            filename='output.tif'
-        )
-
-        copied = ds.copy()
-
-        assert copied.template_manager is ds.template_manager
-
-
 class TestLocalDatasetCopy:
     """Test copy() specific to LocalDataset."""
 
