@@ -6,9 +6,13 @@ creation and application to ensure coordinate consistency across dataset files.
 """
 
 from typing import Optional, Iterator
+import os
+import json
 import numpy as np
 import xarray as xr
+from pathlib import Path
 from .io_utils import set_type
+from ..errors import TemplateValidationError, TemplateMemoryError
 
 
 class TemplateManager:
@@ -20,23 +24,50 @@ class TemplateManager:
     
     Attributes:
         _templates: Dictionary mapping spatial keys to template dictionaries
+        _cache_dir: Optional directory for disk caching of templates
+        _validate: Whether to validate templates on creation
     """
     
-    def __init__(self):
-        """Initialize an empty TemplateManager."""
-        self._templates: dict[str, dict] = {}
+    # Required keys for valid templates
+    REQUIRED_KEYS = {'crs', '_FillValue', 'dims_names', 'spatial_dims', 
+                     'dims_starts', 'dims_ends', 'dims_lengths'}
     
-    def get(self, spatial_key: str = '__tile__') -> Optional[dict]:
+    def __init__(self, cache_dir: Optional[str] = None, validate: bool = True):
+        """
+        Initialize a TemplateManager.
+        
+        Args:
+            cache_dir: Optional directory path for disk caching templates
+            validate: Whether to validate templates on creation
+        """
+        self._templates: dict[str, dict] = {}
+        self._cache_dir = Path(cache_dir) if cache_dir else None
+        self._validate = validate
+        
+        if self._cache_dir:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    def get(self, spatial_key: str = '__tile__', load_from_cache: bool = True) -> Optional[dict]:
         """
         Get template dictionary for a spatial key.
         
         Args:
             spatial_key: Identifier for the spatial unit (tile name or '__tile__')
+            load_from_cache: If True and template not in memory, try loading from cache
             
         Returns:
             Template dictionary if it exists, None otherwise
         """
-        return self._templates.get(spatial_key)
+        # Check memory first
+        if spatial_key in self._templates:
+            return self._templates[spatial_key]
+        
+        # Try loading from cache if enabled
+        if load_from_cache and self._cache_dir:
+            if self.load_from_cache(spatial_key):
+                return self._templates[spatial_key]
+        
+        return None
     
     def set(self, templatearray: xr.DataArray | xr.Dataset, spatial_key: str = '__tile__') -> None:
         """
@@ -45,6 +76,9 @@ class TemplateManager:
         Args:
             templatearray: Sample xarray DataArray or Dataset to extract template from
             spatial_key: Identifier for the spatial unit (tile name or '__tile__')
+            
+        Raises:
+            TemplateValidationError: If template validation fails
         """
         # Handle xr.Dataset by extracting first variable
         if isinstance(templatearray, xr.Dataset):
@@ -67,7 +101,7 @@ class TemplateManager:
             from pyproj import CRS
             crs_wkt = CRS.from_epsg(4326).to_wkt()
 
-        self._templates[spatial_key] = {
+        template_dict = {
             'crs': crs_wkt,
             '_FillValue': templatearray.attrs.get('_FillValue'),
             'dims_names': templatearray.dims,
@@ -78,16 +112,27 @@ class TemplateManager:
         }
         
         if vars is not None:
-            self._templates[spatial_key]['variables'] = vars
+            template_dict['variables'] = vars
 
         for dim in templatearray.dims:
             this_dim_values = templatearray[dim].data
             start = this_dim_values[0]
             end = this_dim_values[-1]
             length = len(this_dim_values)
-            self._templates[spatial_key]['dims_starts'][dim] = float(start)
-            self._templates[spatial_key]['dims_ends'][dim] = float(end)
-            self._templates[spatial_key]['dims_lengths'][dim] = length
+            template_dict['dims_starts'][dim] = float(start)
+            template_dict['dims_ends'][dim] = float(end)
+            template_dict['dims_lengths'][dim] = length
+        
+        # Validate if enabled
+        if self._validate:
+            self._validate_template(template_dict, spatial_key)
+        
+        # Store in memory
+        self._templates[spatial_key] = template_dict
+        
+        # Cache to disk if enabled
+        if self._cache_dir:
+            self._cache_template(spatial_key, template_dict)
     
     def exists(self, spatial_key: Optional[str] = None) -> bool:
         """
@@ -134,7 +179,10 @@ class TemplateManager:
         Returns:
             New TemplateManager instance
         """
-        new_manager = TemplateManager()
+        new_manager = TemplateManager(
+            cache_dir=str(self._cache_dir) if self._cache_dir else None,
+            validate=self._validate
+        )
         if deep:
             import copy
             new_manager._templates = copy.deepcopy(self._templates)
@@ -150,6 +198,123 @@ class TemplateManager:
             Spatial key strings
         """
         yield from self._templates.keys()
+    
+    def _validate_template(self, template_dict: dict, spatial_key: str) -> None:
+        """
+        Validate template dictionary has required keys and valid values.
+        
+        Args:
+            template_dict: Template dictionary to validate
+            spatial_key: Spatial key for error messages
+            
+        Raises:
+            TemplateValidationError: If template is invalid
+        """
+        # Check required keys
+        missing_keys = self.REQUIRED_KEYS - set(template_dict.keys())
+        if missing_keys:
+            raise TemplateValidationError(
+                missing_keys=list(missing_keys),
+                spatial_key=spatial_key
+            )
+        
+        # Validate values
+        invalid_keys = {}
+        
+        if template_dict['crs'] is None:
+            invalid_keys['crs'] = "CRS cannot be None"
+        
+        if not template_dict['dims_names']:
+            invalid_keys['dims_names'] = "Must have at least one dimension"
+        
+        if len(template_dict['spatial_dims']) != 2:
+            invalid_keys['spatial_dims'] = f"Must have exactly 2 spatial dimensions, got {len(template_dict['spatial_dims'])}"
+        
+        # Check that all dims have start/end/length
+        for dim in template_dict['dims_names']:
+            if dim not in template_dict['dims_starts']:
+                invalid_keys[f'dims_starts[{dim}]'] = "Missing"
+            if dim not in template_dict['dims_ends']:
+                invalid_keys[f'dims_ends[{dim}]'] = "Missing"
+            if dim not in template_dict['dims_lengths']:
+                invalid_keys[f'dims_lengths[{dim}]'] = "Missing"
+            elif template_dict['dims_lengths'][dim] <= 0:
+                invalid_keys[f'dims_lengths[{dim}]'] = f"Must be positive, got {template_dict['dims_lengths'][dim]}"
+        
+        if invalid_keys:
+            raise TemplateValidationError(
+                invalid_keys=invalid_keys,
+                spatial_key=spatial_key
+            )
+    
+    def _cache_template(self, spatial_key: str, template_dict: dict) -> None:
+        """
+        Save template to disk cache.
+        
+        Args:
+            spatial_key: Spatial key for the template
+            template_dict: Template dictionary to cache
+        """
+        if not self._cache_dir:
+            return
+        
+        cache_file = self._cache_dir / f"template_{spatial_key}.json"
+        
+        # Convert tuples to lists for JSON serialization
+        serializable_dict = {}
+        for key, value in template_dict.items():
+            if isinstance(value, tuple):
+                serializable_dict[key] = list(value)
+            else:
+                serializable_dict[key] = value
+        
+        with open(cache_file, 'w') as f:
+            json.dump(serializable_dict, f, indent=2)
+    
+    def load_from_cache(self, spatial_key: str) -> bool:
+        """
+        Load template from disk cache.
+        
+        Args:
+            spatial_key: Spatial key for the template
+            
+        Returns:
+            True if template was loaded, False if not found in cache
+        """
+        if not self._cache_dir:
+            return False
+        
+        cache_file = self._cache_dir / f"template_{spatial_key}.json"
+        
+        if not cache_file.exists():
+            return False
+        
+        try:
+            with open(cache_file, 'r') as f:
+                template_dict = json.load(f)
+            
+            # Convert lists back to tuples where needed
+            if 'dims_names' in template_dict and isinstance(template_dict['dims_names'], list):
+                template_dict['dims_names'] = tuple(template_dict['dims_names'])
+            if 'spatial_dims' in template_dict and isinstance(template_dict['spatial_dims'], list):
+                template_dict['spatial_dims'] = tuple(template_dict['spatial_dims'])
+            if 'variables' in template_dict and isinstance(template_dict['variables'], list):
+                # variables should stay as list
+                pass
+            
+            self._templates[spatial_key] = template_dict
+            return True
+        except (json.JSONDecodeError, KeyError, IOError):
+            # Cache file corrupted or incompatible, ignore
+            return False
+    
+    def clear_cache(self) -> None:
+        """Clear all cached templates from disk."""
+        if not self._cache_dir or not self._cache_dir.exists():
+            return
+        
+        for cache_file in self._cache_dir.glob("template_*.json"):
+            cache_file.unlink()
     
     @staticmethod
     def build_array(template_dict: dict, data=None) -> xr.DataArray:
