@@ -360,30 +360,96 @@ class Dataset(ABC, metaclass=DatasetMeta):
 
         return all_tags
 
-    def get_last_date(self, now = None, n = 1, lim = dt.datetime(1900,1,1), **kwargs) -> dt.datetime|list[dt.datetime]|None:
+    def get_last_date(self, now = None, n = 1, lim = None, **kwargs) -> dt.datetime|list[dt.datetime]|None:
         if now is None:
             now = dt.datetime.now()
         
-        # the most efficient way, I think is to search my month
-        this_month = Month(now.year, now.month)
-        last_date = []
-        while len(last_date) < n:
-            this_month_times = self.get_times(this_month, **kwargs)
-            if len(this_month_times) > 0:
-                valid_time = [t for t in this_month_times if t <= now]
-                valid_time.sort(reverse = True)
-                last_date.extend(valid_time)
-            elif this_month.start < lim:
-                break
-
-            this_month = this_month - 1
+        # Find ANY date first using exponential backoff
+        any_date = self.get_any_date(now=now, lim=lim, **kwargs)
+        if any_date is None:
+            return None
+        
+        # Binary search between any_date and now to find the last date
+        start_month = Month(any_date.year, any_date.month)
+        end_month = Month(now.year, now.month)
+        last_month_with_data = start_month
+        
+        while start_month <= end_month:
+            # Calculate midpoint
+            months_diff = (end_month.start.year - start_month.start.year) * 12 + \
+                         (end_month.start.month - start_month.start.month)
             
+            if months_diff <= 1:
+                # Adjacent or same months - we're done
+                break
+            
+            mid_months = months_diff // 2
+            mid_month = start_month + mid_months
+            
+            # Check if mid month has data
+            mid_times = self.get_times(mid_month, **kwargs)
+            if len(mid_times) > 0:
+                # Data exists at midpoint, search forward
+                last_month_with_data = mid_month
+                start_month = mid_month
+            else:
+                # No data at midpoint, search backward
+                end_month = mid_month - 1
+        
+        # Now collect n dates from last_month_with_data and nearby months
+        last_date = []
+        search_month = last_month_with_data
+        end_search = Month(now.year, now.month)
+        
+        # Search forward from last known month
+        while search_month <= end_search and len(last_date) < n * 3:  # Get extra to ensure we have enough
+            month_times = self.get_times(search_month, **kwargs)
+            if len(month_times) > 0:
+                valid_time = [t for t in month_times if t <= now]
+                last_date.extend(valid_time)
+            search_month = search_month + 1
+        
+        # Sort and take the most recent n
+        last_date.sort(reverse=True)
+        last_date = last_date[:n]
+        
         if len(last_date) == 0:
             return None
         if n == 1:
             return last_date[0]
         else:
             return last_date
+
+    def get_any_date(self, now=None, lim=None, **kwargs) -> dt.datetime|None:
+        """
+        Find ANY available date quickly (used for template extraction).
+        Much faster than get_last_date when you don't care which file.
+        
+        Returns immediately on first match.
+        """
+        if now is None:
+            now = dt.datetime.now()
+        
+        # Default limit: 5 years back (reasonable for most datasets)
+        if lim is None:
+            lim = now - dt.timedelta(days=5*365)
+        
+        # Find any month with data using exponential backoff
+        search_month = Month(now.year, now.month)
+        months_back = 0
+        jump_sizes = [1, 2, 3, 6, 12, 24, 48, 96]  # Exponentially increasing jumps
+        
+        for jump in jump_sizes:
+            if search_month.start < lim:
+                break
+            
+            month_times = self.get_times(search_month, **kwargs)
+            if len(month_times) > 0:
+                valid_times = [t for t in month_times if t <= now]
+                return valid_times[0] if valid_times else None
+            
+            months_back += jump
+            search_month = Month(now.year, now.month) - months_back  
 
     def get_last_ts(self, **kwargs) -> TimeStep:
 
@@ -933,11 +999,10 @@ class Dataset(ABC, metaclass=DatasetMeta):
                 self.set_template(data, tile = tile)
 
             else:
-                last_ts = self.get_last_ts(tile = tile, **kwargs)
-                if last_ts is None:
-                    last_ts = self.get_last_date(tile = tile, **kwargs)
-                if last_ts is not None:
-                    data = self.get_data(time = last_ts, tile = tile, as_is=True, **kwargs)
+                # Use get_any_date instead of get_last_date - we don't care which file
+                any_date = self.get_any_date(tile = tile, **kwargs)
+                if any_date is not None:
+                    data = self.get_data(time = any_date, tile = tile, as_is=True, **kwargs)
                 else:
                     return None
             
