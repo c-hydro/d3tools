@@ -64,3 +64,48 @@ class TestWorkflowDefinitionCompatibility:
         wf = WorkflowDefinition({"TAGS": {}, "DATASETS": {}, "Download": {"source": "ERA5"}})
         wf.parse(build_workflow_objects=True, strict_workflow_imports=False)
         assert seen == {"build": True, "strict": False}
+
+    def test_parse_always_adds_workflow_sections(self):
+        """parse() should always expose workflow sections list in output."""
+        wf = WorkflowDefinition({"TAGS": {"x": 1}, "DATASETS": {}})
+
+        parsed = wf.parse()
+
+        assert "workflow_sections" in parsed
+        assert parsed["workflow_sections"] == []
+
+    def test_parse_replaces_collected_top_level_workflow_keys(self):
+        """parse() should remove collected workflow keys and keep workflow_sections."""
+        wf = WorkflowDefinition(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Download": {"source": "ERA5"},
+            }
+        )
+
+        parsed = wf.parse()
+
+        assert "Download" not in parsed
+        assert len(parsed["workflow_sections"]) == 1
+        assert parsed["workflow_sections"][0].name == "Download"
+        assert parsed["workflow_sections"][0].engine == "door"
+
+    def test_parse_preserves_workflow_section_order(self):
+        """parse() should preserve top-level section order in workflow_sections."""
+        wf = WorkflowDefinition(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Download": {"source": "A"},
+                "Process": {"input": "x"},
+                "Calculate": {"io_options": {"data": "y"}},
+            }
+        )
+
+        parsed = wf.parse()
+        names = [section.name for section in parsed["workflow_sections"]]
+        engines = [section.engine for section in parsed["workflow_sections"]]
+
+        assert names == ["Download", "Process", "Calculate"]
+        assert engines == ["door", "dam", "dryes"]

@@ -139,8 +139,8 @@ def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return options.parse()
 
 def _build_door_downloader(section_options: Any) -> Any:
-    import door
-    return door.Downloader.from_options(section_options)
+    from door import Downloader
+    return Downloader.from_options(section_options)
 
 
 def _build_dam_workflow(section_options: Any) -> Any:

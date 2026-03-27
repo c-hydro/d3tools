@@ -6,12 +6,19 @@ Tests the centralized configuration parsing logic.
 import pytest
 from unittest import mock
 import os
+import types
+import sys
 
-from d3tools.config.parsers import dataset_from_config, _manager_from_config
+from d3tools.config.parsers import (
+    dataset_from_config,
+    _manager_from_config,
+    workflow_section_from_config,
+)
 from d3tools.data import Dataset,LocalDataset
 from d3tools.thumbnails import DatasetThumbnailManager
 from d3tools.logging import DatasetLogManager
 from d3tools.timestepping import Day, Dekad
+from d3tools.errors import WorkflowEngineImportError
 
 
 class TestDatasetFromConfig:
@@ -328,3 +335,123 @@ class TestParserForExternalUse:
         assert dataset.timestep == Day
         assert dataset.key_pattern == 'data/output.tif'
         assert isinstance(dataset.log, DatasetLogManager)
+
+
+class TestWorkflowSectionFromConfig:
+    """Test workflow_section_from_config dispatch and error handling."""
+
+    def test_build_false_returns_raw_payload(self):
+        """Ensure parse passthrough mode returns the section payload unchanged."""
+        section_options = {"source": "ERA5"}
+        parsed = workflow_section_from_config("door", section_options, build_object=False)
+        assert parsed is section_options
+
+    def test_unknown_engine_raises(self):
+        """Ensure unsupported engine keywords fail with a clear error."""
+        with pytest.raises(ValueError, match="Unknown workflow section engine"):
+            workflow_section_from_config("unknown", {}, build_object=True)
+
+    def test_door_calls_downloader_from_options(self, monkeypatch):
+        """Ensure door sections are delegated to Downloader.from_options with the same payload."""
+        downloader_builder = mock.Mock(return_value={"built": "door"})
+        fake_door = types.SimpleNamespace(
+            Downloader=types.SimpleNamespace(from_options=downloader_builder)
+        )
+        monkeypatch.setitem(sys.modules, "door", fake_door)
+
+        section_options = {"source": "ERA5"}
+        result = workflow_section_from_config("door", section_options, build_object=True)
+
+        downloader_builder.assert_called_once_with(section_options)
+        assert result == {"built": "door"}
+
+    def test_dam_calls_workflow_from_options(self, monkeypatch):
+        """Ensure dam sections are delegated to DAMWorkflow.from_options with the same payload."""
+        workflow_builder = mock.Mock(return_value={"built": "dam"})
+        fake_dam = types.SimpleNamespace(
+            DAMWorkflow=types.SimpleNamespace(from_options=workflow_builder)
+        )
+        monkeypatch.setitem(sys.modules, "dam", fake_dam)
+
+        section_options = {"input": "x"}
+        result = workflow_section_from_config("dam", section_options, build_object=True)
+
+        workflow_builder.assert_called_once_with(section_options)
+        assert result == {"built": "dam"}
+
+    def test_dryes_calls_index_from_options_with_kwargs(self, monkeypatch):
+        """Ensure dryes sections are delegated as keyword arguments to DRYESIndex.from_options."""
+        index_builder = mock.Mock(return_value={"built": "dryes"})
+        fake_dryes = types.SimpleNamespace(
+            DRYESIndex=types.SimpleNamespace(from_options=index_builder)
+        )
+        monkeypatch.setitem(sys.modules, "dryes", fake_dryes)
+
+        section_options = {
+            "index_options": {"index_name": "spi"},
+            "io_options": {"data": "x"},
+            "run_options": {},
+        }
+        result = workflow_section_from_config("dryes", section_options, build_object=True)
+
+        index_builder.assert_called_once_with(**section_options)
+        assert result == {"built": "dryes"}
+
+    def test_dryes_rejects_non_mapping_payload(self):
+        """Ensure dryes section parsing rejects non-dict payloads before dispatch."""
+        with pytest.raises(TypeError, match="DRYES section options must be a mapping"):
+            workflow_section_from_config("dryes", "bad", build_object=True)
+
+    def test_import_error_non_strict_falls_back_to_raw_payload(self, monkeypatch):
+        """Ensure non-strict mode falls back to raw options when engine import fails."""
+        from d3tools.config import parsers
+
+        monkeypatch.setitem(
+            parsers._WORKFLOW_ENGINE_BUILDERS,
+            "door",
+            mock.Mock(side_effect=ModuleNotFoundError("door")),
+        )
+        section_options = {"source": "ERA5"}
+
+        parsed = workflow_section_from_config(
+            "door",
+            section_options,
+            build_object=True,
+            strict_imports=False,
+        )
+
+        assert parsed is section_options
+
+    def test_import_error_strict_raises_workflow_engine_import_error(self, monkeypatch):
+        """Ensure strict mode wraps import failures in WorkflowEngineImportError."""
+        from d3tools.config import parsers
+
+        monkeypatch.setitem(
+            parsers._WORKFLOW_ENGINE_BUILDERS,
+            "door",
+            mock.Mock(side_effect=ModuleNotFoundError("door")),
+        )
+
+        with pytest.raises(WorkflowEngineImportError) as exc_info:
+            workflow_section_from_config(
+                "door",
+                {"source": "ERA5"},
+                build_object=True,
+                strict_imports=True,
+            )
+
+        assert exc_info.value.engine == "door"
+        assert isinstance(exc_info.value.original_error, ImportError)
+
+    def test_non_import_errors_are_not_silenced(self, monkeypatch):
+        """Ensure runtime validation errors from builders are propagated unchanged."""
+        from d3tools.config import parsers
+
+        monkeypatch.setitem(
+            parsers._WORKFLOW_ENGINE_BUILDERS,
+            "door",
+            mock.Mock(side_effect=ValueError("invalid section payload")),
+        )
+
+        with pytest.raises(ValueError, match="invalid section payload"):
+            workflow_section_from_config("door", {"source": "ERA5"}, build_object=True)
