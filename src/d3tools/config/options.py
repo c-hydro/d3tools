@@ -1,5 +1,5 @@
-from ..parse import get_unique_values, flatten_dict, substitute_values, set_dataset, set_env
-from ..data import Dataset
+from ..parse import get_unique_values
+from .parsing_pipeline import parse_options
 from .utils import load_jsons
 
 class Options(dict):
@@ -57,24 +57,8 @@ class Options(dict):
         Parse the options, using the tags.
         And parse the datasets in the options.
         """
-
-        self = Options(set_env(self))
-        
-        tags = self.get('tags', {}, ignore_case = True) #flatten_dict(self, **kwargs)
-        tags = substitute_values(tags, tags, rec=True)
-        parsed_options = Options(substitute_values(self, tags, rec=True))
-
-        # parse datasets - now Dataset.from_options() handles manager parsing
-        dataset_options, ds_key = parsed_options.get('datasets', {}, ignore_case=True, get_key=True)
-        defaults = dataset_options.pop('__defaults__', None)
-        for dsname, dsopt in dataset_options.items():
-            # Dataset.from_options() now handles parsing thumbnail/log configs
-            dataset_options[dsname] = Dataset.from_options(dsopt, defaults)
-
-        flat_dsoptions = flatten_dict({ds_key: dataset_options})
-        parsed_options = set_dataset(parsed_options, flat_dsoptions)
-
-        return parsed_options
+        parsed_options = parse_options(self)
+        return Options(parsed_options)
     
     def find_keys(self, key: str, get_all = False) -> list[str]:
         """
