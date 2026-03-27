@@ -8,9 +8,10 @@ import json
 import datetime as dt
 import numpy as np
 from typing import Optional, Any, Dict
+import geopandas as gpd
 
 from .base import FormatMixin
-
+from .vector_mixin import VectorMixin  # For GeoJSON detection and delegation
 
 class StructuredTextMixin(FormatMixin):
     """
@@ -18,6 +19,8 @@ class StructuredTextMixin(FormatMixin):
     
     Handles JSON files with serialization/deserialization and metadata.
     """
+
+    json_warning_issued = False  # Class-level flag to track if warning has been issued
     
     def _init_format_properties(self):
         """
@@ -27,8 +30,31 @@ class StructuredTextMixin(FormatMixin):
         """
         # JSON formats don't need special initialization
         pass
+
+    def _read_from_file(self, path: str, **kwargs) -> Dict[str, Any]:
+        """
+        Read raw JSON data from a file.
+        
+        Args:
+            path: Full path to the source JSON file (must be local, resolved by storage mixin)
+            **kwargs: Additional arguments [unused in this method but passed for consistency]
+        Returns:
+            Raw dictionary data read from the JSON file
+        """
+        with open(path, 'r') as f:
+            data = json.load(f)
+
+        # check if data is actually a list of features (e.g., GeoJSON)
+        if isinstance(data, dict) and 'features' in data.keys():
+            self._set_format_to_geojson()
+
+            # Initialize vector properties for GeoJSON handling
+            VectorMixin._init_format_properties(self)  
+            return VectorMixin._read_from_file(self,path)
+
+        return data
     
-    def _format_after_read(self, data: Dict[str, Any], full_key: str, **kwargs) -> Dict[str, Any]:
+    def _format_after_read(self, data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Post-process structured text data after reading from storage.
         
@@ -40,74 +66,94 @@ class StructuredTextMixin(FormatMixin):
         Returns:
             Processed dictionary ready for use
         """
+        if self.format == 'geojson':
+            # Delegate to VectorMixin for GeoJSON post-processing
+            return VectorMixin._format_after_read(self, data, **kwargs)
+
         # Future: datetime parsing, schema validation
         return data
     
-    def _format_before_write(self, data: Dict[str, Any], time, time_format: str,
-                     metadata: dict, **kwargs) -> Dict[str, Any]:
+    def _format_before_write(self, data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Prepare structured text data for writing with format-specific logic.
         
         Args:
             data: Dictionary/JSON data to prepare
-            time: Timestamp
-            time_format: Format string for time
-            metadata: Metadata dictionary
             **kwargs: Additional arguments
             
         Returns:
             Prepared dictionary ready for JSON serialization
         """
+
+        if self.format == 'geojson':
+            # Delegate to VectorMixin for GeoJSON preparation
+            return VectorMixin._format_before_write(self, data, **kwargs)
+
         # Prepare data for JSON serialization (convert datetime, numpy, etc.)
-        data = self._prepare_for_json_serialization(data)
-        
-        return data
-    
-    def _prepare_for_json_serialization(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Prepare data for JSON serialization.
-        
-        Converts non-serializable types (datetime, numpy arrays) to JSON-compatible formats.
-        
-        Args:
-            data: Data dictionary to prepare
-            
-        Returns:
-            Dictionary with serializable values
-        """
-        prepared = {}
-        for key, value in data.items():
+        def convert_value(value):
+            """Recursively convert non-JSON-serializable types."""
             if isinstance(value, np.ndarray):
-                prepared[key] = value.tolist()
+                return value.tolist()
             elif isinstance(value, (dt.datetime, dt.date)):
-                prepared[key] = value.isoformat()
+                return value.isoformat()
             elif isinstance(value, np.datetime64):
-                prepared[key] = np.datetime_as_string(value)
+                return np.datetime_as_string(value)
+            elif isinstance(value, dict):
+                return {k: convert_value(v) for k, v in value.items()}
+            elif isinstance(value, (list, tuple)):
+                return [convert_value(item) for item in value]
             else:
-                prepared[key] = value
+                return value
+        
+        prepared = convert_value(data)
+        
         return prepared
     
-    def _load_json_with_append(self, path: str, new_data: Dict[str, Any]) -> Any:
+    def _write_to_file(self, data: Dict[str, Any]|gpd.GeoDataFrame, path: str, append: bool = False, **kwargs) -> Any:
         """
-        Load existing JSON and append new data.
+        Write data to a file, optionally appending to existing data.
         
         Args:
-            path: Path to existing JSON file
-            new_data: New data to append
+            data: Dictionary/JSON data to write
+            path: Path to the output file
+            append: Whether to append to an existing file
+            **kwargs: Additional arguments [unused in this method but passed for consistency]
             
         Returns:
             Combined data structure
         """
-        try:
+        from ..io_utils import ensure_directory_exists
+        ensure_directory_exists(path)
+
+        if isinstance(data, gpd.GeoDataFrame):
+            self._set_format_to_geojson()
+
+        if self.format == 'geojson':
+            # Delegate to VectorMixin for GeoJSON writing
+            return VectorMixin._write_to_file(self, data, path, append, **kwargs)
+
+        # if append, open the existing file and append the new data to it
+        if append:
             with open(path, 'r') as f:
                 old_data = json.load(f)
-            
-            # If existing data is not a list, make it one
-            if not isinstance(old_data, list):
-                old_data = [old_data]
-            
-            old_data.append(new_data)
-            return old_data
-        except (FileNotFoundError, json.JSONDecodeError):
-            # If file doesn't exist or is invalid, just return new data
-            return new_data
+            old_data = [old_data] if not isinstance(old_data, list) else old_data
+            old_data.append(data)
+            data = old_data
+        
+        # write the data to a (geo)json file
+        with open(path, 'w') as f:
+            json.dump(data, f, indent = 4)
+
+    def _set_format_to_geojson(self):
+        # Detected GeoJSON structure - delegate to VectorMixin
+        if not self.json_warning_issued:
+            import warnings
+            warnings.warn(
+                f"File '{self.key_pattern}' appears to be GeoJSON but has .json extension. "
+                f"Most functionality should work, but some GeoJSON-specific features may not be available. "
+                f"Consider renaming to .geojson or specifying format='geojson' explicitly.",
+                UserWarning
+            )
+            self.json_warning_issued = True
+
+        self.format = 'geojson'

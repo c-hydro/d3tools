@@ -10,6 +10,7 @@ from .table_mixin import TableMixin
 from .vector_mixin import VectorMixin
 from .plaintext_mixin import PlainTextMixin
 from .structuredtext_mixin import StructuredTextMixin
+from .file_mixin import FileMixin
 
 __all__ = [
     'FormatMixin',
@@ -18,4 +19,5 @@ __all__ = [
     'VectorMixin', 
     'PlainTextMixin',
     'StructuredTextMixin',
+    'FileMixin'
 ]

@@ -1,4 +1,3 @@
-
 import rioxarray as rxr
 import xarray as xr
 import numpy as np
@@ -13,7 +12,29 @@ try:
 except ImportError:
     pass
 
-from typing import Optional
+from typing import Any, Optional
+
+from .format_mixins import (
+    RasterMixin,
+    TableMixin,
+    VectorMixin,
+    PlainTextMixin,
+    StructuredTextMixin,
+    FileMixin
+)
+
+# Format → Mixin mapping
+FORMAT_MIXIN_MAP = {
+    'netcdf': RasterMixin,
+    'geotiff': RasterMixin,
+    'csv': TableMixin,
+    'parquet': TableMixin,
+    'shp': VectorMixin,
+    'geojson': VectorMixin,
+    'json': StructuredTextMixin,
+    'txt': PlainTextMixin,
+    'file': FileMixin,  # Generic file, no format processing
+}
 
 def check_data_format(data, format: str) -> None:
     """"
@@ -22,230 +43,151 @@ def check_data_format(data, format: str) -> None:
     # add possibility to write a geopandas dataframe to a geojson or a shapefile
     if isinstance(data, np.ndarray) or isinstance(data, xr.DataArray):
         if not format in ['geotiff', 'netcdf']:
-            raise ValueError(f'Cannot write matrix data to a {format} file.')
+            raise TypeError(f'Cannot write matrix data to a {format} file.')
 
     elif isinstance(data, xr.Dataset):
         if format not in ['netcdf']:
-            raise ValueError(f'Cannot write a dataset to a {format} file.')
+            raise TypeError(f'Cannot write a dataset to a {format} file.')
         
     elif isinstance(data, str):
         if format not in ['txt', 'file']:
-            raise ValueError(f'Cannot write a string to a {format} file.')
+            raise TypeError(f'Cannot write a string to a {format} file.')
         
     elif isinstance(data, dict):
         if format not in ['json']:
-            raise ValueError(f'Cannot write a dictionary to a {format} file.')
+            raise TypeError(f'Cannot write a dictionary to a {format} file.')
         
     elif 'gpd' in globals() and isinstance(data, gpd.GeoDataFrame):
-        if format not in ['shp', 'json']:
-            raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
+        if format not in ['shp', 'geojson', 'json']:
+            raise TypeError(f'Cannot write a geopandas dataframe to a {format} file.')
                 
     elif 'pd' in globals() and isinstance(data, pd.DataFrame):
         if format not in ['csv', 'parquet']:
-            raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
+            raise TypeError(f'Cannot write a pandas dataframe to a {format} file.')
     
     elif format not in ['file']:
-        raise ValueError(f'Cannot write a {type(data)} to a {format} file.')
+        raise TypeError(f'Cannot write a {type(data)} to a {format} file.')
 
 def get_format_from_path(path: str) -> str:
     # get the file extension
     extension = path.split('.')[-1]
 
-    # check if the file is a csv
-    if extension == 'csv':
-        return 'csv'
-    
-    # check if the file is a parquet
-    if extension == 'parquet':
-        return 'parquet'
-
-    # check if the file is a geotiff
-    elif extension == 'tif' or extension == 'tiff':
-        return 'geotiff'
-
-    # check if the file is a netcdf
-    elif extension == 'nc':
-        return 'netcdf'
-    
-    elif extension in ['json', 'geojson']:
-        return 'json'
-    
-    elif extension == 'txt':
-        return 'txt'
-    
-    elif extension == 'shp':
-        return 'shp'
-    
-    elif extension in ['png', 'pdf', '']:
+    if extension == path or extension in ['png', 'pdf', 'jpg', 'jpeg']:
         return 'file'
 
-    raise ValueError(f'File format not supported: {extension}')
+    if extension == 'tif' or extension == 'tiff':
+        return 'geotiff'
 
-def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Dataset|pd.DataFrame:
+    if extension == 'nc':
+        return 'netcdf'
 
+    if extension not in FORMAT_MIXIN_MAP:
+        raise ValueError(f'File format not supported: {extension}')
+
+    return extension
+
+def get_mixin_class_from_format(format: str):
+    """Get the format mixin CLASS for a given format string."""
+    _format_mixin = FORMAT_MIXIN_MAP.get(format, None)
+    if _format_mixin is None:
+        raise ValueError(f'Format {format} not supported.')
+    
+    return _format_mixin  # Return the class, not an instance
+
+def get_mixin_from_format(format: str):
+    _format_mixin = get_mixin_class_from_format(format)
+    format_mixin = _format_mixin()
+    format_mixin.format = format
+
+    return format_mixin
+
+def ensure_directory_exists(path: str) -> None:
+    """Ensure that the directory for the given path exists."""
+    directory = os.path.dirname(path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
+
+def read_from_file(path, format: Optional[str] = None, **kwargs) -> Any:
     if format is None:
         format = get_format_from_path(path)
-
-    # read the data from a csv
-    if format == 'csv':
-        data = pd.read_csv(path)
-
-    # read the data from a parquet
-    elif format == 'parquet':
-        data = pd.read_parquet(path)
-
-    # read the data from a json
-    elif format == 'json':
-        with open(path, 'r') as f:
-            data = json.load(f)
-            # understand if the data is actually in a geodataframe format
-            if isinstance(data, dict) and 'features' in data.keys():
-                df = gpd.read_file(path)
-                if 'metadata' in data.keys():
-                    df.attrs = data['metadata']
-                data = df
-
-    # read the data from a txt file
-    elif format == 'txt':
-        with open(path, 'r') as f:
-            data = f.readlines()
-
-    # read the data from a shapefile
-    elif format == 'shp':
-        data:gpd.GeoDataFrame = gpd.read_file(path)
-
-    # read the data from a geotiff
-    elif format == 'geotiff':
-        data = rxr.open_rasterio(path)
-
-    # read the data from a netcdf
-    elif format == 'netcdf':
-        data = xr.open_dataset(path)
-        # check if there is a single variable in the dataset
-        if len(data.data_vars) == 1:
-            data = data[list(data.data_vars)[0]]
-
-    # read the data from a png or pdf
-    elif format == 'file':
-        data = path
-
-    return data
+    
+    format_mixin = get_mixin_from_format(format)
+    return format_mixin._read_from_file(path, **kwargs)
 
 def write_to_file(data, path, format: Optional[str] = None, append = False) -> None:
 
     if format is None:
         format = get_format_from_path(path)
 
-    dir = os.path.dirname(path)
-    if len(dir) > 0:
-        os.makedirs(os.path.dirname(path), exist_ok = True)
-    if not os.path.exists(path):
-        append = False
+    format_mixin = get_mixin_from_format(format)
+    format_mixin._write_to_file(data, path, append = append)
 
-    # write the data to a csv
-    if format == 'csv':
-        if append:
-            data.to_csv(path, mode = 'a', header = False, index=False)
-        else:
-            data.to_csv(path, index=False)
+def save_raster_in_chunks(data: xr.DataArray, path: str, chunk_mb = 128) -> None:
+    y_name = data.rio.y_dim
+    x_name = data.rio.x_dim
 
-    # write the data to a parquet
-    elif format == 'parquet':
-        if append:
-            data.to_parquet(path, mode = 'a', header = False, index=False, compression='snappy')
-        else:
-            data.to_parquet(path, index=False, compression='snappy')
+    profile = {
+        "driver": "GTiff",
+        "height": data.sizes[y_name],
+        "width": data.sizes[x_name],
+        "count": data.shape[0] if "band" in data.dims or "bands" in data.dims else 1,
+        "dtype": str(data.dtype),
+        "crs": data.rio.crs,
+        "transform": data.rio.transform(),
+        "compress": "LZW"
+    }
 
-    # write the data to a json
-    elif format == 'json':
+    blockxsize, blockysize = optimise_blocksizes(data, target_chunk_mb = chunk_mb)
+    profile.update(blockxsize=blockxsize, blockysize=blockysize, tiled=True)
 
-        if isinstance(data, gpd.GeoDataFrame):
-            # ensure time columns are converted to strings
-            for col in data.columns:
-                if isinstance(data[col].iloc[0], np.datetime64):
-                    data[col] = data[col].apply(lambda x: x.astype('O'))
-                if isinstance(data[col].iloc[0], (dt.datetime, dt.date)):
-                    data[col] = data[col].apply(lambda x: x.isoformat())
-            dict_data = json.loads(data.to_json())
-            if data.attrs:
-                dict_data['metadata'] = data.attrs
-            data = dict_data
+    with rasterio.open(path, 'w', **profile) as dst:
+        for ji, window in dst.block_windows(1):
+            arr = data.isel(
+                **{x_name: slice(window.col_off, window.col_off + window.width),
+                    y_name: slice(window.row_off, window.row_off + window.height)}
+            ).values
+            # Ensure arr has the correct shape for rasterio (add band dimension if missing)
+            if arr.ndim == 2: arr = arr[np.newaxis, :, :]
+            dst.write(arr, window=window)
 
-        for key in data.keys():
-            if isinstance(data[key], np.ndarray):
-                data[key] = data[key].tolist
-            elif isinstance(data[key], dt.datetime):
-                data[key] = data[key].isoformat()
-        if append:
-            with open(path, 'r') as f:
-                old_data = json.load(f)
-            old_data = [old_data] if not isinstance(old_data, list) else old_data
-            old_data.append(data)
-            data = old_data
-        with open(path, 'w') as f:
-            json.dump(data, f, indent = 4)
+            print(f'Wrote window {window}')
 
-    # write a geodataframe to a shapefile
-    elif format == 'shp':
-        data.to_file(path)
+        # Convert all attrs to strings for GeoTIFF tags
+        tags = {k: str(v) for k, v in data.attrs.items()}
+        dst.update_tags(**tags)
 
-    elif format == 'txt':
-        if append:
-            with open(path, 'a') as f:
-                f.writelines(data)
-        else:
-            with open(path, 'w') as f:
-                f.writelines(data)
+        # Set nodata value if available
+        dst.nodata = data.attrs.get('_FillValue', data.rio.nodata)
 
-    # write the data to a geotiff
-    elif format == 'geotiff':
-        # If data is chunked, use chunk size as block size
-        
-        if data.chunks is not None:
-            profile = {
-                "driver": "GTiff",
-                "height": data.sizes[data.rio.y_dim],
-                "width": data.sizes[data.rio.x_dim],
-                "count": data.shape[0] if "band" in data.dims or "bands" in data.dims else 1,
-                "dtype": str(data.dtype),
-                "crs": data.rio.crs,
-                "transform": data.rio.transform(),
-                "compress": "LZW"
-            }
-            # Assume 2D spatial chunks (y, x) are last two dims
-            chunk_map = dict(zip(data.dims, data.chunks))
-            y_chunk = chunk_map.get('y', [None])[0]
-            x_chunk = chunk_map.get('x', [None])[0]
-            if y_chunk and x_chunk:
-                profile.update(blockxsize=max(16, (x_chunk//16) * 16),
-                               blockysize=max(16, (y_chunk//16) * 16))
+def optimise_blocksizes(data: xr.DataArray, target_chunk_mb = 128) -> tuple[int, int]:
+    y_name = data.rio.y_dim
+    x_name = data.rio.x_dim
+    
+    # Assume 2D spatial chunks (y, x) are last two dims
+    chunk_map = dict(zip(data.dims, data.chunks))
+    y_chunk = chunk_map.get(y_name, [None])[0]
+    x_chunk = chunk_map.get(x_name, [None])[0]
 
-            with rasterio.open(path, 'w', **profile) as dst:
-                for ji, window in dst.block_windows(1):
-                    arr = data.isel(
-                        x=slice(window.col_off, window.col_off + window.width),
-                        y=slice(window.row_off, window.row_off + window.height)
-                    ).values
-                    dst.write(arr, window=window)
-                    print(f'Wrote window {window}')
-                if hasattr(data, "attrs") and data.attrs:
-                    # Convert all attrs to strings for GeoTIFF tags
-                    tags = {k: str(v) for k, v in data.attrs.items()}
-                    dst.update_tags(**tags)
+    # Target chunk size in MB (adjustable based on your memory)
+    bytes_per_element = data.dtype.itemsize
+    current_chunk_size_mb = (y_chunk * x_chunk * bytes_per_element) / (1024**2)
+    
+    # Calculate multiplier to reach target size
+    if current_chunk_size_mb < target_chunk_mb:
+        multiplier = int(np.sqrt(target_chunk_mb / current_chunk_size_mb))
+        multiplier = max(2, multiplier)  # At least 2x
+    else:
+        multiplier = 1
+    
+    # Apply multiplier and round to multiple of 16
+    blockxsize = max(16, ((x_chunk * multiplier)//16) * 16)
+    blockysize = max(16, ((y_chunk * multiplier)//16) * 16)
+    
+    # # Cap at image dimensions
+    # blockxsize = min(blockxsize, data.sizes[x_name])
+    # blockysize = min(blockysize, data.sizes[y_name])
 
-                # Set nodata value if available
-                dst.nodata = data.attrs.get('_FillValue', data.rio.nodata)
-        else:
-            # If not chunked, write directly
-            data.rio.to_raster(path, compress='LZW', windowed=np.prod(data.shape) > 1e8)
-
-    # write the data to a netcdf
-    elif format == 'netcdf':
-        data.to_netcdf(path)
-
-    # write the data to a png or pdf (i.e. move the file)
-    elif format == 'file':
-        os.rename(data, path)
+    return blockxsize, blockysize
 
 def rm_file(path) -> None:
     os.remove(path)
