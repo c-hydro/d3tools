@@ -359,7 +359,7 @@ class RasterMixin(FormatMixin):
         else:
             return {}
 
-    def validate_data(self, data: xr.DataArray|xr.Dataset, **kwargs) -> xr.DataArray|xr.Dataset:
+    def validate_data(self, data: xr.DataArray|xr.Dataset|np.ndarray, **kwargs) -> xr.DataArray|xr.Dataset|np.ndarray:
         """
         Validate the data object in a format-specific way.
         
@@ -373,5 +373,8 @@ class RasterMixin(FormatMixin):
         Returns:
             Validated data object
         """
-        output = data.rio.write_nodata(data.attrs.get('_FillValue', self.nan_value))
-        return output
+        if isinstance(data, (xr.DataArray, xr.Dataset)):
+            output = data.rio.write_nodata(data.attrs.get('_FillValue', self.nan_value))
+            return output
+        else:
+            return data
