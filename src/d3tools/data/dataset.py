@@ -35,55 +35,105 @@ class Dataset(ABC, metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
-    def __init__(self, **kwargs):
-
-        # subsitute "now" with the current time
-        self.key_pattern = substitute_string(self.key_pattern, {'now': dt.datetime.now()})
-
+    def _get_or_derive_name(self, kwargs: dict) -> str:
+        """Get name from kwargs or derive from key_pattern."""
         if 'name' in kwargs:
-            self.name   = kwargs.pop('name')
-        else:
-            basename_noext  = '.'.join(os.path.basename(self.key_pattern).split('.')[:-1])
-            basename_nodate = basename_noext.replace('%Y', '').replace('%m', '').replace('%d', '')
-            if basename_nodate.endswith('_'):
-                basename_nodate = basename_nodate[:-1]
-            elif basename_nodate.startswith('_'):
-                basename_nodate = basename_nodate[1:]
-            elif '__' in basename_nodate:
-                basename_nodate = basename_nodate.replace('__', '_')
-
-            self.name = basename_nodate
-
+            return kwargs.pop('name')
+        
+        # Derive name from key_pattern by removing extension and date placeholders
+        basename_noext = '.'.join(os.path.basename(self.key_pattern).split('.')[:-1])
+        basename_nodate = basename_noext.replace('%Y', '').replace('%m', '').replace('%d', '')
+        
+        # Clean up extra underscores iteratively until no more changes
+        while True:
+            cleaned = basename_nodate
+            
+            # Remove trailing underscore
+            if cleaned.endswith('_'):
+                cleaned = cleaned[:-1]
+            
+            # Remove leading underscore
+            if cleaned.startswith('_'):
+                cleaned = cleaned[1:]
+            
+            # Collapse double underscores
+            if '__' in cleaned:
+                cleaned = cleaned.replace('__', '_')
+            
+            # If no changes were made, we're done
+            if cleaned == basename_nodate:
+                break
+            basename_nodate = cleaned
+        
+        return basename_nodate
+    
+    def _get_or_detect_format(self, kwargs: dict) -> str:
+        """Get format from kwargs or detect from key_pattern."""
         if 'format' in kwargs:
-            self.format = kwargs.pop('format')
-        else:
-            self.format = get_format_from_path(self.key_pattern)
-
+            return kwargs.pop('format')
+        return get_format_from_path(self.key_pattern)
+    
+    def _setup_temporal_properties(self, kwargs: dict) -> None:
+        """Setup timestep, aggregation, and time_signature properties."""
+        # Set time signature (default from class defaults)
         if 'time_signature' in kwargs:
             self.time_signature = kwargs.pop('time_signature')
-
+        
+        # Set aggregation window
         if 'aggregation' in kwargs:
             self.agg = TimeWindow.from_str(kwargs.pop('aggregation'))
-
+        
+        # Set timestep and link with aggregation if present
         if 'timestep' in kwargs:
             self.timestep = TimeStep.from_unit(kwargs.pop('timestep'))
             if hasattr(self, 'agg'):
                 self.timestep = self.timestep.with_agg(self.agg)
-
+    
+    def _set_optional_attributes(self, kwargs: dict) -> None:
+        """Set optional dataset attributes from kwargs."""
         if 'thumbnail' in kwargs:
             self.thumbnail = kwargs.pop('thumbnail')
-
+        
         if 'log' in kwargs:
             self.log = kwargs.pop('log')
-
+        
         if 'tile_names' in kwargs:
             self.tile_names = kwargs.pop('tile_names')
-
+        
         if 'nan_value' in kwargs:
             self.nan_value = kwargs.pop('nan_value')
         else:
             self.nan_value = None
 
+    def __init__(self, **kwargs):
+        """Initialize Dataset with configuration.
+        
+        Args:
+            name: Dataset name (derived from key_pattern if not provided)
+            format: Data format (detected from key_pattern if not provided)
+            time_signature: Time reference ('end', 'start', 'end+1')
+            timestep: Time step unit (e.g., 'daily', 'monthly')
+            aggregation: Aggregation window for timestep
+            thumbnail: DatasetThumbnailManager or config dict
+            log: DatasetLogManager or config dict
+            tile_names: List of tile names or path to file
+            nan_value: Value to use for missing data
+            **kwargs: Additional options stored in self.options
+        """
+        # Substitute "now" with the current time in key_pattern
+        self.key_pattern = substitute_string(self.key_pattern, {'now': dt.datetime.now()})
+        
+        # Setup core attributes
+        self.name = self._get_or_derive_name(kwargs)
+        self.format = self._get_or_detect_format(kwargs)
+        
+        # Setup temporal properties
+        self._setup_temporal_properties(kwargs)
+        
+        # Setup optional features
+        self._set_optional_attributes(kwargs)
+        
+        # Initialize template manager and storage
         self.template_manager = TemplateManager()
         self.options = kwargs
         self.tags = {}
