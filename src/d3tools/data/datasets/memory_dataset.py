@@ -11,6 +11,7 @@ class MemoryDataset(Dataset):
         super().__init__(**kwargs)
         self.data_dict = {}
         self.keep_after_reading = keep_after_reading
+        self._creation_kwargs.update({'keep_after_reading': self.keep_after_reading})
 
     @property
     def key_pattern(self):
@@ -47,11 +48,6 @@ class MemoryDataset(Dataset):
         for key in self.data_dict.keys():
             if key.startswith(prefix):
                 yield key
-
-    def _get_recreate_kwargs(self) -> dict:
-        kwargs = super()._get_recreate_kwargs()
-        kwargs.update({'keep_after_reading': self.keep_after_reading})
-        return kwargs
     
     def update(self, in_place = False, **kwargs):
         new_self = super().update(in_place = in_place, **kwargs)

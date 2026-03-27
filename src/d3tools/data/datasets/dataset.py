@@ -134,6 +134,15 @@ class Dataset(metaclass=DatasetMeta):
         self.options = kwargs
         self.tags = {}
 
+        # Store kwargs used for initialization (excluding options) for potential use in update()
+        self._creation_kwargs = {
+            'type': self.type,
+            'name': self.name,
+            'format': self.format,
+            'time_signature': self.time_signature,
+            'nan_value': self.nan_value
+        }
+
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
     # endregion
@@ -224,15 +233,6 @@ class Dataset(metaclass=DatasetMeta):
     # endregion
 
     # region: METHODS TO COPY, UPDATE AND COMPARE DATASETS
-    def _get_recreate_kwargs(self) -> dict:
-        """Return constructor kwargs used to recreate this dataset instance.
-
-        Subclasses can override to inject required storage-specific fields
-        (e.g., remote credentials/connection options) without mutating
-        ``self.options``.
-        """
-        return self.options.copy()
-
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
         new_key_pattern = substitute_string(self.key_pattern, kwargs)
@@ -248,7 +248,7 @@ class Dataset(metaclass=DatasetMeta):
 
             return self
         else:
-            new_options = self._get_recreate_kwargs()
+            new_options = self._creation_kwargs.copy()
             new_options.update({'key_pattern': new_key_pattern, 'name': new_name})
             # Use original storage class, not the dynamic class (avoids MRO conflicts)
             original_class = getattr(self, '_original_class', self.__class__)

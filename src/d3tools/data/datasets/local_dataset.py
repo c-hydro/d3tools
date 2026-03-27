@@ -27,7 +27,6 @@ class LocalDataset(Dataset):
         elif 'key_pattern' in kwargs:
             self.file = os.path.basename(kwargs.pop('key_pattern'))
             
-        self._creation_kwargs = {'type' : self.type}
         super().__init__(**kwargs)
 
     @property
