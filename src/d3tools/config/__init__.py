@@ -9,6 +9,7 @@ from .parsing_pipeline import (
 )
 
 __all__ = [
+    'WorkflowDefinition',
     'Options',
     'dataset_from_config',
     'workflow_from_config',

@@ -1,1 +1,1 @@
-from .config.options import Options
+from .config.options import Options, WorkflowDefinition

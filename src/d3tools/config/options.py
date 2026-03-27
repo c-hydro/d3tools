@@ -2,16 +2,22 @@ from ..parse import get_unique_values
 from .parsing_pipeline import parse_options
 from .utils import load_jsons
 
-class Options(dict):
+class WorkflowDefinition(dict):
+    """Canonical workflow configuration container.
+
+    This class wraps nested mapping/list structures so sections can be accessed
+    both as dictionary keys and attributes, while preserving backward-compatible
+    parsing behavior via ``parse()`` and ``load()``.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         for k, v in self.items():
             if isinstance(v, dict):
-                self[k] = Options(v)
+                self[k] = self.__class__(v)
             elif isinstance(v, list):
-                self[k] = [Options(i) if isinstance(i, dict) else i for i in v]
+                self[k] = [self.__class__(i) if isinstance(i, dict) else i for i in v]
 
     def __getattr__(self, item):
         key_paths = self.find_keys(item, get_all = True)
@@ -42,15 +48,15 @@ class Options(dict):
     @classmethod
     def load(cls, *paths: str, **kwargs) -> dict:
         """
-        Load the configuration from the specified path as a dictionary.
+        Load and parse workflow configuration from one or more JSON files.
         """
         
         config = load_jsons(*paths)
 
-        config_options = Options(config)
+        config_options = cls(config)
         parsed_options = config_options.parse(**kwargs)
 
-        return Options(parsed_options)
+        return cls(parsed_options)
 
     def parse(self, **kwargs):
         """
@@ -58,7 +64,7 @@ class Options(dict):
         And parse the datasets in the options.
         """
         parsed_options = parse_options(self)
-        return Options(parsed_options)
+        return self.__class__(parsed_options)
     
     def find_keys(self, key: str, get_all = False) -> list[str]:
         """
@@ -117,3 +123,8 @@ class Options(dict):
             return outvalue, outkey
         else:
             return outvalue
+
+
+class Options(WorkflowDefinition):
+    """Backward-compatible alias for ``WorkflowDefinition``."""
+    pass
