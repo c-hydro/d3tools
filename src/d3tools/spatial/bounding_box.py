@@ -1,9 +1,13 @@
+from typing import TYPE_CHECKING
+
 import xarray as xr
 import rioxarray as rxr
 from pyproj import CRS, Transformer
 
 from .space_utils import get_crs, buffer_bbox
-from ..data import Dataset
+
+if TYPE_CHECKING:
+    from ..data import Dataset
 
 class BoundingBox():
 
@@ -39,7 +43,7 @@ class BoundingBox():
         return BoundingBox(left, bottom, right, top, datum = data.rio.crs, buffer = buffer)
 
     @staticmethod
-    def from_dataset(dataset: Dataset, buffer: float = 0.0):
+    def from_dataset(dataset: "Dataset", buffer: float = 0.0):
         data:xr.DataArray = dataset.get_data()
 
         return BoundingBox.from_xarray(data, buffer)

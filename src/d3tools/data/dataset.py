@@ -11,7 +11,7 @@ import re
 from ..timestepping import TimeRange, Month, TimeStep, estimate_timestep, TimeWindow
 from ..parse import substitute_string, extract_date_and_tags
 from .io_utils import get_format_from_path, straighten_data, set_type, check_data_format
-from .template_manager import TemplateManager
+from .format_mixins import RasterMixin
 
 def withcases(func):
     def wrapper(*args, **kwargs):
@@ -31,7 +31,7 @@ class DatasetMeta(ABCMeta):
         elif 'type' in attrs:
             cls.subclasses[attrs['type']] = cls
 
-class Dataset(ABC, metaclass=DatasetMeta):
+class Dataset(RasterMixin, ABC, metaclass=DatasetMeta):
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
@@ -133,23 +133,15 @@ class Dataset(ABC, metaclass=DatasetMeta):
         # Setup optional features
         self._set_optional_attributes(kwargs)
         
-        # Initialize template manager and storage
-        self.template_manager = TemplateManager()
+        # Initialize raster-specific properties (template manager)
+        self._init_raster_properties()
+        
+        # Store remaining options and initialize tags
         self.options = kwargs
         self.tags = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name})"
-    
-    @property
-    def _template(self) -> dict:
-        """Backward compatibility property for accessing templates."""
-        return self.template_manager._templates
-    
-    @_template.setter
-    def _template(self, value: dict):
-        """Backward compatibility property for setting templates."""
-        self.template_manager._templates = value
 
     def update(self, in_place = False, **kwargs):
         new_name = substitute_string(self.name, kwargs)
@@ -1049,56 +1041,11 @@ class Dataset(ABC, metaclass=DatasetMeta):
         self.fn = fn
 
     ## METHODS TO MANIPULATE THE TEMPLATE
-    def get_template_dict(self, make_it:bool = True, **kwargs):
-        # frop the file_version if it exists
-        kwargs.pop('file_version', None)
-        
-        tile = kwargs.pop('tile', None)
-        if tile is None:
-            if self.has_tiles:
-                template_dict = {}
-                for tile in self.tile_names:
-                    template_dict[tile] = self.get_template_dict(make_it = make_it, tile = tile, **kwargs)
-                return template_dict
-            else:
-                tile = '__tile__'
-
-        template_dict = self.template_manager.get(tile)
-        if template_dict is None and make_it:
-            if not self.has_time:
-                data = self.get_data(as_is = True, **kwargs)
-                self.set_template(data, tile = tile)
-
-            else:
-                # Use get_any_date instead of get_last_date - we don't care which file
-                any_date = self.get_any_date(tile = tile, **kwargs)
-                if any_date is not None:
-                    data = self.get_data(time = any_date, tile = tile, as_is=True, **kwargs)
-                else:
-                    return None
-            
-            data = straighten_data(data)
-            #templatearray = self.make_templatearray_from_data(start_data)
-            self.set_template(data, tile = tile)
-            template_dict = self.get_template_dict(make_it = False, tile = tile, **kwargs)
-        
-        return template_dict
-    
-    def set_template(self, templatearray: xr.DataArray|xr.Dataset, **kwargs):
-        tile = kwargs.get('tile', '__tile__')
-        self.template_manager.set(templatearray, spatial_key=tile)
-
-    @staticmethod
-    def build_templatearray(template_dict: dict, data = None) -> xr.DataArray|xr.Dataset:
-        """
-        Build a template xarray.DataArray from a dictionary.
-        """
-        return TemplateManager.build_array(template_dict, data)
-
-    @staticmethod
-    def set_data_to_template(data: np.ndarray|xr.DataArray|xr.Dataset,
-                             template_dict: dict) -> xr.DataArray|xr.Dataset:
-        return TemplateManager.apply_to_data(data, template_dict)
+    # Template methods moved to RasterMixin
+    # - get_template_dict()
+    # - set_template()
+    # - build_templatearray()
+    # - set_data_to_template()
 
     def set_metadata(self, data: xr.DataArray|xr.Dataset,
                      time: Optional[TimeStep|dt.datetime] = None,
