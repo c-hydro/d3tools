@@ -12,7 +12,7 @@ import datetime as dt
 
 import pytest
 
-from d3tools.config.options import Options
+from d3tools.config.workflow_definition import Options
 from d3tools.config.parsing_pipeline import (
     build_datasets,
     collect_workflow_sections,

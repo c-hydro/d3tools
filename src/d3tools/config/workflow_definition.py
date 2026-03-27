@@ -9,9 +9,22 @@ from .utils import load_jsons
 class WorkflowDefinition(dict):
     """Canonical workflow configuration container.
 
-    This class wraps nested mapping/list structures so sections can be accessed
-    both as dictionary keys and attributes, while preserving backward-compatible
-    parsing behavior via ``parse()`` and ``load()``.
+    ``WorkflowDefinition`` is the user-facing mapping for workflow options and
+    parsed workflow state. It keeps dict semantics for backward compatibility,
+    while adding:
+
+    - recursive wrapping of nested mappings/lists into ``WorkflowDefinition``
+      instances;
+    - attribute-style access for uniquely resolvable keys;
+    - convenience parsing/loading helpers that delegate to the explicit
+      configuration parsing pipeline;
+    - basic ordered workflow execution via :meth:`run`.
+
+    Notes:
+        - attribute access is global across nested structures and raises when a
+          key matches multiple distinct values;
+        - parsing does not mutate the receiver in-place and returns a new
+          ``WorkflowDefinition`` (or subclass) instance.
     """
 
     def __init__(self, *args, **kwargs):
@@ -57,8 +70,20 @@ class WorkflowDefinition(dict):
             strict_workflow_imports: bool = False,
             **kwargs,
         ) -> dict:
-        """
-        Load and parse workflow configuration from one or more JSON files.
+        """Load JSON configuration files and return a parsed workflow object.
+
+        Args:
+            *paths: One or more JSON file paths loaded and merged by
+                :func:`d3tools.config.utils.load_jsons`.
+            build_workflow_objects: Whether collected workflow sections should
+                be converted into runtime objects (door/dam/dryes builders).
+            strict_workflow_imports: Whether missing workflow-engine imports
+                should raise instead of falling back to raw section payloads.
+            **kwargs: Reserved for forward compatibility.
+
+        Returns:
+            A parsed instance of ``cls`` containing resolved tags, datasets, and
+            ``workflow_sections``.
         """
         
         config = load_jsons(*paths)
@@ -78,14 +103,18 @@ class WorkflowDefinition(dict):
             strict_workflow_imports: bool = False,
             **kwargs,
         ):
-        """
-        Parse workflow options through the d3tools parsing pipeline.
+        """Parse this workflow definition through the d3tools pipeline.
 
         Args:
             build_workflow_objects: Whether to try building runtime workflow
                 objects in collected workflow sections.
             strict_workflow_imports: If ``True``, propagate build/import errors
                 from workflow-section object construction.
+            **kwargs: Reserved for forward compatibility.
+
+        Returns:
+            A new instance of ``self.__class__`` containing the parsed
+            configuration.
         """
         parsed_options = parse_options(
             self,
@@ -95,10 +124,21 @@ class WorkflowDefinition(dict):
         return self.__class__(parsed_options)
     
     def find_keys(self, key: str, get_all = False) -> list[str]:
-        """
-        Returns the tree of keys that contain the specified key.
-        It returns a list of keys that end with the specified key.
-        e.g. {'a': {'b': 1, 'c': 2}}, 'c' -> ['a','c']
+        """Find nested key paths ending with ``key``.
+
+        Args:
+            key: Target key name to search recursively.
+            get_all: If ``True``, return all matching paths. If ``False``,
+                require a single match and return only that path.
+
+        Returns:
+            Either:
+            - a list of key-paths when ``get_all=True``;
+            - one key-path (list of keys) when ``get_all=False`` and unique;
+            - an empty list when no match is found.
+
+        Raises:
+            ValueError: If ``get_all=False`` and more than one path matches.
         """
         def search(d, key, path=[]):
             paths_found = []
@@ -121,9 +161,22 @@ class WorkflowDefinition(dict):
             return []
         
     def get(self, key: list[str]|str, default = None, ignore_case = False, get_key = False):
-        """
-        Get the value of the specified key.
-        If the key is a list, it will return the value of the first key that is found.
+        """Get a top-level option by key with optional compatibility helpers.
+
+        Args:
+            key: Either a single key name or a list of fallback key names.
+                For a list, keys are tried in order and the first match wins.
+            default: Value returned when no key matches.
+            ignore_case: Whether key matching should be case-insensitive.
+            get_key: If ``True``, return ``(value, matched_key)``.
+
+        Returns:
+            The matched value, or ``default`` if no key matches. If
+            ``get_key=True``, returns ``(value, matched_key_or_None)``.
+
+        Notes:
+            This method checks only the current mapping level; recursive lookup
+            is handled by :meth:`find_keys` and attribute access.
         """
         if isinstance(key, str):
             if ignore_case:
@@ -157,10 +210,22 @@ class WorkflowDefinition(dict):
             start: dt.datetime|str,
             end: dt.datetime|str = dt.datetime.now()
         ):
-        """Run parsed workflow sections in their collected order.
+        """Run parsed workflow sections sequentially in collection order.
 
-        This method expects sections to be already parsed and, when execution is
-        desired, built as runtime objects (``section.value``).
+        Args:
+            start: Start datetime/date string for workflow execution.
+            end: End datetime/date string for workflow execution.
+
+        The method converts ``start``/``end`` to a :class:`TimeRange` and, for
+        each entry in ``workflow_sections``, executes the first supported
+        callable among:
+
+        - ``get_data(time_range)``  (downloader-like)
+        - ``run(time_range)``       (workflow-like)
+        - ``compute(time_range)``   (index-like)
+
+        Raises:
+            TypeError: If a section does not expose a runnable object interface.
         """
         workflow_sections = self.get("workflow_sections", [])
         time_range = TimeRange.from_any([start, end])

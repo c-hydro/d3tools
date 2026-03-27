@@ -1,4 +1,4 @@
-from .options import *
+from .workflow_definition import *
 from .parsers import dataset_from_config, workflow_from_config
 from .workflow_section import WORKFLOW_SECTION_ALIASES, WorkflowSection
 from .parsing_pipeline import (
