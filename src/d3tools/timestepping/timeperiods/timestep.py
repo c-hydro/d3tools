@@ -1,8 +1,8 @@
 from abc import ABC, ABCMeta, abstractmethod
 
 from .timerange import TimeRange, TimePeriod
-from .time_utils import find_unit_of_time
-from .timewindow import TimeWindow
+from ..time_utils import find_unit_of_time
+from ..timewindow import TimeWindow
 
 class TimeStepMeta(ABCMeta):
     def __init__(cls, name, bases, attrs):
@@ -27,7 +27,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         unit = find_unit_of_time(unit)
         Subclass: 'TimeStep' = cls.subclasses.get(unit)
         if Subclass is None:
-            raise ValueError(f"Invalid unit of time: {type}")
+            raise ValueError(f"Invalid unit of time: {unit}")
         return Subclass
 
     @classmethod

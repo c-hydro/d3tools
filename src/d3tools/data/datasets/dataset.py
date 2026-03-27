@@ -6,10 +6,10 @@ from abc import ABCMeta, abstractmethod
 import os
 import re
 
-from ..timestepping import TimeRange, TimeStep, TimeWindow
-from ..parse import substitute_string, extract_date_and_tags
-from .io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format, read_from_file
-from .data_catalogue import DataCatalogue
+from ...timestepping import TimeRange, TimeStep, TimeWindow
+from ...parse import substitute_string, extract_date_and_tags
+from ..io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format, read_from_file
+from ..data_catalogue import DataCatalogue
 
 # Cache for dynamically created classes (avoids recreating same class combinations)
 _CLASS_CACHE = {}
@@ -203,7 +203,7 @@ class Dataset(metaclass=DatasetMeta):
             >>> dataset = Dataset.from_options(config)
         """
         # Delegate to centralized parser
-        from ..config.parsers import dataset_from_config
+        from ...config.parsers import dataset_from_config
         return dataset_from_config(options, defaults)
 
     @classmethod

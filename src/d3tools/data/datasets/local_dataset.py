@@ -4,8 +4,8 @@ import xarray as xr
 import pandas as pd
 
 from .dataset import Dataset
-from ..timestepping.timestep import TimeStep
-from .io_utils import rm_file
+from ...timestepping import TimeStep
+from ..io_utils import rm_file
 
 from typing import Any, Optional
 

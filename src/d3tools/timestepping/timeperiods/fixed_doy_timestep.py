@@ -3,7 +3,7 @@ from abc import ABC
 from typing import Iterable, Optional, Sequence
 
 from .fixed_num_timestep import FixedNTimeStep, FixedNTimeStepMeta
-from .time_utils import get_date_from_str
+from ..time_utils import get_date_from_str
 
 class FixedDOYTimeStepStepMeta(FixedNTimeStepMeta):
     def __init__(cls, name, bases, attrs):

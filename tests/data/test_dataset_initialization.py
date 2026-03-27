@@ -7,7 +7,7 @@ proper initialization of Dataset instances.
 import pytest
 from unittest import mock
 
-from d3tools.data.local_dataset import LocalDataset
+from d3tools.data import LocalDataset
 from d3tools.logging import DatasetLogManager
 from d3tools.thumbnails import DatasetThumbnailManager
 from d3tools.timestepping import TimeStep, TimeWindow, Day, Dekad

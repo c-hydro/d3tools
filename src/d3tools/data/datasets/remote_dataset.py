@@ -23,8 +23,8 @@ import stat
 import posixpath
 
 from .dataset import Dataset
-from ..parse import extract_date_and_tags
-from ..exit import rm_at_exit
+from ...parse import extract_date_and_tags
+from ...exit import rm_at_exit
 
 class RemoteDataset(Dataset):
     type = 'remote'

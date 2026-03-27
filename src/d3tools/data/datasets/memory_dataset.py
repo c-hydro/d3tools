@@ -1,7 +1,7 @@
 from typing import Any
 
 from .dataset import Dataset
-from ..parse import extract_date_and_tags
+from ...parse import extract_date_and_tags
 
 class MemoryDataset(Dataset):
     type = 'memory'

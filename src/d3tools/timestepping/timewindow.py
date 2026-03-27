@@ -45,8 +45,7 @@ class TimeWindow():
     
     def apply(self, time: datetime.datetime, start: bool = False) -> 'TimeRange':
         
-        from .fixed_num_timestep import Dekad
-        from .timerange import TimeRange
+        from .timeperiods import Dekad, TimeRange
 
         unit = self.unit
         size = self.size
