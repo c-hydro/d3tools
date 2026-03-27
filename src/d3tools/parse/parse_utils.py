@@ -1,63 +1,10 @@
 import datetime as dt
 import re
-import os
 
 # backward compatibility, these functions used to be in this module
 from .string_substitution import substitute_string, substitute_values
 from .structure_utils import flatten_dict, make_hashable, transform_back, get_unique_values, format_dict
-
-def set_env(structure):
-    """
-    Replace the {ENV.var, default = 'value'} in the structure with the corresponding environment variable.
-    the default = 'value' is used to provide a default value if the environment variable is not set.
-    """
-    if isinstance(structure, dict):
-        return {set_env(key): set_env(value) for key, value in structure.items()}
-    elif isinstance(structure, list):
-        return [set_env(value) for value in structure]
-    elif isinstance(structure, str):
-        pattern = r'(\{ENV\.([\w#\-\.]+)(?:\s*,\s*(?:default\s*=\s*)?\'(.*?)\'\s*)?\})'
-        matches = re.findall(pattern, structure)
-        if matches:
-            for match in matches:
-                var = match[1]
-                default = match[2] if len(match[2]) > 0 else None
-                value = os.getenv(var, default)
-
-                if value is None:
-                    raise ValueError(f"Environment variable {var} is not set and no default value provided")
-            
-                structure = structure.replace(match[0], value)
-    
-    return structure
-
-def set_dataset(structure, obj_dict):
-    """
-    Replace the {obj, tag = 'value'} in the structure with the corresponding dataset in the obj_dict.
-    the tag = 'value' is used to update the tags of the dataset.
-    """
-    if isinstance(structure, dict):
-        return {set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()}
-    elif isinstance(structure, list):
-        return [set_dataset(value, obj_dict) for value in structure]
-    elif isinstance(structure, str):
-        pattern = r'{([\w#-\.]+)(?:\s*,\s*([\w#-\.]+\s*=\s*\'.*?\')+)?}'
-        match = re.match(pattern, structure)
-        if match:
-            key= match.group(1)
-            structure = obj_dict.get(key, structure)
-
-            if len(match.groups()) > 1:
-                tag_values = match.group(2)
-                if tag_values:
-                    tags = {}
-                    tag_values_pattern = r'([\w#-\.]+)\s*=\s*\'(.*?)\''
-                    for tag_values_match in re.finditer(tag_values_pattern, tag_values):
-                        tags[tag_values_match.group(1)] = tag_values_match.group(2)
-
-                    structure = structure.update(**tags)
-
-    return structure
+from .special_substitutions import set_env, set_dataset
 
 def extract_date_and_tags(string: str, string_pattern: str):
     import copy
