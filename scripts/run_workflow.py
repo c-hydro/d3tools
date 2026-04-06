@@ -31,6 +31,10 @@ def main():
         strict_workflow_imports=True,
     )
 
+    for wf_section in options.workflow_sections:
+        print(f"Workflow section: {wf_section.name}")
+        wf_section.value.get_last_ts()
+
     # set the start and end date
     start_date = args.start
     end_date   = args.end

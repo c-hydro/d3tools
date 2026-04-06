@@ -6,11 +6,13 @@ from typing import Any
 
 from .parsers import workflow_section_from_config
 from ..parse.string_rendering import normalise_string
+from ..timestepping import TimeRange
 
 WORKFLOW_SECTION_ALIASES = {
     "door_downloader": "door",
     "downloader": "door",
     "download": "door",
+    "ingest": "door",
     "dam_workflow": "dam",
     "process": "dam",
     "publish": "dam",
@@ -70,3 +72,33 @@ class WorkflowSection:
             strict_imports=strict_imports,
         )
         return cls(name=name, engine=engine, definition=definition, value=value)
+    
+    def get_run_timerange(self) -> TimeRange:
+        """Determine the execution range for this workflow section.
+
+        The section value is expected to provide ``get_last_ts()``, returning a
+        pair ``(last_available, last_done)``. The resulting range starts at the
+        first timestep that still needs processing and ends at the latest
+        available timestep.
+
+        Returns:
+            TimeRange spanning the timesteps that still need to be processed.
+
+        Raises:
+            ValueError: If the section has no available data.
+        """
+        process = self.value
+        last_available, last_done = process.get_last_ts()
+        
+        if last_available is None or last_done is None:
+            raise ValueError(f"Workflow section '{self.name}' has not enough available data to determine time range for execution")
+        
+        next_ts = last_done + 1
+        last_ts = next_ts
+        while last_ts.end <= last_available.end:
+            last_ts = last_ts + 1
+        
+        start = next_ts.start
+        end = (last_ts - 1).end
+
+        return TimeRange(start, end)

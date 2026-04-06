@@ -11,6 +11,7 @@ import datetime as dt
 import pytest
 
 from d3tools import WorkflowDefinition
+from d3tools.timestepping import TimeRange
 from d3tools.config.workflow_section import WorkflowSection
 
 
@@ -305,7 +306,7 @@ class TestWorkflowDefinitionRunExecution:
         )
         
         wf = WorkflowDefinition({})
-        wf.run("2024-01-01", "2024-01-31")
+        wf.run(start="2024-01-01", end="2024-01-31")
         
         # Should execute in order: door, dam, dryes
         assert [call[0] for call in calls] == ["door", "dam", "dryes"]
@@ -315,7 +316,7 @@ class TestWorkflowDefinitionRunExecution:
         wf = WorkflowDefinition(minimal_config)
         
         # Should not raise
-        wf.run("2024-01-01", "2024-01-31")
+        wf.run(start="2024-01-01", end="2024-01-31")
 
     def test_run_raises_for_invalid_engine(self, monkeypatch):
         """run() should raise TypeError for unrecognized engine."""
@@ -340,7 +341,7 @@ class TestWorkflowDefinitionRunExecution:
         wf = WorkflowDefinition({})
         
         with pytest.raises(TypeError, match="unrecognized engine"):
-            wf.run(dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2))
+            wf.run(start=dt.datetime(2024, 1, 1), end=dt.datetime(2024, 1, 2))
 
     def test_run_accepts_datetime_objects(self, minimal_config):
         """run() should accept datetime objects."""
@@ -349,8 +350,14 @@ class TestWorkflowDefinitionRunExecution:
         # Should not raise
         wf.run(
             start=dt.datetime(2024, 1, 1),
-            end=dt.datetime(2024, 1, 31)
+            end=dt.datetime(2024, 1, 31),
         )
+
+    def test_run_accepts_timerange_object(self, minimal_config):
+        """run() should accept an explicit TimeRange."""
+        wf = WorkflowDefinition(minimal_config)
+
+        wf.run(time_range=TimeRange("2024-01-01", "2024-01-31"))
 
     def test_run_accepts_date_strings(self, minimal_config):
         """run() should accept date strings."""
@@ -359,9 +366,115 @@ class TestWorkflowDefinitionRunExecution:
         # Should not raise
         wf.run(start="2024-01-01", end="2024-01-31")
 
-    def test_run_defaults_end_to_now(self, minimal_config):
+    def test_run_defaults_end_to_now(self, minimal_config, monkeypatch):
         """run() should default end date to now if not provided."""
         wf = WorkflowDefinition(minimal_config)
         
-        # Should not raise
+        captured = {}
+        monkeypatch.setattr(wf, "_run_sections", lambda time_range: captured.setdefault("time_range", time_range))
+
+        before = dt.datetime.now()
         wf.run(start="2024-01-01")
+        after = dt.datetime.now()
+
+        assert captured["time_range"].start == dt.datetime(2024, 1, 1)
+        assert before <= captured["time_range"].end <= after
+
+
+class TestWorkflowDefinitionRunTimerangeResolution:
+    """Test workflow timerange resolution helpers."""
+
+    def test_get_run_timerange_returns_input_timerange(self):
+        """_get_run_timerange should return a provided TimeRange unchanged."""
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+
+        assert WorkflowDefinition._get_run_timerange(time_range=time_range) is time_range
+
+    def test_get_run_timerange_reads_environment_dates(self, monkeypatch):
+        """_get_run_timerange should build a range from environment variables."""
+        monkeypatch.setenv("START_DATE", "2024-03-01")
+        monkeypatch.setenv("END_DATE", "2024-03-31")
+
+        time_range = WorkflowDefinition._get_run_timerange()
+
+        assert isinstance(time_range, TimeRange)
+        assert time_range.start == dt.datetime(2024, 3, 1)
+        assert time_range.end == dt.datetime(2024, 3, 31, 23, 59, 59)
+
+    def test_get_run_timerange_returns_none_without_inputs_or_environment(self, monkeypatch):
+        """_get_run_timerange should return None when section-level resolution is needed."""
+        monkeypatch.delenv("START_DATE", raising=False)
+        monkeypatch.delenv("END_DATE", raising=False)
+
+        assert WorkflowDefinition._get_run_timerange() is None
+
+    def test_get_run_timerange_raises_for_unsupported_type(self):
+        """_get_run_timerange should reject unsupported input types."""
+        with pytest.raises(TypeError, match="time_range must be a TimeRange"):
+            WorkflowDefinition._get_run_timerange(time_range=123)
+
+    def test_get_run_timerange_raises_for_mixed_inputs(self):
+        """_get_run_timerange should reject time_range mixed with start/end."""
+        with pytest.raises(ValueError, match="either time_range or start/end"):
+            WorkflowDefinition._get_run_timerange(
+                time_range=TimeRange("2024-01-01", "2024-01-31"),
+                start="2024-01-01",
+            )
+
+    def test_get_run_timerange_raises_for_end_without_start(self):
+        """_get_run_timerange should reject end without a start."""
+        with pytest.raises(ValueError, match="start is missing"):
+            WorkflowDefinition._get_run_timerange(end="2024-01-31")
+
+    def test_run_resolves_section_timerange_per_section(self, monkeypatch):
+        """run() should ask each section for its own timerange when none is provided."""
+        calls = []
+
+        class MockProcess:
+            def __init__(self, engine):
+                self.engine = engine
+
+            def get_data(self, time_range):
+                calls.append((self.engine, time_range))
+
+            def run(self, time_range):
+                calls.append((self.engine, time_range))
+
+        class MockSection:
+            def __init__(self, name, engine, time_range):
+                self.name = name
+                self.engine = engine
+                self.value = MockProcess(engine)
+                self._time_range = time_range
+
+            def get_run_timerange(self):
+                return self._time_range
+
+        from d3tools.config import parsing_pipeline
+
+        first_range = TimeRange("2024-01-01", "2024-01-31")
+        second_range = TimeRange("2024-02-01", "2024-02-29")
+        parsed_config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_sections": [
+                MockSection("Download", "door", first_range),
+                MockSection("Process", "dam", second_range),
+            ],
+            "workflow_name": "test",
+            "workflow_log": None,
+        }
+
+        monkeypatch.setattr(
+            parsing_pipeline,
+            "parse_options",
+            lambda config, **kwargs: parsed_config,
+        )
+
+        monkeypatch.delenv("START_DATE", raising=False)
+        monkeypatch.delenv("END_DATE", raising=False)
+
+        wf = WorkflowDefinition({})
+        wf.run()
+
+        assert calls == [("door", first_range), ("dam", second_range)]

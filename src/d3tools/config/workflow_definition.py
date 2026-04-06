@@ -1,3 +1,4 @@
+import os
 import datetime as dt
 from typing import Optional
 
@@ -32,7 +33,7 @@ class WorkflowDefinition:
         Load from JSON::
 
             wf = WorkflowDefinition.load("workflow.json", build_workflow_objects=True)
-            wf.run(start="2024-01-01", end="2024-12-31")
+            wf.run(time_range=TimeRange("2024-01-01", "2024-12-31"))
     """
 
     RESERVED_TOP_LEVEL_KEYS = {"workflow_name", "tags", "datasets", "workflow_log", "workflow_sections"}
@@ -120,18 +121,26 @@ class WorkflowDefinition:
 
     def run(
         self,
-        start: dt.datetime | str,
-        end: dt.datetime | str = None
+        time_range: TimeRange | None = None,
+        *,
+        start: dt.datetime | str | None = None,
+        end: dt.datetime | str | None = None,
     ):
         """Execute workflow sections sequentially in order.
 
         Args:
-            start: Start datetime/date string for workflow execution
-            end: End datetime/date string for workflow execution. 
-                Defaults to current time if not provided.
+            time_range: Explicit workflow execution range.
+            start: Start datetime/date string for workflow execution when not
+                passing ``time_range``.
+            end: End datetime/date string for workflow execution. Defaults to
+                current time if not provided when ``start`` is set.
 
-        The method converts start/end to a TimeRange and executes each
-        workflow section using its engine-specific interface:
+        If all arguments are ``None``, the workflow attempts to determine the
+        execution time range from ``START_DATE`` and ``END_DATE`` environment
+        variables, or from each section's data availability if those are not
+        set.
+
+        The method executes each workflow section using its engine-specific interface:
 
         - **door** engine: calls ``get_data(time_range)``
         - **dam** engine: calls ``run(time_range)``
@@ -146,11 +155,12 @@ class WorkflowDefinition:
             wf = WorkflowDefinition.load("workflow.json")
             wf.run(start="2024-01-01", end="2024-12-31")
         """
-        if end is None:
-            end = dt.datetime.now()
-            
-        time_range = TimeRange.from_any([start, end])
-        
+        time_range = self._get_run_timerange(
+            time_range=time_range,
+            start=start,
+            end=end,
+        )
+
         # Run workflow with logging context if logger exists
         if self.logger:
             with self.logger.workflow_execution(self.workflow_name):
@@ -158,30 +168,35 @@ class WorkflowDefinition:
         else:
             self._run_sections(time_range)
 
-    def _run_sections(self, time_range):
+    def _run_sections(self, time_range: TimeRange | None):
         """Execute workflow sections with optional logging.
-        
+
         Args:
-            time_range: TimeRange for workflow execution
+            time_range: TimeRange for workflow execution. If ``None``, each
+                section determines its own range from input/output data
+                availability.
         """
         for section in self.workflow_sections:
             section_name = getattr(section, "name", "<unknown>")
             engine = getattr(section, "engine", None)
-            
+            section_time_range = time_range
+            if section_time_range is None:
+                section_time_range = section.get_run_timerange()
+
             # Execute section with logging context if logger exists
             if self.logger:
                 with self.logger.section_execution(section_name, engine=engine):
-                    self._execute_section(section, time_range)
+                    self._execute_section(section, section_time_range)
             else:
-                self._execute_section(section, time_range)
+                self._execute_section(section, section_time_range)
     
     def _execute_section(self, section, time_range):
         """Execute a single workflow section using its engine-specific interface.
-        
+
         Args:
             section: WorkflowSection object containing the workflow process
             time_range: TimeRange for execution
-            
+
         Raises:
             TypeError: If the section doesn't have a recognized engine
         """
@@ -203,3 +218,52 @@ class WorkflowDefinition:
                     f"Workflow section '{section_name}' has unrecognized engine '{engine}'. "
                     f"Expected one of: 'door', 'dam', 'dryes'"
                 )
+
+    @staticmethod
+    def _get_run_timerange(
+        time_range: TimeRange | None = None,
+        *,
+        start: dt.datetime | str | None = None,
+        end: dt.datetime | str | None = None,
+    ) -> TimeRange | None:
+        """Determine the workflow execution range.
+
+        Args:
+            time_range: Explicit workflow execution range.
+            start: Optional start datetime/date string.
+            end: Optional end datetime/date string.
+
+        Returns:
+            A resolved TimeRange, or ``None`` if execution should be resolved
+            separately for each workflow section.
+
+        Raises:
+            TypeError: If ``time_range`` is not a TimeRange.
+            ValueError: If conflicting or incomplete time arguments are
+                provided.
+        """
+
+        if time_range is not None:
+            if not isinstance(time_range, TimeRange):
+                raise TypeError("time_range must be a TimeRange or None")
+            if start is not None or end is not None:
+                raise ValueError(
+                    "Provide either time_range or start/end, not both"
+                )
+            return time_range
+
+        if start is None:
+            start = os.getenv("START_DATE", None)
+        if end is None:
+            end = os.getenv("END_DATE", None)
+
+        if start is None and end is None:
+            return None
+
+        if start is None:
+            raise ValueError("end was provided but start is missing")
+
+        if end is None:
+            end = dt.datetime.now()
+
+        return TimeRange.from_any([start, end])
