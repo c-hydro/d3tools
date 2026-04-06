@@ -6,6 +6,7 @@ Each stage preserves existing behavior while making responsibilities clearer.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from ..data import Dataset
@@ -192,6 +193,21 @@ def parse_options(
             workflow sections.
         strict_workflow_imports: If ``True``, propagate build/import failures.
     """
+    if not isinstance(options, Options):
+        options = Options(options)
+    
+    # Set environment variables from the "env" section before any other processing
+    env_keys = options.get("env", None, ignore_case=True)
+    if env_keys is None:
+        env_keys = {}
+    elif not isinstance(env_keys, dict):
+        raise TypeError(
+            f"env must be a dict or None, got {type(env_keys).__name__}"
+        )
+
+    for key, value in env_keys.items():
+        os.environ[str(key)] = str(value)
+
     parsed = resolve_env(options)
     parsed = resolve_tags(parsed)
     parsed = build_datasets(parsed)

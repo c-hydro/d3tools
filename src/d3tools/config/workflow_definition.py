@@ -36,7 +36,7 @@ class WorkflowDefinition:
             wf.run(time_range=TimeRange("2024-01-01", "2024-12-31"))
     """
 
-    RESERVED_TOP_LEVEL_KEYS = {"workflow_name", "tags", "datasets", "workflow_log", "workflow_sections"}
+    RESERVED_TOP_LEVEL_KEYS = {"workflow_name", "tags", "datasets", "env", "workflow_log", "workflow_sections"}
 
     def __init__(
         self, 

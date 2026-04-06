@@ -8,6 +8,7 @@ These tests lock down the explicit parsing stages introduced in the pipeline:
 - resolve_dataset_refs
 - parse_options
 """
+import os
 import datetime as dt
 
 import pytest
@@ -232,6 +233,60 @@ class TestCollectWorkflowSections:
 
 class TestParseOptionsIntegration:
     """Integration tests for full parse_options stage."""
+
+    def test_parse_options_sets_env_before_placeholder_resolution(self, monkeypatch):
+        """Full pipeline should allow ENV values defined in config to be reused immediately."""
+        monkeypatch.delenv("CIMA_PIPELINE_INLINE_ENV", raising=False)
+
+        options = Options(
+            {
+                "ENV": {
+                    "PIPELINE_INLINE_ENV": "configured_value",
+                    "PIPELINE_YEAR": 2024,
+                },
+                "TAGS": {
+                    "source": "{ENV.PIPELINE_INLINE_ENV}",
+                    "year": "{ENV.PIPELINE_YEAR}",
+                },
+                "DATASETS": {},
+            }
+        )
+
+        parsed = parse_options(options)
+
+        assert os.getenv("PIPELINE_INLINE_ENV") == "configured_value"
+        assert os.getenv("PIPELINE_YEAR") == "2024"
+        assert parsed["TAGS"]["source"] == "configured_value"
+        assert parsed["TAGS"]["year"] == "2024"
+
+    def test_parse_options_treats_env_as_reserved_top_level_key(self):
+        """ENV should not be collected as a workflow section."""
+        options = Options(
+            {
+                "ENV": {"CIMA_PIPELINE_SECTION_ENV": "configured_value"},
+                "TAGS": {},
+                "DATASETS": {},
+                "Download": {"source": "ERA5"},
+            }
+        )
+
+        parsed = parse_options(options)
+
+        assert "ENV" in parsed
+        assert [section.name for section in parsed["workflow_sections"]] == ["Download"]
+
+    def test_parse_options_raises_for_invalid_env_section_type(self):
+        """env should be a mapping if provided."""
+        options = Options(
+            {
+                "ENV": ["NOT", "A", "DICT"],
+                "TAGS": {},
+                "DATASETS": {},
+            }
+        )
+
+        with pytest.raises(TypeError, match="env must be a dict or None"):
+            parse_options(options)
 
     def test_parse_options_resolves_tags_datasets_and_collects_workflow_sections(self):
         """Full pipeline should resolve placeholders and collect sections generically."""
