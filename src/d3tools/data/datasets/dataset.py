@@ -572,6 +572,11 @@ class Dataset(metaclass=DatasetMeta):
         # remove time from metadata and old_md if present
         metadata.pop('time', None)
         old_md.pop('time', None)
+
+        # remove any keys from old_md that are already in metadata to avoid duplication
+        for key in metadata.keys():
+            old_md.pop(key, None)
+
         output = self.set_metadata(output, time=time, **old_md, **metadata)
         
         # write the data
