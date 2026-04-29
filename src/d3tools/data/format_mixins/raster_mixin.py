@@ -10,6 +10,7 @@ import rioxarray as rxr
 import os
 import datetime as dt
 from typing import Optional
+import rasterio
 
 from .base import FormatMixin
 from ...spatial import TemplateManager
@@ -67,7 +68,7 @@ class RasterMixin(FormatMixin):
         # read the data from a geotiff
         if self.format == 'geotiff':
             # check the size of the file to decide whether to use dask or not
-            file_size = os.path.getsize(path) / (1024**2)  # size in MB
+            file_size = self.estimate_tiff_decoded_mb(path)  # size in MB
             if file_size > chunk_threshold:  # threshold for using dask
                 data = rxr.open_rasterio(path, chunks = {})
             else:
@@ -378,3 +379,20 @@ class RasterMixin(FormatMixin):
             return output
         else:
             return data
+    
+    @staticmethod
+    def estimate_tiff_decoded_mb(path: str) -> float:
+        with rasterio.open(path) as src:  # reads metadata/header
+            itemsize = np.dtype(src.dtypes[0]).itemsize
+            decoded_bytes = src.width * src.height * src.count * itemsize
+
+            # Optional safety margins:
+            # - add one byte/pixel if a mask is present
+            if src.mask_flag_enums and any(src.mask_flag_enums):
+                decoded_bytes += src.width * src.height
+
+            # - if overviews exist and may be touched in workflows, add small overhead
+            ovr_factor = 1.0 + 0.35 if src.overviews(1) else 1.0
+            decoded_bytes = int(decoded_bytes * ovr_factor)
+
+        return decoded_bytes / (1024**2)
