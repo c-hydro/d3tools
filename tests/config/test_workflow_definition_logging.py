@@ -90,16 +90,6 @@ class TestWorkflowDefinitionLoggingIntegration:
         assert isinstance(wf.logger, WorkflowLogManager)
         assert wf.logger.log_file == str(log_file)
 
-    def test_logger_none_when_disabled(self):
-        """Logger should be None when workflow_log is None."""
-        config = {
-            "TAGS": {},
-            "DATASETS": {},
-            "workflow_log": None
-        }
-        wf = WorkflowDefinition(config)
-        assert wf.logger is None
-
     def test_run_uses_logger_for_workflow_execution(self, config_with_logging):
         """run() should use logger to log workflow execution."""
         config, log_file = config_with_logging

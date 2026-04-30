@@ -105,7 +105,7 @@ class WorkflowLogManager:
         
         Args:
             config: Configuration dictionary, string path, or None.
-                   If None or empty dict, returns None (no logging).
+                   If None or empty dict, returns a console-only logger.
                    If string, treated as log file path with defaults.
                    If dict, expects keys:
                        - file: Log file path (supports {now:...} formatting)
@@ -115,10 +115,10 @@ class WorkflowLogManager:
                        - logger_name: Root logger name (default: 'd3tools')
         
         Returns:
-            WorkflowLogManager instance or None if logging is disabled
+            WorkflowLogManager instance
             
         Examples:
-            # Disable logging
+            # Use default console-only logging
             log_mgr = WorkflowLogManager.from_dict(None)
             
             # Simple file path
@@ -132,9 +132,9 @@ class WorkflowLogManager:
                 'format': 'detailed'
             })
         """
-        # Handle None or empty config
+        # Handle None or empty config with default console-only logging
         if config is None or (isinstance(config, dict) and len(config) == 0):
-            return None
+            return cls()
         
         # Handle string path
         if isinstance(config, str):

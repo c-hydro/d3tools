@@ -126,14 +126,22 @@ class TestWorkflowLogManagerFromDict:
     """Test WorkflowLogManager.from_dict() factory method."""
     
     def test_from_dict_none(self):
-        """Test from_dict with None returns None (logging disabled)."""
+        """Test from_dict with None returns a default console-only logger."""
         log_mgr = WorkflowLogManager.from_dict(None)
-        assert log_mgr is None
+        assert log_mgr is not None
+        assert log_mgr.log_file is None
+        assert log_mgr.console is True
+
+        log_mgr.close()
     
     def test_from_dict_empty_dict(self):
-        """Test from_dict with empty dict returns None (logging disabled)."""
+        """Test from_dict with empty dict returns a default console-only logger."""
         log_mgr = WorkflowLogManager.from_dict({})
-        assert log_mgr is None
+        assert log_mgr is not None
+        assert log_mgr.log_file is None
+        assert log_mgr.console is True
+
+        log_mgr.close()
     
     def test_from_dict_string_path(self):
         """Test from_dict with simple string path."""

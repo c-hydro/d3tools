@@ -1,6 +1,12 @@
 import argparse
+import logging
 
 from d3tools import WorkflowDefinition
+
+main_log = logging.getLogger("main")
+main_log.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+main_log.addHandler(handler)
 
 def parse_arguments():
     """
@@ -32,7 +38,6 @@ def main():
     )
 
     for wf_section in options.workflow_sections:
-        print(f"Workflow section: {wf_section.name}")
         wf_section.value.get_last_ts()
 
     # set the start and end date
