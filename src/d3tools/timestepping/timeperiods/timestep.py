@@ -106,6 +106,9 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
             def __repr__(self):
                 return f"{self.super_name} ({self.start:%Y%m%d} - {self.end:%Y%m%d}) agg = {self.agg_window}"
 
+            def __str__(self):
+                return f'{self.__class__.__name__.lower()} {self.start:%Y%m%d}-{self.end:%Y%m%d} (agg={self.agg_window.__str__()})'
+
             def __add__(self, other):
                 super_add = super().__add__(other)
                 super_add.agg_window = self.agg_window
