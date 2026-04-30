@@ -86,6 +86,8 @@ class WorkflowLogManager:
         self.format_console = format_console
         self.logger_name = logger_name
         self.options = options
+        self._managed_logger_names = tuple(dict.fromkeys((self.logger_name, 'door', 'dam', 'dryes')))
+        self._managed_loggers = []
         
         # Track workflow execution state
         self._workflow_start_time = None
@@ -195,7 +197,24 @@ class WorkflowLogManager:
             propagate=False,  # Root logger shouldn't propagate
             clear_existing=True  # Clear any existing handlers
         )
-        
+
+        self._managed_loggers = [logger]
+        # Attach the workflow handlers to sibling package roots so their child
+        # loggers write into the same workflow outputs.
+        for package in self._managed_logger_names:
+            if package == logger.name:
+                continue
+
+            pkg_logger = logging.getLogger(package)
+            pkg_logger.setLevel(self.level)
+            pkg_logger.propagate = False
+
+            for handler in logger.handlers:
+                if handler not in pkg_logger.handlers:
+                    pkg_logger.addHandler(handler)
+
+            self._managed_loggers.append(pkg_logger)
+
         return logger
     
     @contextmanager
@@ -356,7 +375,9 @@ class WorkflowLogManager:
             level: New logging level (e.g., 'DEBUG', logging.DEBUG)
         """
         self.level = level
-        self.logger.setLevel(level)
+        for managed_logger in self._managed_loggers:
+            managed_logger.setLevel(level)
+
         for handler in self.logger.handlers:
             handler.setLevel(level)
     
@@ -372,9 +393,19 @@ class WorkflowLogManager:
         
         if self._closed:
             return  # Already closed
-        
-        for handler in self.logger.handlers[:]:  # Copy list to avoid modification during iteration
+
+        handlers_to_close = []
+        seen_handlers = set()
+
+        for managed_logger in self._managed_loggers:
+            for handler in managed_logger.handlers[:]:
+                managed_logger.removeHandler(handler)
+                handler_id = id(handler)
+                if handler_id not in seen_handlers:
+                    seen_handlers.add(handler_id)
+                    handlers_to_close.append(handler)
+
+        for handler in handlers_to_close:
             handler.close()
-            self.logger.removeHandler(handler)
         
         self._closed = True

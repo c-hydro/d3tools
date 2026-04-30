@@ -280,6 +280,8 @@ class TestWorkflowLogManagerLogging:
                 content = f.read()
             
             # All module messages should appear
+            assert "Message from door" in content
+            assert "Message from dam" in content
             assert "Message from d3tools child" in content
 
 
@@ -448,6 +450,7 @@ class TestWorkflowLogManagerMethods:
         
         log_mgr.set_level('DEBUG')
         assert log_mgr.logger.level == logging.DEBUG
+        assert logging.getLogger('door').level == logging.DEBUG
         
         # Handlers should also be updated
         for handler in log_mgr.logger.handlers:
@@ -460,6 +463,11 @@ class TestWorkflowLogManagerMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             log_file = os.path.join(tmpdir, 'test.log')
             log_mgr = WorkflowLogManager(log_file=log_file)
+            file_handler = next(
+                handler for handler in log_mgr.logger.handlers
+                if isinstance(handler, logging.FileHandler)
+            )
+            assert file_handler in logging.getLogger('door').handlers
             
             # Close multiple times - should not raise
             log_mgr.close()
@@ -468,6 +476,7 @@ class TestWorkflowLogManagerMethods:
             
             # Handlers should be cleared after first close
             assert len(log_mgr.logger.handlers) == 0
+            assert file_handler not in logging.getLogger('door').handlers
             assert log_mgr._closed is True
     
     def test_format_duration(self):
