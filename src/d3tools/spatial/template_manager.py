@@ -316,13 +316,13 @@ class TemplateManager:
             cache_file.unlink()
     
     @staticmethod
-    def build_array(template_dict: dict, data=None) -> xr.DataArray:
+    def build_array(template_dict: dict, data:Optional[np.ndarray]=None) -> xr.DataArray:
         """
         Build a template xarray.DataArray from a template dictionary.
         
         Args:
             template_dict: Template dictionary with spatial metadata
-            data: Optional numpy array data to populate. If None, filled with nodata value
+            data: Optional numpy array or DataArray data to populate. If None, filled with nodata value
             
         Returns:
             xarray.DataArray with template spatial structure
@@ -363,12 +363,12 @@ class TemplateManager:
             Data with template spatial structure applied
         """
         if isinstance(data, xr.DataArray):
-            data = TemplateManager.build_array(template_dict, data.values)
+            data = TemplateManager.build_array(template_dict, data.data)
         elif isinstance(data, np.ndarray):
             data = TemplateManager.build_array(template_dict, data)
         elif isinstance(data, xr.Dataset):
             vars = template_dict['variables']
-            template = TemplateManager.build_array(template_dict, data[vars[0]].values)
+            template = TemplateManager.build_array(template_dict, data[vars[0]].data)
             data = xr.Dataset({var: template.copy(data=data[var]) for var in vars})
         
         # Lazy import to avoid circular dependency
