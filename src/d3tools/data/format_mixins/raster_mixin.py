@@ -176,8 +176,9 @@ class RasterMixin(FormatMixin):
         if self.format == 'geotiff':
             if data.chunks is not None:
                 # If data is chunked, save it in chunks
-                from ..io_utils_raster import save_raster_in_chunks
+                from ..io_utils_raster import save_raster_in_chunks, save_raster_as_cog
                 save_raster_in_chunks(data, path)
+                #save_raster_as_cog(data, path)
             else:
                 # If not chunked, write directly
                 data.rio.to_raster(path, compress='LZW', windowed=np.prod(data.shape) > 1e8)

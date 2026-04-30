@@ -3,6 +3,34 @@ import xarray as xr
 import numpy as np
 import rasterio
 
+def save_raster_as_cog(data: xr.DataArray, path: str) -> None:
+    y_name = data.rio.y_dim
+    x_name = data.rio.x_dim
+
+    profile = {
+        "driver": "COG",
+        "height": data.sizes[y_name],
+        "width": data.sizes[x_name],
+        "count": 1,
+        "dtype": str(data.dtype),
+        "crs": data.rio.crs,
+        "transform": data.rio.transform(),
+
+        "compress": "LZW",
+        "blocksize": 512,
+        "overview_resampling": "average"
+    }
+
+    with rasterio.open(path, 'w', **profile) as dst:
+        dst.write(data.values)
+
+        # Convert all attrs to strings for GeoTIFF tags
+        tags = {k: str(v) for k, v in data.attrs.items()}
+        dst.update_tags(**tags)
+
+        # Set nodata value if available
+        dst.nodata = data.attrs.get('_FillValue', data.rio.nodata)
+
 def save_raster_in_chunks(data: xr.DataArray, path: str, chunk_mb = 128) -> None:
     y_name = data.rio.y_dim
     x_name = data.rio.x_dim
