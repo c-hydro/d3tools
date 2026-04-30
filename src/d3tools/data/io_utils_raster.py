@@ -19,19 +19,19 @@ def save_raster_in_chunks(data: xr.DataArray, path: str, chunk_mb = 128) -> None
     }
 
     blockxsize, blockysize = optimise_blocksizes(data, target_chunk_mb = chunk_mb)
-    profile.update(blockxsize=blockxsize, blockysize=blockysize, tiled=True)
+    profile.update(blockxsize=blockxsize, blockysize=blockysize, tiled=True, BIGTIFF="YES")
 
     with rasterio.open(path, 'w', **profile) as dst:
         for ji, window in dst.block_windows(1):
             arr = data.isel(
                 **{x_name: slice(window.col_off, window.col_off + window.width),
-                    y_name: slice(window.row_off, window.row_off + window.height)}
+                   y_name: slice(window.row_off, window.row_off + window.height)}
             ).values
             # Ensure arr has the correct shape for rasterio (add band dimension if missing)
             if arr.ndim == 2: arr = arr[np.newaxis, :, :]
             dst.write(arr, window=window)
 
-            print(f'Wrote window {window}')
+            #print(f'Wrote window {window}')
 
         # Convert all attrs to strings for GeoTIFF tags
         tags = {k: str(v) for k, v in data.attrs.items()}
@@ -39,6 +39,10 @@ def save_raster_in_chunks(data: xr.DataArray, path: str, chunk_mb = 128) -> None
 
         # Set nodata value if available
         dst.nodata = data.attrs.get('_FillValue', data.rio.nodata)
+
+        # build overviews (pyramids)
+        dst.build_overviews([2, 4, 8, 16], rasterio.enums.Resampling.average)
+        dst.update_tags(ns='rio_overview', resampling='average')
 
 def optimise_blocksizes(data: xr.DataArray, target_chunk_mb = 128) -> tuple[int, int]:
     y_name = data.rio.y_dim
