@@ -96,6 +96,9 @@ class Dataset(metaclass=DatasetMeta):
         else:
             self.nan_value = None
 
+        if 'fallback' in kwargs:
+            self.fallback = kwargs.pop('fallback')
+
     def __init__(self, **kwargs):
         """Initialize Dataset with configuration.
         
@@ -308,6 +311,9 @@ class Dataset(metaclass=DatasetMeta):
             self.parents = {k: p.update(**update_kwargs) for k, p in source_dataset.parents.items()}
             if hasattr(source_dataset, 'fn'):
                 self.fn = source_dataset.fn
+
+        if hasattr(source_dataset, 'fallback') and source_dataset.fallback is not None:
+            self.fallback = source_dataset.fallback.update(**update_kwargs)
         
         # Always preserve/copy tags (merged with update_kwargs)
         new_tags = source_dataset.tags.copy()
@@ -525,6 +531,9 @@ class Dataset(metaclass=DatasetMeta):
         # if not, check if it has parents to inherit from
         elif hasattr(self, 'parents') and self.parents is not None:
             raw_data = self.make_data(time, **kwargs)
+        # if not, try fallback dataset if configured
+        elif hasattr(self, 'fallback') and self.fallback is not None:
+            return self.fallback.get_data(time, as_is = as_is, **kwargs)
         # if the data is not available and there are no parents, raise an error
         else:
             raise FileNotFoundError(f'Could not resolve data from {full_key}.')
