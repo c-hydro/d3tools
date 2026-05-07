@@ -450,15 +450,15 @@ class DataCatalogue:
         # Now collect n dates from last_month_with_data and nearby months
         last_date = []
         search_month = last_month_with_data
-        end_search = Month(now.year, now.month)
+        end_search   = last_month_with_data - 12*5 if lim is None else Month.from_date(lim)
         
         # Search forward from last known month
-        while search_month <= end_search and len(last_date) < n * 3:  # Get extra to ensure we have enough
+        while search_month >= end_search and len(last_date) < n:
             month_times = self.get_times(search_month, **kwargs)
             if len(month_times) > 0:
                 valid_time = [t for t in month_times if t <= now]
                 last_date.extend(valid_time)
-            search_month = search_month + 1
+            search_month = search_month - 1
         
         # Sort and take the most recent n
         last_date.sort(reverse=True)
@@ -571,7 +571,7 @@ class DataCatalogue:
         first_date = []
         search_month = first_month_with_data
         # Set a reasonable end limit (any_date's month + buffer)
-        end_limit = end_month + 12  # Look up to 1 year past any_date
+        end_limit = end_month + 12*5  # Look up to 5 year past any_date
         
         while len(first_date) < n and search_month <= end_limit:
             this_month_times = self.get_times(search_month, **kwargs)

@@ -662,6 +662,81 @@ class TestGetLastDate:
         result = dataset.get_last_date()
         
         assert result == dt.datetime(2024, 1, 5)
+
+    def test_get_last_date_multiple_single_month(self, tmp_path):
+        """Test get_last_date returns n latest dates from one month."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+
+        for day in range(1, 6):
+            (tmp_path / f"data_202401{day:02d}.tif").touch()
+
+        result = dataset.get_last_date(n=3, now=dt.datetime(2024, 1, 31))
+
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert result[0] == dt.datetime(2024, 1, 5)
+        assert result[1] == dt.datetime(2024, 1, 4)
+        assert result[2] == dt.datetime(2024, 1, 3)
+
+    def test_get_last_date_sparse_months_gap_to_now(self, tmp_path):
+        """Test get_last_date collects latest values across sparse months."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+
+        (tmp_path / "data_20240205.tif").touch()
+        (tmp_path / "data_20240504.tif").touch()
+
+        result = dataset.get_last_date(n=2, now=dt.datetime(2024, 12, 31))
+
+        assert result == [
+            dt.datetime(2024, 5, 4),
+            dt.datetime(2024, 2, 5),
+        ]
+
+    def test_get_last_date_collects_previous_months_when_last_month_sparse(self, tmp_path):
+        """Test get_last_date walks backward when the last month has few files."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+
+        (tmp_path / "data_20240310.tif").touch()
+        (tmp_path / "data_20240420.tif").touch()
+        (tmp_path / "data_20240504.tif").touch()
+
+        result = dataset.get_last_date(n=3, now=dt.datetime(2024, 12, 31))
+
+        assert len(result) == 3
+        assert result == [
+            dt.datetime(2024, 5, 4),
+            dt.datetime(2024, 4, 20),
+            dt.datetime(2024, 3, 10),
+        ]
+
+    def test_get_last_date_returns_min_available_within_lim(self, tmp_path):
+        """Test get_last_date respects lim and returns only available values in range."""
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif"
+        )
+
+        (tmp_path / "data_20190115.tif").touch()
+        (tmp_path / "data_20240110.tif").touch()
+
+        result = dataset.get_last_date(
+            n=3,
+            now=dt.datetime(2024, 12, 31),
+            lim=dt.datetime(2024, 1, 1),
+        )
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result == [dt.datetime(2024, 1, 10)]
     
     def test_get_last_date_delegates_to_catalog(self, tmp_path):
         """Test that Dataset.get_last_date delegates to catalog."""
