@@ -3,10 +3,11 @@
 from dataclasses import dataclass
 
 from typing import Any
+import os
 
 from .parsers import workflow_section_from_config
 from ..parse.string_rendering import normalise_string
-from ..timestepping import TimeRange
+from ..timestepping import TimeRange, TimeWindow
 
 WORKFLOW_SECTION_ALIASES = {
     "door_downloader": "door",
@@ -41,6 +42,7 @@ class WorkflowSection:
     engine: str
     definition: Any
     value: Any
+    exec_options: dict[str, Any] = None
 
     @classmethod
     def from_config(
@@ -65,13 +67,15 @@ class WorkflowSection:
             engine = resolve_workflow_section_alias(name)
         if engine is None:
             raise ValueError(f"Key '{name}' is not a recognized workflow section")
+        
+        exec_options = definition.get("exec_options", {})
         value = workflow_section_from_config(
             engine,
             definition,
             build_object=build_object,
             strict_imports=strict_imports,
         )
-        return cls(name=name, engine=engine, definition=definition, value=value)
+        return cls(name=name, engine=engine, definition=definition, value=value, exec_options=exec_options)
     
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
@@ -91,9 +95,13 @@ class WorkflowSection:
         process = self.value
         last_available, last_done = process.get_last_ts()
         
+        repeat_window = (self.exec_options or {}).get("repeat_window", os.getenv("REPEAT_WINDOW", None))
+        if repeat_window is not None:
+            repeat_window = TimeWindow.from_str(repeat_window)
+
         if last_available is None or last_done is None:
             raise ValueError(f"Workflow section '{self.name}' has not enough available data to determine time range for execution")
-        elif last_available <= last_done:
+        elif last_available <= last_done and repeat_window is None:
             return None
 
         next_ts = last_done + 1
@@ -103,5 +111,9 @@ class WorkflowSection:
         
         start = next_ts.start
         end = (last_ts - 1).end
+        time_range = TimeRange(start, end)
 
-        return TimeRange(start, end)
+        if repeat_window is not None:
+            time_range = time_range.extend(repeat_window, before = True)
+        
+        return time_range

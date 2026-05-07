@@ -4,6 +4,7 @@ Tests for workflow-section aliasing and WorkflowSection behavior.
 import datetime as dt
 
 import pytest
+from d3tools.timestepping import TimeWindow
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
@@ -67,6 +68,170 @@ class TestWorkflowSection:
                 name="not_an_alias",
                 definition={"engine": "invalid_engine", "source": "ERA5", "options": {"ts_per_year": 36}},
             )
+
+    def test_from_config_extracts_exec_options_from_definition(self):
+        """from_config should extract exec_options dict from definition."""
+        section = WorkflowSection.from_config(
+            name="Download",
+            definition={
+                "source": "ERA5",
+                "exec_options": {"repeat_window": "3d", "other_option": "value"}
+            },
+        )
+
+        assert section.exec_options == {"repeat_window": "3d", "other_option": "value"}
+
+    def test_from_config_sets_exec_options_to_empty_dict_when_missing(self):
+        """from_config should set exec_options to {} when not in definition."""
+        section = WorkflowSection.from_config(
+            name="Download",
+            definition={"source": "ERA5"},
+        )
+
+        assert section.exec_options == {}
+
+    def test_from_config_stores_empty_exec_options_dict_not_none(self):
+        """from_config should store {} not None for easier dict operations."""
+        section = WorkflowSection.from_config(
+            name="Download",
+            definition={"engine": "door", "source": "ERA5"},
+        )
+
+        # Should be able to call .get() without checking for None
+        assert section.exec_options.get("repeat_window") is None
+
+    def test_direct_construction_with_exec_options(self):
+        """WorkflowSection can be constructed with exec_options dict."""
+        section = WorkflowSection(
+            name="Download",
+            engine="door",
+            definition={},
+            value={},
+            exec_options={"repeat_window": "2d", "param": "val"},
+        )
+
+        assert section.exec_options["repeat_window"] == "2d"
+        assert section.exec_options["param"] == "val"
+
+    def test_direct_construction_with_none_exec_options(self):
+        """WorkflowSection can be constructed with exec_options=None."""
+        section = WorkflowSection(
+            name="Download",
+            engine="door",
+            definition={},
+            value={},
+            exec_options=None,
+        )
+
+        assert section.exec_options is None
+
+    def test_get_run_timerange_uses_repeat_window_from_exec_options(self, monkeypatch):
+        """get_run_timerange should use repeat_window from exec_options."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                # last_available=2024-01-04, last_done=2024-01-04 (no new work)
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        # Clear environment
+        monkeypatch.delenv("REPEAT_WINDOW", raising=False)
+
+        # Without exec_options, should return None
+        section1 = WorkflowSection("Download", "door", {}, MockProcess(), exec_options={})
+        assert section1.get_run_timerange() is None
+
+        # With exec_options repeat_window, should reopen work
+        section2 = WorkflowSection(
+            "Download", "door", {}, MockProcess(),
+            exec_options={"repeat_window": "2d"}
+        )
+        time_range = section2.get_run_timerange()
+        assert time_range is not None
+        assert time_range.start == dt.datetime(2024, 1, 3)
+
+    def test_get_run_timerange_falls_back_to_env_var_when_no_exec_options(self, monkeypatch):
+        """get_run_timerange should fall back to REPEAT_WINDOW env var when exec_options doesn't have repeat_window."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        monkeypatch.setenv("REPEAT_WINDOW", "1d")
+
+        # Section with empty exec_options should use env var
+        section = WorkflowSection("Download", "door", {}, MockProcess(), exec_options={})
+        time_range = section.get_run_timerange()
+
+        assert time_range is not None
+        assert time_range.start == dt.datetime(2024, 1, 4)
+
+    def test_get_run_timerange_prefers_exec_options_over_env_var(self, monkeypatch):
+        """get_run_timerange should prefer repeat_window from exec_options over REPEAT_WINDOW env var."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        monkeypatch.setenv("REPEAT_WINDOW", "5d")
+
+        # Section with exec_options should use that, not env var
+        section = WorkflowSection(
+            "Download", "door", {}, MockProcess(),
+            exec_options={"repeat_window": "2d"}
+        )
+        time_range = section.get_run_timerange()
+
+        assert time_range is not None
+        # 5-day window would start from 2023-12-31, 2-day window starts from 2024-01-03
+        assert time_range.start == dt.datetime(2024, 1, 3)
 
     def test_get_run_timerange_returns_missing_output_window(self):
         """get_run_timerange should span the timesteps still missing from output."""
@@ -162,3 +327,37 @@ class TestWorkflowSection:
         section = WorkflowSection("Download", "door", {}, MockProcess())
 
         assert section.get_run_timerange() is None
+
+    def test_get_run_timerange_repeats_same_timestep_with_repeat_window(self):
+        """get_run_timerange should reopen work when repeat_window is in exec_options."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        section = WorkflowSection(
+            "Download", "door", {}, MockProcess(),
+            exec_options={"repeat_window": "3d"}
+        )
+
+        time_range = section.get_run_timerange()
+
+        assert time_range is not None
+        assert time_range.start == dt.datetime(2024, 1, 2)
+        assert time_range.end == dt.datetime(2024, 1, 4, 23, 59, 59)

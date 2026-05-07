@@ -2,7 +2,7 @@ import os
 import datetime as dt
 from typing import Optional
 
-from ..timestepping import TimeRange
+from ..timestepping import TimeRange, TimeWindow
 from ..logging import WorkflowLogManager
 
 from .utils import load_jsons
