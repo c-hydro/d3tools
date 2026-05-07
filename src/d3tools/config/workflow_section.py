@@ -91,6 +91,12 @@ class WorkflowSection:
         )
         return cls(name=name, engine=engine, definition=definition, value=value, exec_options=exec_options)
     
+    def get_exec_option(self, option_name: str, default: Any = None) -> Any:
+        """Helper to get an execution option for this section."""
+
+        option_env_name = f"{option_name.upper()}"
+        return os.getenv(option_env_name, (self.exec_options or {}).get(option_name, default))
+
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
 
@@ -109,7 +115,7 @@ class WorkflowSection:
         process = self.value
         last_available, last_done = process.get_last_ts()
         
-        repeat_window = (self.exec_options or {}).get("repeat_window", os.getenv("REPEAT_WINDOW", None))
+        repeat_window = self.get_exec_option("repeat_window")
         if repeat_window is not None:
             repeat_window = TimeWindow.from_str(repeat_window)
 
@@ -162,7 +168,7 @@ class WorkflowSection:
                 time_range=None,
                 executed=False,
                 reason="nothing to do",
-            )
+            )           
 
         # Execute based on engine type
         match engine:
