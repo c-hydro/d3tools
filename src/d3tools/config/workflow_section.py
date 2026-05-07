@@ -83,6 +83,7 @@ class WorkflowSection:
 
         Returns:
             TimeRange spanning the timesteps that still need to be processed.
+            None if there are no timesteps to process (i.e. all available timesteps have already been processed).
 
         Raises:
             ValueError: If the section has no available data.
@@ -92,7 +93,9 @@ class WorkflowSection:
         
         if last_available is None or last_done is None:
             raise ValueError(f"Workflow section '{self.name}' has not enough available data to determine time range for execution")
-        
+        elif last_available <= last_done:
+            return None
+
         next_ts = last_done + 1
         last_ts = next_ts
         while last_ts.end <= last_available.end:

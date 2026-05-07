@@ -183,6 +183,15 @@ class WorkflowDefinition:
             if section_time_range is None:
                 section_time_range = section.get_run_timerange()
 
+            # if section_time_range is None, skip execution
+            if section_time_range is None:
+                if self.logger:
+                    self.logger.get_logger().info(
+                        f"Skipping workflow section '{section_name}' with engine '{engine}': "
+                        f"nothing to do!"
+                    )
+                continue
+
             # Execute section with logging context if logger exists
             if self.logger:
                 with self.logger.section_execution(section_name, engine=engine):

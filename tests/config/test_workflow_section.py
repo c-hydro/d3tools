@@ -83,6 +83,9 @@ class TestWorkflowSection:
             def __sub__(self, n):
                 return self.__add__(-n)
 
+            def __le__(self, other):
+                return self.start <= other.start
+
         class MockProcess:
             def get_last_ts(self):
                 return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 2)
@@ -109,6 +112,9 @@ class TestWorkflowSection:
             def __sub__(self, n):
                 return self.__add__(-n)
 
+            def __le__(self, other):
+                return self.start <= other.start
+
         class MockProcess:
             def get_last_ts(self):
                 return MockTimeStep(2024, 1, 4), None
@@ -129,3 +135,30 @@ class TestWorkflowSection:
 
         with pytest.raises(ValueError, match="not enough available data"):
             section.get_run_timerange()
+
+    def test_get_run_timerange_returns_none_when_same_timestep(self):
+        """get_run_timerange should return None when available and done are the same timestep."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        assert section.get_run_timerange() is None
