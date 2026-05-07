@@ -450,6 +450,19 @@ class TestWorkflowDefinitionRunTimerangeResolution:
             def get_run_timerange(self):
                 return self._time_range
 
+            def run(self, time_range):
+                if time_range is None:
+                    time_range = self.get_run_timerange()
+                if time_range is None:
+                    return
+                # Delegate to the underlying process
+                if self.engine == 'door':
+                    self.value.get_data(time_range)
+                elif self.engine == 'dam':
+                    self.value.run(time_range)
+                elif self.engine == 'dryes':
+                    self.value.compute(time_range)
+
         from d3tools.config import parsing_pipeline
 
         first_range = TimeRange("2024-01-01", "2024-01-31")
@@ -568,6 +581,19 @@ class TestWorkflowDefinitionRunTimerangeResolution:
 
             def get_run_timerange(self):
                 return self._time_range
+
+            def run(self, time_range):
+                if time_range is None:
+                    time_range = self.get_run_timerange()
+                if time_range is None:
+                    return
+                # Delegate to the underlying process
+                if self.engine == 'door':
+                    self.value.get_data(time_range)
+                elif self.engine == 'dam':
+                    self.value.run(time_range)
+                elif self.engine == 'dryes':
+                    self.value.compute(time_range)
 
         from d3tools.config import parsing_pipeline
 

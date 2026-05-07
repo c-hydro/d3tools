@@ -22,6 +22,20 @@ WORKFLOW_SECTION_ALIASES = {
     "calculate": "dryes",
 }
 
+
+@dataclass
+class WorkflowSectionRunResult:
+    """Outcome of a WorkflowSection run attempt.
+
+    Fields are intentionally minimal and logging-oriented.
+    """
+
+    section_name: str
+    engine: str
+    time_range: TimeRange | None
+    executed: bool
+    reason: str | None = None
+
 def resolve_workflow_section_alias(section: str) -> str | None:
     """Resolve a workflow-section alias to an engine keyword."""
     return WORKFLOW_SECTION_ALIASES.get(normalise_string(section), None)
@@ -117,3 +131,57 @@ class WorkflowSection:
             time_range = time_range.extend(repeat_window, before = True)
         
         return time_range
+
+    def run(self, time_range: TimeRange | None = None) -> WorkflowSectionRunResult:
+        """Execute a single workflow section using its engine-specific interface.
+
+        Args:
+            time_range: TimeRange for execution
+
+        Returns:
+            WorkflowSectionRunResult with execution/skipping details.
+
+        Raises:
+            TypeError: If the section doesn't have a recognized engine
+        """
+
+        # Get the actual workflow object
+        process = self.value
+        engine = self.engine
+        section_name = self.name if self.name else "Unnamed Section"
+        
+        # figure out the time range for this section, if not provided
+        if time_range is None:
+            time_range = self.get_run_timerange()
+
+        # If no time range is available, section is skipped.
+        if time_range is None:
+            return WorkflowSectionRunResult(
+                section_name=section_name,
+                engine=engine,
+                time_range=None,
+                executed=False,
+                reason="nothing to do",
+            )
+
+        # Execute based on engine type
+        match engine:
+            case 'door':
+                process.get_data(time_range)
+            case 'dam':
+                process.run(time_range)
+            case 'dryes':
+                process.compute(time_range)
+            case _:
+                raise TypeError(
+                    f"Workflow section '{section_name}' has unrecognized engine '{engine}'. "
+                    f"Expected one of: 'door', 'dam', 'dryes'"
+                )
+
+        return WorkflowSectionRunResult(
+            section_name=section_name,
+            engine=engine,
+            time_range=time_range,
+            executed=True,
+            reason=None,
+        )
