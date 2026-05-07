@@ -171,8 +171,27 @@ class WorkflowSection:
                 time_range=None,
                 executed=False,
                 reason="nothing to do",
+            )
+        else:
+            output = WorkflowSectionRunResult(
+                section_name=section_name,
+                engine=engine,
+                time_range=time_range,
+                executed=True,
+                reason=None,
             )           
 
+        split = self.get_exec_option("split", "false", asbool=True)
+        if split and time_range.length() > 31:
+            time_ranges = time_range.months
+            time_ranges[0].start = time_range.start
+            time_ranges[-1].end = time_range.end
+            results = []
+            for tr in time_ranges:
+                result = self._execute_section(process, engine, section_name, tr)
+                results.append(result)
+            return output._replace(reason=f"split into {len(time_ranges)} sub-ranges")
+            
         # Execute based on engine type
         match engine:
             case 'door':
@@ -187,10 +206,4 @@ class WorkflowSection:
                     f"Expected one of: 'door', 'dam', 'dryes'"
                 )
 
-        return WorkflowSectionRunResult(
-            section_name=section_name,
-            engine=engine,
-            time_range=time_range,
-            executed=True,
-            reason=None,
-        )
+        return output
