@@ -121,8 +121,8 @@ def prepare_workflow_log(options: Any):
 
 def collect_workflow_sections(
         options: Any,
-        build_workflow_objects: bool = False,
-        strict_workflow_imports: bool = False,
+        build_workflow_objects: bool = True,
+        strict_workflow_imports: bool = True,
     ):
     """Collect ordered workflow sections recognized by alias mapping.
 
@@ -142,32 +142,42 @@ def collect_workflow_sections(
         build_workflow_objects: Whether to build runtime objects for sections.
         strict_workflow_imports: If ``True``, propagate build/import failures.
     """
+
+    # a default engine and exec_options can be specified at the top-level and will be passed to all sections that don't specify them explicitly
+    def_engine       = options.get("engine", None, ignore_case=True)
+    def_exec_options = options.get("exec_options", {}, ignore_case=True)
+
+    default_definition = {"engine": def_engine, "exec_options": def_exec_options}
+
     collected = []
     collected_keys = []
     for key, value in options.items():
         if key == "workflow_sections":
             continue
-        # all the keys that are not recognised as
-        # reserved top-level keys are considered workflow sections
+        # all the keys that are not recognised as reserved top-level keys are considered workflow sections
         if normalise_string(key) in WorkflowDefinition.RESERVED_TOP_LEVEL_KEYS:
             continue
         collected_keys.append(key)
 
         if isinstance(value, list):
+            i=1
             for item in value:
+                this_definition = {**default_definition, **item}
                 collected.append(
                     WorkflowSection.from_config(
-                        name=key,
-                        definition=item,
+                        name=f'{key}_{i:02d}',
+                        definition=this_definition,
                         build_object=build_workflow_objects,
                         strict_imports=strict_workflow_imports,
                     )
                 )
+                i+=1
         else:
+            this_definition = {**default_definition, **value}
             collected.append(
                 WorkflowSection.from_config(
                     name=key,
-                    definition=value,
+                    definition=this_definition,
                     build_object=build_workflow_objects,
                     strict_imports=strict_workflow_imports,
                 )

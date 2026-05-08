@@ -30,6 +30,41 @@ class TestWorkflowSectionAliases:
         assert resolve_workflow_section_alias("Calculate") == "dryes"
         assert resolve_workflow_section_alias("UnknownSection") is None
 
+    def test_resolve_workflow_section_alias_with_suffix_numbers(self):
+        """Alias resolver should match when alias is contained in section name with suffix."""
+        assert resolve_workflow_section_alias("Download_01") == "door"
+        assert resolve_workflow_section_alias("Process_02") == "dam"
+        assert resolve_workflow_section_alias("Calculate_03") == "dryes"
+        assert resolve_workflow_section_alias("Ingest_99") == "door"
+        assert resolve_workflow_section_alias("Publish_05") == "dam"
+
+    def test_resolve_workflow_section_alias_with_custom_prefix(self):
+        """Alias resolver should match when alias is contained in custom-prefixed name."""
+        assert resolve_workflow_section_alias("MyDownload") == "door"
+        assert resolve_workflow_section_alias("DataProcess") == "dam"
+        assert resolve_workflow_section_alias("RiskCalculate") == "dryes"
+        assert resolve_workflow_section_alias("MyIngest") == "door"
+        assert resolve_workflow_section_alias("FinalPublish") == "dam"
+
+    def test_resolve_workflow_section_alias_with_complex_names(self):
+        """Alias resolver should match with complex naming schemes."""
+        assert resolve_workflow_section_alias("Stage1_Download_01") == "door"
+        assert resolve_workflow_section_alias("Data_Processing_Step_02") == "dam"
+        assert resolve_workflow_section_alias("Final_Calculate_Index") == "dryes"
+
+    def test_resolve_workflow_section_alias_case_insensitive(self):
+        """Alias resolver should be case-insensitive."""
+        assert resolve_workflow_section_alias("DOWNLOAD") == "door"
+        assert resolve_workflow_section_alias("Process_01") == "dam"
+        assert resolve_workflow_section_alias("MYDATAPROCESS") == "dam"
+        assert resolve_workflow_section_alias("MyCalculate") == "dryes"
+
+    def test_resolve_workflow_section_alias_no_match(self):
+        """Alias resolver should return None for names without recognized aliases."""
+        assert resolve_workflow_section_alias("Transform") is None
+        assert resolve_workflow_section_alias("CustomStep_01") is None
+        assert resolve_workflow_section_alias("UnknownOperation") is None
+
 
 class TestWorkflowSection:
     """Test WorkflowSection dataclass construction behavior."""

@@ -23,7 +23,11 @@ WORKFLOW_SECTION_ALIASES = {
 
 def resolve_workflow_section_alias(section: str) -> str | None:
     """Resolve a workflow-section alias to an engine keyword."""
-    return WORKFLOW_SECTION_ALIASES.get(normalise_string(section), None)
+
+    for alias, engine in WORKFLOW_SECTION_ALIASES.items():
+        if normalise_string(alias) in normalise_string(section):
+            return engine
+    return None
 
 @dataclass
 class WorkflowSection:

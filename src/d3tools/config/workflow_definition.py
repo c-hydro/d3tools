@@ -36,7 +36,7 @@ class WorkflowDefinition:
             wf.run(time_range=TimeRange("2024-01-01", "2024-12-31"))
     """
 
-    RESERVED_TOP_LEVEL_KEYS = {"workflow_name", "tags", "datasets", "env", "workflow_log", "workflow_sections"}
+    RESERVED_TOP_LEVEL_KEYS = {"workflow_name", "tags", "datasets", "env", "workflow_log", "workflow_sections", "exec_options", "engine", "other_options"}
 
     def __init__(
         self, 
@@ -70,16 +70,19 @@ class WorkflowDefinition:
             build_workflow_objects=build_workflow_objects,
             strict_workflow_imports=strict_workflow_imports,
         )
-        
+
         # Store full parsed config as Options for flexible access
         self.options = Options(parsed)
-        
+
         # Extract workflow components as proper attributes
         self.workflow_sections: list = self.options.get("workflow_sections", [], ignore_case=True)
         self.workflow_name: str = self.options.get("workflow_name", "workflow", ignore_case=True)
         self.tags: dict = self.options.get("tags", {}, ignore_case=True)
         self.datasets: dict = self.options.get("datasets", {}, ignore_case=True)
         
+        # Save other_options for potential future use (not currently used in WorkflowDefinition)
+        self.other_options = self.options.get("other_options", {}, ignore_case=True)
+
         # Initialize logger if configured
         workflow_log_config = self.options.get("workflow_log", {}, ignore_case=True)
         self.logger: Optional[WorkflowLogManager] = WorkflowLogManager.from_dict(workflow_log_config)

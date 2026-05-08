@@ -72,6 +72,19 @@ def config_with_workflow_log():
     }
 
 
+@pytest.fixture
+def config_with_other_options():
+    """Configuration with other_options."""
+    return {
+        "TAGS": {},
+        "DATASETS": {},
+        "other_options": {
+            "custom_setting": "custom_value",
+            "nested": {"key": "value"}
+        }
+    }
+
+
 # ============================================================================
 # Test Classes
 # ============================================================================
@@ -192,6 +205,21 @@ class TestWorkflowDefinitionAttributes:
         """Logger should be None when not configured."""
         wf = WorkflowDefinition(minimal_config)
         # Logger may be None or a default instance depending on implementation
+
+    def test_extracts_other_options(self, config_with_other_options):
+        """Should extract other_options as a dict attribute."""
+        wf = WorkflowDefinition(config_with_other_options)
+        
+        assert hasattr(wf, "other_options")
+        assert isinstance(wf.other_options, dict)
+        assert wf.other_options["custom_setting"] == "custom_value"
+        assert wf.other_options["nested"]["key"] == "value"
+
+    def test_other_options_empty_when_not_configured(self, minimal_config):
+        """other_options should be empty dict when not configured."""
+        wf = WorkflowDefinition(minimal_config)
+        assert hasattr(wf, "other_options")
+        assert wf.other_options == {}
 
 
 class TestWorkflowDefinitionLoad:

@@ -174,7 +174,7 @@ class TestCollectWorkflowSections:
             }
         )
 
-        collected = collect_workflow_sections(options)
+        collected = collect_workflow_sections(options,  False, False)
         sections = collected["workflow_sections"]
 
         assert all(isinstance(s, WorkflowSection) for s in sections)
@@ -194,12 +194,12 @@ class TestCollectWorkflowSections:
             }
         )
 
-        collected = collect_workflow_sections(options)
+        collected = collect_workflow_sections(options, False, False)
         sections = collected["workflow_sections"]
 
         assert len(sections) == 2
-        assert sections[0].name == "Publish"
-        assert sections[1].name == "Publish"
+        assert sections[0].name == "Publish_01"
+        assert sections[1].name == "Publish_02"
         assert sections[0].definition["process_list"][0]["function"] == "a"
         assert sections[1].definition["process_list"][0]["function"] == "b"
 
@@ -229,6 +229,163 @@ class TestCollectWorkflowSections:
 
         assert len(collected["workflow_sections"]) == 1
         assert calls == [("Download", True, True)]
+
+    def test_collect_workflow_sections_applies_workflow_level_defaults(self):
+        """Workflow-level engine and exec_options should be applied to sections."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "engine": "door",
+                "exec_options": {"timeout": 300},
+                "Download": {"source": "ERA5"},
+                "Process": {"engine": "dam", "process_list": [{"function": "a"}]},
+            }
+        )
+
+        collected = collect_workflow_sections(options, build_workflow_objects=False)
+        sections = collected["workflow_sections"]
+
+        # Download should inherit workflow-level defaults
+        assert sections[0].name == "Download"
+        assert sections[0].engine == "door"
+        assert sections[0].exec_options == {"timeout": 300}
+
+        # Process should override the workflow-level engine but keep exec_options
+        assert sections[1].name == "Process"
+        assert sections[1].engine == "dam"
+        assert sections[1].exec_options == {"timeout": 300}
+
+    def test_collect_workflow_sections_numbers_list_items(self):
+        """List-valued sections should be numbered with 2-digit padding (section_01, section_02, etc.)."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Process": [
+                    {"engine": "dam", "process_list": [{"function": "a"}]},
+                    {"engine": "dam", "process_list": [{"function": "b"}]},
+                    {"engine": "dam", "process_list": [{"function": "c"}]},
+                ],
+            }
+        )
+
+        collected = collect_workflow_sections(options, build_workflow_objects=False)
+        sections = collected["workflow_sections"]
+
+        assert len(sections) == 3
+        assert sections[0].name == "Process_01"
+        assert sections[1].name == "Process_02"
+        assert sections[2].name == "Process_03"
+
+    def test_collect_workflow_sections_removes_collected_keys_from_options(self):
+        """Collected workflow section keys should be removed from top-level options."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Download": {"source": "ERA5"},
+                "Process": {"process_list": [{"function": "a"}]},
+            }
+        )
+
+        collected = collect_workflow_sections(options, build_workflow_objects=False)
+
+        # Keys should be removed from options
+        assert "Download" not in collected
+        assert "Process" not in collected
+        # Preserved keys should still be there
+        assert "TAGS" in collected
+        assert "DATASETS" in collected
+
+    def test_collect_workflow_sections_resolves_alias_in_section_name_with_suffix(self):
+        """Alias resolution should match when alias is contained in section name (e.g., Process_01)."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Process_01": {"engine": "dam", "process_list": [{"function": "a"}]},
+                "Download_02": {"engine": "door", "source": "ERA5"},
+                "Calculate_03": {"engine": "dryes", "index_options": {"index": "SPI"}},
+            }
+        )
+
+        collected = collect_workflow_sections(options, build_workflow_objects=False)
+        sections = collected["workflow_sections"]
+
+        assert len(sections) == 3
+        # Verify correct engines resolved from aliases contained in names
+        assert sections[0].name == "Process_01"
+        assert sections[0].engine == "dam"
+        assert sections[1].name == "Download_02"
+        assert sections[1].engine == "door"
+        assert sections[2].name == "Calculate_03"
+        assert sections[2].engine == "dryes"
+
+    def test_collect_workflow_sections_resolves_alias_with_custom_prefix(self):
+        """Alias resolution should work with custom prefixes (e.g., MyProcess, DataDownload)."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "MyProcess": {"engine": "dam", "process_list": [{"function": "a"}]},
+                "DataDownload": {"engine": "door", "source": "ERA5"},
+                "RiskCalculate": {"engine": "dryes", "index_options": {"index": "SPI"}},
+            }
+        )
+
+        collected = collect_workflow_sections(options, build_workflow_objects=False)
+        sections = collected["workflow_sections"]
+
+        assert len(sections) == 3
+        assert sections[0].engine == "dam"
+        assert sections[1].engine == "door"
+        assert sections[2].engine == "dryes"
+
+    def test_collect_workflow_sections_default_flags_are_true(self, monkeypatch):
+        """Default values for build_workflow_objects and strict_workflow_imports should be True."""
+        calls = []
+        from d3tools.config import parsing_pipeline as pipeline
+
+        def _fake_from_config(name, definition, build_object=False, strict_imports=False):
+            calls.append((name, build_object, strict_imports))
+            return WorkflowSection(name=name, engine="dam", definition=definition, value=definition)
+
+        monkeypatch.setattr(pipeline.WorkflowSection, "from_config", staticmethod(_fake_from_config))
+
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "Process": {"process_list": [{"function": "a"}]},
+            }
+        )
+
+        # Call without explicit flags - should use defaults (True, True)
+        collected = collect_workflow_sections(options)
+
+        assert len(collected["workflow_sections"]) == 1
+        assert calls == [("Process", True, True)]
+
+    def test_collect_workflow_sections_exact_alias_match_still_works(self):
+        """Exact alias matches (without suffix) should still work."""
+        options = Options(
+            {
+                "TAGS": {},
+                "DATASETS": {},
+                "download": {"engine": "door", "source": "ERA5"},
+                "process": {"engine": "dam", "process_list": [{"function": "a"}]},
+                "calculate": {"engine": "dryes", "index_options": {"index": "SPI"}},
+            }
+        )
+
+        collected = collect_workflow_sections(options, build_workflow_objects=False)
+        sections = collected["workflow_sections"]
+
+        assert len(sections) == 3
+        assert sections[0].engine == "door"
+        assert sections[1].engine == "dam"
+        assert sections[2].engine == "dryes"
 
 
 class TestParseOptionsIntegration:
