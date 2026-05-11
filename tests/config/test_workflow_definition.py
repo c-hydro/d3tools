@@ -137,14 +137,19 @@ class TestWorkflowDefinitionAttributes:
 
     def test_extracts_workflow_sections(self, config_with_sections):
         """Should extract workflow_sections as a list attribute."""
-        wf = WorkflowDefinition(config_with_sections)
+        wf = WorkflowDefinition(
+                config_with_sections,
+                build_workflow_objects=False)  # skip building workflow objects for this test
         
         assert isinstance(wf.workflow_sections, list)
         assert len(wf.workflow_sections) == 3
 
     def test_sections_have_correct_names(self, config_with_sections):
         """Workflow sections should have correct names and engines."""
-        wf = WorkflowDefinition(config_with_sections)
+        wf = WorkflowDefinition(
+                config_with_sections,
+                build_workflow_objects=False)  # skip building workflow objects for this test
+                    
         
         names = [s.name for s in wf.workflow_sections]
         engines = [s.engine for s in wf.workflow_sections]
@@ -154,7 +159,10 @@ class TestWorkflowDefinitionAttributes:
 
     def test_sections_preserve_order(self, config_with_sections):
         """Workflow sections should preserve definition order."""
-        wf = WorkflowDefinition(config_with_sections)
+        wf = WorkflowDefinition(
+                config_with_sections,
+                build_workflow_objects=False) 
+        
         names = [s.name for s in wf.workflow_sections]
         assert names == ["Download", "Process", "Calculate"]
 
