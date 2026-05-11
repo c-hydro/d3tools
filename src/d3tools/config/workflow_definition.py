@@ -88,8 +88,8 @@ class WorkflowDefinition:
     def load(
         cls,
         *paths: str,
-        build_workflow_objects: bool = False,
-        strict_workflow_imports: bool = False,
+        build_workflow_objects: bool = True,
+        strict_workflow_imports: bool = True,
     ) -> "WorkflowDefinition":
         """Load and parse workflow configuration from JSON file(s).
 
