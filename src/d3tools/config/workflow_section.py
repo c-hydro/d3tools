@@ -47,8 +47,8 @@ class WorkflowSection:
             cls,
             name: str,
             definition: Any,
-            build_object: bool = False,
-            strict_imports: bool = False,
+            build_object: bool = True,
+            strict_imports: bool = True,
         ) -> "WorkflowSection":
         """Build a workflow section from raw top-level key/value.
 

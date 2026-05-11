@@ -41,8 +41,8 @@ class WorkflowDefinition:
     def __init__(
         self, 
         config: dict | Options,
-        build_workflow_objects: bool = False,
-        strict_workflow_imports: bool = False
+        build_workflow_objects: bool = True,
+        strict_workflow_imports: bool = True
     ):
         """Initialize and parse workflow definition.
         
