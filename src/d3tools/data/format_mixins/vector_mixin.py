@@ -116,6 +116,13 @@ class VectorMixin(FormatMixin):
             # mode = 'a' if append else 'w'
             # data.to_file(path, driver='GeoJSON', mode=mode, **kwargs)
 
+            # ensure time columns are converted to strings
+            for col in data.columns:
+                if isinstance(data[col].iloc[0], np.datetime64):
+                    data[col] = data[col].apply(lambda x: x.astype('O'))
+                if isinstance(data[col].iloc[0], (dt.datetime, dt.date)):
+                    data[col] = data[col].apply(lambda x: x.isoformat())
+
             # convert the GeoDataFrame into a dictionary
             dict_data = json.loads(data.to_json())
             # if there is metadata, add it to the dictionary
