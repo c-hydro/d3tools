@@ -156,15 +156,18 @@ class VectorMixin(FormatMixin):
             GeoDataFrame object with metadata attached
         """
 
+        time = kwargs.pop('time', None)
+        if time is not None:
+            datatime = self.get_time_signature(time)
+            kwargs['time'] = datatime.strftime('%Y-%m-%d')
+
         if hasattr(data, 'attrs'):
+            if 'time' in data.attrs:
+                data.attrs.pop('time')
             kwargs.update(data.attrs)
         
         metadata = kwargs.copy()
         metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        time = kwargs.pop('time', None)
-        if time is not None:
-            datatime = self.get_time_signature(time)
-            metadata['time'] = datatime.strftime('%Y-%m-%d')
 
         data.attrs.update(metadata)
 
