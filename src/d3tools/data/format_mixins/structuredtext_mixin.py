@@ -144,6 +144,33 @@ class StructuredTextMixin(FormatMixin):
         with open(path, 'w') as f:
             json.dump(data, f, indent = 4)
 
+    def set_metadata(self, data, time = None, time_format = '%Y-%m-%d', **kwargs):
+        """
+        Set metadata for the data.
+        """
+        if not isinstance(data, gpd.GeoDataFrame):
+            return data
+        
+        self._set_format_to_geojson()
+        if hasattr(data, 'attrs'):
+            if 'long_name' in data.attrs:
+                data.attrs.pop('long_name')
+            kwargs.update(data.attrs)
+        
+        metadata = kwargs.copy()
+        metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        if time is not None:
+            datatime = self.get_time_signature(time)
+            metadata['time'] = datatime.strftime(time_format)
+
+        name = metadata.get('name', self.name)
+        if 'long_name' in metadata:
+            metadata.pop('long_name')
+
+        data.attrs.update(metadata)
+
+        return data
+
     def _set_format_to_geojson(self):
         # Detected GeoJSON structure - delegate to VectorMixin
         if not self.json_warning_issued:
