@@ -90,6 +90,7 @@ class TestTemplateManagerValidation:
             'spatial_dims': ('x', 'y'),
             'dims_starts': {'x': 0, 'y': 0},
             'dims_ends': {'x': 10, 'y': 10},
+            'dims_steps': {'x': 1, 'y': 1},
             'dims_lengths': {'x': 10, 'y': 10}
         }
         
@@ -109,6 +110,7 @@ class TestTemplateManagerValidation:
             'spatial_dims': ('x', 'y', 'z'),  # 3 instead of 2
             'dims_starts': {'x': 0, 'y': 0, 'z': 0},
             'dims_ends': {'x': 10, 'y': 10, 'z': 5},
+            'dims_steps': {'x': 1, 'y': 1, 'z': 1},
             'dims_lengths': {'x': 10, 'y': 10, 'z': 5}
         }
         
@@ -128,6 +130,7 @@ class TestTemplateManagerValidation:
             'spatial_dims': ('x', 'y'),
             'dims_starts': {'x': 0, 'y': 0},
             'dims_ends': {'x': 10, 'y': 10},
+            'dims_steps': {'x': 1, 'y': 1},
             'dims_lengths': {'x': -10, 'y': 10}  # Negative length
         }
         
