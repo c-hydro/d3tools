@@ -13,8 +13,10 @@ import json
 import numpy as np
 import xarray as xr
 from pathlib import Path
-from ..errors import TemplateValidationError, TemplateMemoryError
+import pandas as pd
 
+from ..timestepping.timeperiods.timestep import estimate_timestep, TimeStep
+from ..errors import TemplateValidationError, TemplateMemoryError
 
 class TemplateManager:
     """
@@ -117,16 +119,34 @@ class TemplateManager:
             template_dict['variables'] = vars
 
         for dim in templatearray.dims:
-
             this_dim_values = templatearray[dim].data
-            start = this_dim_values[0]
-            end = this_dim_values[-1]
-            step  = this_dim_values[1] - this_dim_values[0] if len(this_dim_values) > 1 else 0
             length = len(this_dim_values)
-            template_dict['dims_starts'][dim] = float(start)
-            template_dict['dims_ends'][dim] = float(end)
-            template_dict['dims_steps'][dim] = float(step)
             template_dict['dims_lengths'][dim] = length
+            # check the type of the coordinate,
+            # if numeric:
+            if np.issubdtype(this_dim_values.dtype, np.number):
+                start = this_dim_values[0]
+                end = this_dim_values[-1]
+                step  = this_dim_values[1] - this_dim_values[0] if len(this_dim_values) > 1 else 0
+                template_dict['dims_starts'][dim] = float(start)
+                template_dict['dims_ends'][dim] = float(end)
+                template_dict['dims_steps'][dim] = float(step)
+            # if datetime:
+            elif np.issubdtype(this_dim_values.dtype, np.datetime64):
+                # Convert to python datetimes: estimate_timestep and from_date
+                # require datetime.datetime, not numpy.datetime64 / pd.Timestamp.
+                # ISO strings are used for storage so json.dump works unchanged.
+                py_dates = pd.DatetimeIndex(this_dim_values).to_pydatetime().tolist()
+                start = py_dates[0]
+                end   = py_dates[-1]
+                step  = 'd'  # default to daily
+                if len(py_dates) > 1:
+                    step_ = estimate_timestep(py_dates)
+                    if step_ is not None:
+                        step = step_.unit
+                template_dict['dims_starts'][dim] = start.isoformat()
+                template_dict['dims_ends'][dim]   = end.isoformat()
+                template_dict['dims_steps'][dim]  = step
         
         # Validate if enabled
         if self._validate:
@@ -346,8 +366,14 @@ class TemplateManager:
             start = template_dict['dims_starts'][dim]
             end = template_dict['dims_ends'][dim]
             length = template_dict['dims_lengths'][dim]
-            template[dim] = np.linspace(start, end, length)
-
+            step = template_dict['dims_steps'][dim]
+            if isinstance(start, float):
+                template[dim] = np.linspace(start, end, length)
+            else:
+                start_ts = TimeStep.from_unit(step).from_date(start)
+                vals = [start_ts + i for i in range(length)]
+                template[dim] = [val.start for val in vals]
+                
         template.attrs = {'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']}
         template = template.rio.set_spatial_dims(*template_dict['spatial_dims']).rio.write_crs(
             template_dict['crs']).rio.write_coordinate_system()
