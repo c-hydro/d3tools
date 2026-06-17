@@ -100,11 +100,16 @@ class TemplateManager:
             from pyproj import CRS
             crs_wkt = CRS.from_epsg(4326).to_wkt()
 
+        x_dim = templatearray.rio.x_dim
+        y_dim = templatearray.rio.y_dim
+        spatial_dims = (x_dim, y_dim)
+        template_dims = tuple(dim for dim in templatearray.dims if dim in spatial_dims)
+
         template_dict = {
             'crs': crs_wkt,
             '_FillValue': templatearray.attrs.get('_FillValue'),
-            'dims_names': templatearray.dims,
-            'spatial_dims': (templatearray.rio.x_dim, templatearray.rio.y_dim),
+            'dims_names': template_dims,
+            'spatial_dims': spatial_dims,
             'dims_starts': {},
             'dims_ends': {},
             'dims_lengths': {}
@@ -113,7 +118,7 @@ class TemplateManager:
         if vars is not None:
             template_dict['variables'] = vars
 
-        for dim in templatearray.dims:
+        for dim in template_dims:
             this_dim_values = templatearray[dim].data
             start = this_dim_values[0]
             end = this_dim_values[-1]
@@ -362,14 +367,58 @@ class TemplateManager:
         Returns:
             Data with template spatial structure applied
         """
+        def _get_spatial_dims(arr: xr.DataArray) -> tuple[str, str]:
+            """Get (x_dim, y_dim) for a data array, even when dim names differ from template."""
+            try:
+                return arr.rio.x_dim, arr.rio.y_dim
+            except Exception:
+                # Fallback: assume trailing two dimensions are spatial (y, x)
+                if len(arr.dims) < 2:
+                    raise ValueError("Cannot determine spatial dimensions for data with fewer than 2 dims")
+                return arr.dims[-1], arr.dims[-2]
+
         if isinstance(data, xr.DataArray):
-            data = TemplateManager.build_array(template_dict, data.data)
+            template_x_dim, template_y_dim = template_dict['spatial_dims']
+            target_x_dim, target_y_dim = _get_spatial_dims(data)
+
+            template_x_coords = np.linspace(
+                template_dict['dims_starts'][template_x_dim],
+                template_dict['dims_ends'][template_x_dim],
+                template_dict['dims_lengths'][template_x_dim],
+            )
+            template_y_coords = np.linspace(
+                template_dict['dims_starts'][template_y_dim],
+                template_dict['dims_ends'][template_y_dim],
+                template_dict['dims_lengths'][template_y_dim],
+            )
+
+            data = data.assign_coords({
+                target_x_dim: template_x_coords,
+                target_y_dim: template_y_coords,
+            })
+
+            # Output must use template spatial dimension names while preserving
+            # all non-spatial dimensions unchanged.
+            rename_map = {}
+            if target_x_dim != template_x_dim:
+                rename_map[target_x_dim] = template_x_dim
+            if target_y_dim != template_y_dim:
+                rename_map[target_y_dim] = template_y_dim
+            if rename_map:
+                data = data.rename(rename_map)
+
+            data.attrs.update({'crs': template_dict['crs'], '_FillValue': template_dict['_FillValue']})
+            data = data.rio.set_spatial_dims(x_dim=template_x_dim, y_dim=template_y_dim).rio.write_crs(
+                template_dict['crs']).rio.write_coordinate_system()
         elif isinstance(data, np.ndarray):
             data = TemplateManager.build_array(template_dict, data)
         elif isinstance(data, xr.Dataset):
-            vars = template_dict['variables']
-            template = TemplateManager.build_array(template_dict, data[vars[0]].data)
-            data = xr.Dataset({var: template.copy(data=data[var]) for var in vars})
+            vars = template_dict.get('variables', list(data.data_vars))
+            updated = {}
+            for var in vars:
+                if var in data:
+                    updated[var] = TemplateManager.apply_to_data(data[var], template_dict)
+            data = xr.Dataset(updated)
         
         # Lazy import to avoid circular dependency
         from ..data.io_utils import set_type

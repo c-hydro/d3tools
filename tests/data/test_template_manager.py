@@ -391,3 +391,137 @@ class TestTemplateManagerIntegration:
             template = mgr.get(key)
             arr = TemplateManager.build_array(template)
             assert arr.shape == (10, 20)
+
+
+class TestTemplateManagerTemporalDims:
+    """Test behavior when data contains temporal dimensions."""
+
+    def test_set_ignores_datetime_dimension(self):
+        """Template should only store spatial/numeric dimensions, not datetime dims."""
+        times = np.array(['2024-01-01', '2024-01-02', '2024-01-03'], dtype='datetime64[ns]')
+        x = np.linspace(10.0, 15.0, 20)
+        y = np.linspace(45.0, 40.0, 10)
+        da = xr.DataArray(
+            np.random.rand(3, 10, 20),
+            coords={'time': times, 'y': y, 'x': x},
+            dims=['time', 'y', 'x'],
+            attrs={'_FillValue': -9999.0},
+        )
+        da = da.rio.write_crs(4326)
+        da = da.rio.set_spatial_dims(x_dim='x', y_dim='y')
+
+        mgr = TemplateManager()
+        mgr.set(da, spatial_key='tile1')
+        template = mgr.get('tile1')
+
+        assert template['dims_names'] == ('y', 'x')
+        assert 'time' not in template['dims_starts']
+        assert 'time' not in template['dims_ends']
+        assert 'time' not in template['dims_lengths']
+
+
+class TestTemplateManagerSpatialOnlyDims:
+    """Template should include only spatial dimensions, not every numeric dim."""
+
+    def test_set_ignores_non_spatial_numeric_dimension(self):
+        """A numeric non-spatial axis (e.g. band) must not be templated."""
+        x = np.linspace(10.0, 15.0, 20)
+        y = np.linspace(45.0, 40.0, 10)
+        bands = np.array([1, 2, 3], dtype=np.int32)
+        da = xr.DataArray(
+            np.random.rand(3, 10, 20),
+            coords={'band': bands, 'y': y, 'x': x},
+            dims=['band', 'y', 'x'],
+            attrs={'_FillValue': -9999.0},
+        )
+        da = da.rio.write_crs(4326)
+        da = da.rio.set_spatial_dims(x_dim='x', y_dim='y')
+
+        mgr = TemplateManager()
+        mgr.set(da, spatial_key='tile1')
+        template = mgr.get('tile1')
+
+        assert template['dims_names'] == ('y', 'x')
+        assert 'band' not in template['dims_starts']
+        assert 'band' not in template['dims_ends']
+        assert 'band' not in template['dims_lengths']
+
+
+class TestTemplateManagerSpatialMapping:
+    """Spatial coordinates should be mapped by role (x/y), not by dim names."""
+
+    def test_apply_to_dataarray_maps_spatial_coords_when_names_differ(self, sample_template_dict):
+        """Template spatial dims should replace target names and coords by role."""
+        lon = np.linspace(0.0, 1.0, 20)
+        lat = np.linspace(0.0, 1.0, 10)
+        da = xr.DataArray(
+            np.random.rand(10, 20),
+            coords={'lat': lat, 'lon': lon},
+            dims=['lat', 'lon'],
+            attrs={'_FillValue': -9999.0},
+        )
+        da = da.rio.write_crs(4326)
+        da = da.rio.set_spatial_dims(x_dim='lon', y_dim='lat')
+
+        result = TemplateManager.apply_to_data(da, sample_template_dict)
+
+        assert result.rio.x_dim == 'x'
+        assert result.rio.y_dim == 'y'
+        assert result.dims == ('y', 'x')
+        assert result.x.values[0] == pytest.approx(10.0)
+        assert result.x.values[-1] == pytest.approx(15.0)
+        assert result.y.values[0] == pytest.approx(45.0)
+        assert result.y.values[-1] == pytest.approx(40.0)
+
+    def test_apply_to_dataarray_retains_non_spatial_dims(self, sample_template_dict):
+        """Non-spatial dimensions (e.g. time) should be preserved unchanged."""
+        times = np.array(['2024-01-01', '2024-01-02', '2024-01-03'], dtype='datetime64[ns]')
+        lon = np.linspace(0.0, 1.0, 20)
+        lat = np.linspace(0.0, 1.0, 10)
+        da = xr.DataArray(
+            np.random.rand(3, 10, 20),
+            coords={'time': times, 'lat': lat, 'lon': lon},
+            dims=['time', 'lat', 'lon'],
+            attrs={'_FillValue': -9999.0},
+        )
+        da = da.rio.write_crs(4326)
+        da = da.rio.set_spatial_dims(x_dim='lon', y_dim='lat')
+
+        result = TemplateManager.apply_to_data(da, sample_template_dict)
+
+        assert 'time' in result.dims
+        assert result.dims == ('time', 'y', 'x')
+        np.testing.assert_array_equal(result['time'].values, times)
+
+    def test_apply_to_dataarray_preserves_time_dimension(self):
+        """Applying a spatial template should keep time coords unchanged."""
+        ref = xr.DataArray(
+            np.random.rand(10, 20),
+            coords={'y': np.linspace(45.0, 40.0, 10), 'x': np.linspace(10.0, 15.0, 20)},
+            dims=['y', 'x'],
+            attrs={'_FillValue': -9999.0},
+        )
+        ref = ref.rio.write_crs(4326)
+        ref = ref.rio.set_spatial_dims(x_dim='x', y_dim='y')
+
+        mgr = TemplateManager()
+        mgr.set(ref, spatial_key='tile1')
+        template = mgr.get('tile1')
+
+        times = np.array(['2024-01-01', '2024-01-02', '2024-01-03'], dtype='datetime64[ns]')
+        shifted = xr.DataArray(
+            np.random.rand(3, 10, 20),
+            coords={
+                'time': times,
+                'y': np.linspace(46.0, 41.0, 10),
+                'x': np.linspace(11.0, 16.0, 20),
+            },
+            dims=['time', 'y', 'x'],
+            attrs={'_FillValue': -9999.0},
+        )
+
+        result = TemplateManager.apply_to_data(shifted, template)
+
+        np.testing.assert_array_equal(result['time'].values, times)
+        np.testing.assert_allclose(result['x'].values, ref['x'].values)
+        np.testing.assert_allclose(result['y'].values, ref['y'].values)
