@@ -5,8 +5,6 @@ This module provides the TemplateManager class which handles spatial template
 creation and application to ensure coordinate consistency across dataset files.
 """
 
-import datetime as dt
-
 from typing import Optional, Iterator
 import os
 import json
@@ -31,7 +29,7 @@ class TemplateManager:
     
     # Required keys for valid templates
     REQUIRED_KEYS = {'crs', '_FillValue', 'dims_names', 'spatial_dims', 
-                     'dims_starts', 'dims_ends', 'dims_steps', 'dims_lengths'}
+                     'dims_starts', 'dims_ends', 'dims_lengths'}
     
     def __init__(self, cache_dir: Optional[str] = None, validate: bool = True):
         """
@@ -109,7 +107,6 @@ class TemplateManager:
             'spatial_dims': (templatearray.rio.x_dim, templatearray.rio.y_dim),
             'dims_starts': {},
             'dims_ends': {},
-            'dims_steps': {},
             'dims_lengths': {}
         }
         
@@ -117,15 +114,12 @@ class TemplateManager:
             template_dict['variables'] = vars
 
         for dim in templatearray.dims:
-
             this_dim_values = templatearray[dim].data
             start = this_dim_values[0]
             end = this_dim_values[-1]
-            step  = this_dim_values[1] - this_dim_values[0] if len(this_dim_values) > 1 else 0
             length = len(this_dim_values)
             template_dict['dims_starts'][dim] = float(start)
             template_dict['dims_ends'][dim] = float(end)
-            template_dict['dims_steps'][dim] = float(step)
             template_dict['dims_lengths'][dim] = length
         
         # Validate if enabled
@@ -241,8 +235,6 @@ class TemplateManager:
                 invalid_keys[f'dims_starts[{dim}]'] = "Missing"
             if dim not in template_dict['dims_ends']:
                 invalid_keys[f'dims_ends[{dim}]'] = "Missing"
-            if dim not in template_dict['dims_steps']:
-                invalid_keys[f'dims_steps[{dim}]'] = "Missing"
             if dim not in template_dict['dims_lengths']:
                 invalid_keys[f'dims_lengths[{dim}]'] = "Missing"
             elif template_dict['dims_lengths'][dim] <= 0:

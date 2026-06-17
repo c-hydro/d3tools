@@ -149,7 +149,6 @@ class TestBuildTemplatearrayDelegation:
             'spatial_dims': ('x', 'y'),
             'dims_starts': {'x': 10.0, 'y': 45.0},
             'dims_ends': {'x': 15.0, 'y': 40.0},
-            'dims_steps': {'x': (15.0 - 10.0) / 19, 'y': (40.0 - 45.0) / 9},
             'dims_lengths': {'x': 20, 'y': 10}
         }
         
@@ -172,7 +171,6 @@ class TestBuildTemplatearrayDelegation:
             'spatial_dims': ('x', 'y'),
             'dims_starts': {'x': 10.0, 'y': 45.0},
             'dims_ends': {'x': 15.0, 'y': 40.0},
-            'dims_steps': {'x': (15.0 - 10.0) / 19, 'y': (40.0 - 45.0) / 9},
             'dims_lengths': {'x': 20, 'y': 10}
         }
         
@@ -194,7 +192,6 @@ class TestSetDataToTemplateDelegation:
             'spatial_dims': ('x', 'y'),
             'dims_starts': {'x': 10.0, 'y': 45.0},
             'dims_ends': {'x': 15.0, 'y': 40.0},
-            'dims_steps': {'x': (15.0 - 10.0) / 19, 'y': (40.0 - 45.0) / 9},
             'dims_lengths': {'x': 20, 'y': 10}
         }
         
@@ -217,7 +214,6 @@ class TestSetDataToTemplateDelegation:
             'spatial_dims': ('x', 'y'),
             'dims_starts': {'x': 10.0, 'y': 45.0},
             'dims_ends': {'x': 15.0, 'y': 40.0},
-            'dims_steps': {'x': (15.0 - 10.0) / 19, 'y': (40.0 - 45.0) / 9},
             'dims_lengths': {'x': 20, 'y': 10}
         }
         

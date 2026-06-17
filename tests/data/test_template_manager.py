@@ -48,7 +48,6 @@ def sample_template_dict():
         'spatial_dims': ('x', 'y'),
         'dims_starts': {'x': 10.0, 'y': 45.0},
         'dims_ends': {'x': 15.0, 'y': 40.0},
-        'dims_steps': {'x': (15.0 - 10.0) / 19, 'y': (40.0 - 45.0) / 9},
         'dims_lengths': {'x': 20, 'y': 10}
     }
 
@@ -81,7 +80,6 @@ class TestTemplateManagerSet:
         assert 'spatial_dims' in template
         assert 'dims_starts' in template
         assert 'dims_ends' in template
-        assert 'dims_steps' in template
         assert 'dims_lengths' in template
         
         # Check values
