@@ -51,11 +51,10 @@ def get_date_from_str(str: str, format: None|str = None, end = False) -> dt.date
         - '%d %b %Y', '%d %B %Y' (with month names)
         - '%Y %b %d', '%Y %B %d' (ISO-like with month names)
         - '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H' (with time)
-        - '%Y-%m-%dT%H:%M:%S' (ISO 8601 with time)
     """
     _date_formats = ['%Y-%m-%d', '%Y%m%d',   '%d/%m/%Y', '%d-%m-%Y',
                      '%d.%m.%Y', '%d %b %Y', '%d %B %Y', '%Y %b %d', '%Y %B %d',
-                     '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H', '%Y-%m-%dT%H:%M:%S']
+                     '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H']
     if format:
         date = dt.datetime.strptime(str, format)
     else:
