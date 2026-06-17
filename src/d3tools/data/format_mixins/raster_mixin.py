@@ -206,9 +206,9 @@ class RasterMixin(FormatMixin):
                     var: {'zlib': True, 'complevel': 5}
                     for var in data.data_vars
                 }
-                data.to_netcdf(path, encoding=encoding, engine=engine, **kwargs)
+                data.to_netcdf(path, encoding=encoding, engine=engine)
             else:
-                data.to_netcdf(path, engine=engine, **kwargs)
+                data.to_netcdf(path, engine=engine)
 
     @property
     def _template(self) -> dict:
