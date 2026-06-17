@@ -185,7 +185,14 @@ class RasterMixin(FormatMixin):
 
         # write the data to a netcdf
         elif self.format == 'netcdf':
-            data.to_netcdf(path)
+            if isinstance(data, xr.DataArray):
+                var_name = data.name or '__xarray_dataarray_variable__'
+                data = data.to_dataset(name=var_name)
+
+            encoding = {}
+            for var in data.data_vars:
+                encoding[var] = {'zlib': True, 'complevel': 5}
+            data.to_netcdf(path, encoding=encoding)
 
     @property
     def _template(self) -> dict:
