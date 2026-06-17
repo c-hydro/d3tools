@@ -185,14 +185,30 @@ class RasterMixin(FormatMixin):
 
         # write the data to a netcdf
         elif self.format == 'netcdf':
+            import importlib.util
+
             if isinstance(data, xr.DataArray):
                 var_name = data.name or '__xarray_dataarray_variable__'
                 data = data.to_dataset(name=var_name)
 
-            encoding = {}
-            for var in data.data_vars:
-                encoding[var] = {'zlib': True, 'complevel': 5}
-            data.to_netcdf(path, encoding=encoding)
+            engine = kwargs.pop('engine', None)
+            if engine is None:
+                if importlib.util.find_spec('h5netcdf') is not None:
+                    engine = 'h5netcdf'
+                elif importlib.util.find_spec('netCDF4') is not None:
+                    engine = 'netcdf4'
+                else:
+                    engine = 'scipy'
+
+            # Compression is only supported by netcdf4/h5netcdf backends.
+            if engine in ('netcdf4', 'h5netcdf'):
+                encoding = {
+                    var: {'zlib': True, 'complevel': 5}
+                    for var in data.data_vars
+                }
+                data.to_netcdf(path, encoding=encoding, engine=engine, **kwargs)
+            else:
+                data.to_netcdf(path, engine=engine, **kwargs)
 
     @property
     def _template(self) -> dict:
