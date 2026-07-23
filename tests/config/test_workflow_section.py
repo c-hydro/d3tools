@@ -2,11 +2,14 @@
 Tests for workflow-section aliasing and WorkflowSection behavior.
 """
 import datetime as dt
+from dataclasses import replace
 
 import pytest
+from d3tools.timestepping import TimeWindow
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
+    WorkflowSectionRunResult,
     resolve_workflow_section_alias,
 )
 
@@ -329,6 +332,9 @@ class TestWorkflowSection:
             def __sub__(self, n):
                 return self.__add__(-n)
 
+            def __le__(self, other):
+                return self.start <= other.start
+
         class MockProcess:
             def get_last_ts(self):
                 return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 2)
@@ -355,6 +361,9 @@ class TestWorkflowSection:
             def __sub__(self, n):
                 return self.__add__(-n)
 
+            def __le__(self, other):
+                return self.start <= other.start
+
         class MockProcess:
             def get_last_ts(self):
                 return MockTimeStep(2024, 1, 4), None
@@ -375,3 +384,343 @@ class TestWorkflowSection:
 
         with pytest.raises(ValueError, match="not enough available data"):
             section.get_run_timerange()
+
+    def test_get_run_timerange_returns_none_when_same_timestep(self):
+        """get_run_timerange should return None when available and done are the same timestep."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        assert section.get_run_timerange() is None
+
+    def test_get_run_timerange_repeats_same_timestep_with_repeat_window(self):
+        """get_run_timerange should reopen work when repeat_window is in exec_options."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        section = WorkflowSection(
+            "Download", "door", {}, MockProcess(),
+            exec_options={"repeat_window": "3d"}
+        )
+
+        time_range = section.get_run_timerange()
+
+        assert time_range is not None
+        assert time_range.start == dt.datetime(2024, 1, 2)
+        assert time_range.end == dt.datetime(2024, 1, 4, 23, 59, 59)
+
+    def test_run_calls_door_get_data(self):
+        """run() should call get_data() for door engine."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def get_data(self, time_range):
+                calls.append(("get_data", time_range))
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert len(calls) == 1
+        assert calls[0][0] == "get_data"
+        assert calls[0][1] == time_range
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+        assert result.section_name == "Download"
+        assert result.engine == "door"
+        assert result.time_range == time_range
+        assert result.reason is None
+
+    def test_run_calls_dam_run(self):
+        """run() should call run() for dam engine."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def run(self, time_range):
+                calls.append(("run", time_range))
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Process", "dam", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert len(calls) == 1
+        assert calls[0][0] == "run"
+        assert calls[0][1] == time_range
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+
+    def test_run_calls_dryes_compute(self):
+        """run() should call compute() for dryes engine."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def compute(self, time_range):
+                calls.append(("compute", time_range))
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Calculate", "dryes", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert len(calls) == 1
+        assert calls[0][0] == "compute"
+        assert calls[0][1] == time_range
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+
+    def test_run_split_executes_month_subranges_when_enabled(self, monkeypatch):
+        """run() should split long ranges into monthly chunks when split is enabled."""
+        from d3tools.timestepping import TimeRange
+
+        executed_ranges = []
+
+        class MockProcess:
+            def get_data(self, _):
+                raise AssertionError("direct get_data should not be used in split mode")
+
+        def mock_execute(self, process, engine, section_name, tr):
+            executed_ranges.append((engine, section_name, tr.start, tr.end))
+            return {"executed": True}
+
+        def mock_replace(self, **kwargs):
+            return replace(self, **kwargs)
+
+        monkeypatch.setattr(WorkflowSection, "_execute_section", mock_execute, raising=False)
+        monkeypatch.setattr(WorkflowSectionRunResult, "_replace", mock_replace, raising=False)
+
+        section = WorkflowSection(
+            "Download",
+            "door",
+            {},
+            MockProcess(),
+            exec_options={"split": True},
+        )
+
+        result = section.run(TimeRange("2024-01-01", "2024-03-31"))
+
+        assert len(executed_ranges) == 3
+        assert result.executed is True
+        assert result.reason == "split into 3 sub-ranges"
+
+    def test_run_split_can_be_enabled_by_env_var(self, monkeypatch):
+        """run() should honor SPLIT environment variable and override exec_options."""
+        from d3tools.timestepping import TimeRange
+
+        executed_ranges = []
+
+        class MockProcess:
+            def get_data(self, _):
+                raise AssertionError("direct get_data should not be used in split mode")
+
+        def mock_execute(self, process, engine, section_name, tr):
+            executed_ranges.append(tr)
+            return {"executed": True}
+
+        def mock_replace(self, **kwargs):
+            return replace(self, **kwargs)
+
+        monkeypatch.setattr(WorkflowSection, "_execute_section", mock_execute, raising=False)
+        monkeypatch.setattr(WorkflowSectionRunResult, "_replace", mock_replace, raising=False)
+        monkeypatch.setenv("SPLIT", "true")
+
+        section = WorkflowSection(
+            "Download",
+            "door",
+            {},
+            MockProcess(),
+            exec_options={"split": False},
+        )
+
+        result = section.run(TimeRange("2024-01-01", "2024-03-31"))
+
+        assert len(executed_ranges) == 3
+        assert result.reason == "split into 3 sub-ranges"
+
+    def test_run_split_does_not_apply_to_short_ranges(self, monkeypatch):
+        """run() should not split ranges with length <= 31 days even if split is enabled."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def get_data(self, time_range):
+                calls.append(time_range)
+
+        monkeypatch.setenv("SPLIT", "true")
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(TimeRange("2024-01-01", "2024-01-31"))
+
+        assert len(calls) == 1
+        assert calls[0].start == dt.datetime(2024, 1, 1)
+        assert calls[0].end == dt.datetime(2024, 1, 31, 23, 59, 59)
+        assert result.executed is True
+        assert result.reason is None
+
+    def test_run_split_preserves_original_timerange_boundaries(self, monkeypatch):
+        """Split chunks should preserve original start on first chunk and original end on last chunk."""
+        from d3tools.timestepping import TimeRange
+
+        executed_ranges = []
+
+        class MockProcess:
+            def get_data(self, _):
+                raise AssertionError("direct get_data should not be used in split mode")
+
+        def mock_execute(self, process, engine, section_name, tr):
+            executed_ranges.append(tr)
+            return {"executed": True}
+
+        def mock_replace(self, **kwargs):
+            return replace(self, **kwargs)
+
+        monkeypatch.setattr(WorkflowSection, "_execute_section", mock_execute, raising=False)
+        monkeypatch.setattr(WorkflowSectionRunResult, "_replace", mock_replace, raising=False)
+
+        original_range = TimeRange("2024-01-15", "2024-03-10")
+        section = WorkflowSection(
+            "Download",
+            "door",
+            {},
+            MockProcess(),
+            exec_options={"split": True},
+        )
+
+        section.run(original_range)
+
+        assert len(executed_ranges) >= 2
+        assert executed_ranges[0].start == original_range.start
+        assert executed_ranges[-1].end == original_range.end
+
+    def test_run_returns_skipped_contract_when_no_timerange(self):
+        """run() should return skipped result when no section range is available."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+            def get_data(self, _):
+                raise AssertionError("get_data should not be called when section is skipped")
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(None)
+
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is False
+        assert result.section_name == "Download"
+        assert result.engine == "door"
+        assert result.time_range is None
+        assert result.reason == "nothing to do"
+
+    def test_run_resolves_timerange_when_argument_is_none(self):
+        """run(None) should resolve section timerange and execute with it."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        calls = []
+
+        class MockProcess:
+            def get_last_ts(self):
+                return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 2)
+
+            def get_data(self, time_range):
+                calls.append(time_range)
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(None)
+
+        assert len(calls) == 1
+        assert calls[0].start == dt.datetime(2024, 1, 3)
+        assert calls[0].end == dt.datetime(2024, 1, 4, 23, 59, 59)
+        assert result.executed is True
+        assert result.time_range.start == dt.datetime(2024, 1, 3)
+
+    def test_run_raises_for_unrecognized_engine(self):
+        """run() should raise TypeError for unrecognized engine."""
+        from d3tools.timestepping import TimeRange
+
+        class MockProcess:
+            pass
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Unknown", "unknown_engine", {}, MockProcess())
+
+        with pytest.raises(TypeError, match="unrecognized engine 'unknown_engine'"):
+            section.run(time_range)

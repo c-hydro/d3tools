@@ -2,7 +2,7 @@ import os
 import datetime as dt
 from typing import Optional
 
-from ..timestepping import TimeRange
+from ..timestepping import TimeRange, TimeWindow
 from ..logging import WorkflowLogManager
 
 from .utils import load_jsons
@@ -180,46 +180,22 @@ class WorkflowDefinition:
                 availability.
         """
         for section in self.workflow_sections:
-            section_name = getattr(section, "name", "<unknown>")
-            engine = getattr(section, "engine", None)
-            section_time_range = time_range
-            if section_time_range is None:
-                section_time_range = section.get_run_timerange()
-
-            # Execute section with logging context if logger exists
+            # Keep section-level context around actual section execution.
             if self.logger:
-                with self.logger.section_execution(section_name, engine=engine):
-                    self._execute_section(section, section_time_range)
+                with self.logger.section_execution(section.name, engine=section.engine):
+                    result = section.run(time_range)
             else:
-                self._execute_section(section, section_time_range)
-    
-    def _execute_section(self, section, time_range):
-        """Execute a single workflow section using its engine-specific interface.
+                result = section.run(time_range)
 
-        Args:
-            section: WorkflowSection object containing the workflow process
-            time_range: TimeRange for execution
+            # Backward-compatible: legacy run() may return None.
+            if result is None:
+                continue
 
-        Raises:
-            TypeError: If the section doesn't have a recognized engine
-        """
-        # Get the actual workflow object from the section
-        process = getattr(section, "value", section)
-        engine = getattr(section, "engine", None)
-        section_name = getattr(section, "name", "<unknown>")
-        
-        # Execute based on engine type
-        match engine:
-            case 'door':
-                process.get_data(time_range)
-            case 'dam':
-                process.run(time_range)
-            case 'dryes':
-                process.compute(time_range)
-            case _:
-                raise TypeError(
-                    f"Workflow section '{section_name}' has unrecognized engine '{engine}'. "
-                    f"Expected one of: 'door', 'dam', 'dryes'"
+            # New run contract: log explicit skips.
+            if not result.executed and self.logger:
+                self.logger.get_logger().info(
+                    f"Skipped workflow section '{result.section_name}' with engine '{result.engine}': "
+                    f"{result.reason or 'nothing to do'}"
                 )
 
     @staticmethod

@@ -75,7 +75,7 @@ class RasterMixin(FormatMixin):
                 data = rxr.open_rasterio(path)
         # read the data from a netcdf
         elif self.format == 'netcdf':
-            data = xr.open_dataset(path)
+            data = xr.open_dataset(path, engine = 'h5netcdf')
             # check if there is a single variable in the dataset
             if len(data.data_vars) == 1:
                 data = data[list(data.data_vars)[0]]
@@ -185,7 +185,7 @@ class RasterMixin(FormatMixin):
 
         # write the data to a netcdf
         elif self.format == 'netcdf':
-            data.to_netcdf(path)
+            data.to_netcdf(path, engine = 'h5netcdf')
 
     @property
     def _template(self) -> dict:

@@ -56,6 +56,9 @@ def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any
     thumbnail_config = parsed_config.pop('thumbnail', None)
     log_config       = parsed_config.pop('log', None)
 
+    # also extract fallback config if present, to pass to the dataset constructor
+    fallback_config = parsed_config.pop('fallback', None)
+
     # create the dataset without managers first, so we can use it in manager parsing if needed
     type_str = parsed_config.pop('type', None)
     type_str = Dataset.get_type(type_str)
@@ -79,6 +82,10 @@ def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any
     ds.thumbnail = _manager_from_config(thumbnail_config, 'thumbnail', dataset_factory)
     ds.log       = _manager_from_config(log_config, 'log', dataset_factory)
     
+    # Handle fallback dataset if present
+    if fallback_config is not None:
+        ds.fallback = dataset_factory(fallback_config)
+
     return ds
 
 
