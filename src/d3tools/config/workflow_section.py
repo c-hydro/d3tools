@@ -6,6 +6,7 @@ from typing import Any
 import os
 
 from .parsers import workflow_section_from_config
+from .utils import get_timerange_from_run_state
 from ..parse.string_rendering import normalise_string
 from ..timestepping import TimeRange, TimeWindow
 
@@ -107,6 +108,9 @@ class WorkflowSection:
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
 
+        Checks for ``from_run`` exec_option first, which allows referencing
+        a prior workflow run's execution window.
+
         The section value is expected to provide ``get_last_ts()``, returning a
         pair ``(last_available, last_done)``. The resulting range starts at the
         first timestep that still needs processing and ends at the latest
@@ -119,6 +123,14 @@ class WorkflowSection:
         Raises:
             ValueError: If the section has no available data.
         """
+        # Check for from_run exec_option first
+        from_run = self.get_exec_option("from_run")
+        if from_run:
+            time_range = get_timerange_from_run_state(from_run)
+            if time_range is not None:
+                return time_range
+                    
+        # Normal resolution logic
         process = self.value
         last_available, last_done = process.get_last_ts()
         
