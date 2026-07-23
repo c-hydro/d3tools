@@ -108,7 +108,7 @@ class WorkflowSection:
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
 
-        Checks for ``from_run`` exec_option first, which allows referencing
+        Checks for ``times_from_run`` exec_option first, which allows referencing
         a prior workflow run's execution window.
 
         The section value is expected to provide ``get_last_ts()``, returning a
@@ -123,10 +123,10 @@ class WorkflowSection:
         Raises:
             ValueError: If the section has no available data.
         """
-        # Check for from_run exec_option first
-        from_run = self.get_exec_option("from_run")
-        if from_run:
-            time_range = get_timerange_from_run_state(from_run)
+        # Check for times_from_run exec_option first
+        times_from_run = self.get_exec_option("times_from_run")
+        if times_from_run:
+            time_range = get_timerange_from_run_state(times_from_run)
             if time_range is not None:
                 return time_range
                     
