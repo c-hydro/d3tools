@@ -18,6 +18,8 @@ def dataset_factory(cfg, template_ds):
 
     # use the type from parsed_config as default
     defaults = template_ds._creation_kwargs.copy()
+    # remove the "name" key if present, since it should not be inherited by nested datasets
+    defaults.pop("name", None)
 
     # if cfg is a string, assume it is the key_pattern
     if isinstance(cfg, str):
@@ -88,7 +90,7 @@ def dataset_from_config(config: Union['Dataset', str, Dict[str, Any]], defaults:
     
     # Handle fallback dataset if present
     if fallback_config is not None:
-        ds.fallback = dataset_factory(fallback_config)
+        ds.fallback = dataset_factory(fallback_config, template_ds=ds)
 
     return ds
 
