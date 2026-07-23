@@ -4,6 +4,7 @@ Tests for workflow-section aliasing and WorkflowSection behavior.
 import datetime as dt
 
 import pytest
+from d3tools.timestepping import TimeWindow
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
@@ -408,3 +409,37 @@ class TestWorkflowSection:
         section = WorkflowSection("Download", "door", {}, MockProcess())
 
         assert section.get_run_timerange() is None
+
+    def test_get_run_timerange_repeats_same_timestep_with_repeat_window(self):
+        """get_run_timerange should reopen work when repeat_window is in exec_options."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        section = WorkflowSection(
+            "Download", "door", {}, MockProcess(),
+            exec_options={"repeat_window": "3d"}
+        )
+
+        time_range = section.get_run_timerange()
+
+        assert time_range is not None
+        assert time_range.start == dt.datetime(2024, 1, 2)
+        assert time_range.end == dt.datetime(2024, 1, 4, 23, 59, 59)

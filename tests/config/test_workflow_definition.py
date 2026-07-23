@@ -11,7 +11,7 @@ import datetime as dt
 import pytest
 
 from d3tools import WorkflowDefinition
-from d3tools.timestepping import TimeRange
+from d3tools.timestepping import TimeRange, TimeWindow
 from d3tools.config.workflow_section import WorkflowSection
 
 
@@ -515,6 +515,72 @@ class TestWorkflowDefinitionRunTimerangeResolution:
 
         assert calls == [("door", first_range), ("dam", second_range)]
 
+    def test_run_uses_exec_options_repeat_window_from_config(self, monkeypatch):
+        """run() should use repeat_window from section exec_options in config."""
+        calls = []
+
+        class MockProcess:
+            def __init__(self, engine):
+                self.engine = engine
+
+            def get_data(self, time_range):
+                calls.append((self.engine, time_range))
+
+            def get_last_ts(self):
+                class MockTimeStep:
+                    def __init__(self, year, month, day):
+                        self.start = dt.datetime(year, month, day)
+                        self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+                    def __add__(self, n):
+                        next_day = self.start + dt.timedelta(days=n)
+                        return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+                    def __sub__(self, n):
+                        return self.__add__(-n)
+
+                    def __le__(self, other):
+                        return self.start <= other.start
+
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        from d3tools.config import parsing_pipeline
+        from d3tools.config.workflow_section import WorkflowSection as RealWorkflowSection
+
+        process = MockProcess('door')
+        section = RealWorkflowSection(
+            "Download", "door", 
+            {"engine": "door", "exec_options": {"repeat_window": "2d"}},
+            process,
+            exec_options={"repeat_window": "2d"}
+        )
+
+        parsed_config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_sections": [section],
+            "workflow_name": "test",
+            "workflow_log": None,
+        }
+
+        monkeypatch.setattr(
+            parsing_pipeline,
+            "parse_options",
+            lambda config, **kwargs: parsed_config,
+        )
+
+        monkeypatch.delenv("START_DATE", raising=False)
+        monkeypatch.delenv("END_DATE", raising=False)
+        monkeypatch.delenv("REPEAT_WINDOW", raising=False)
+
+        wf = WorkflowDefinition({})
+        wf.run()
+
+        assert len(calls) == 1
+        assert calls[0][0] == 'door'
+        assert calls[0][1].start == dt.datetime(2024, 1, 3)
+
     def test_run_skips_section_when_section_timerange_is_none(self, monkeypatch):
         """run() should skip sections that resolve to no pending timestep range."""
         calls = []
@@ -566,3 +632,68 @@ class TestWorkflowDefinitionRunTimerangeResolution:
         wf.run()
 
         assert calls == [("dam", second_range)]
+
+    def test_run_skips_section_with_no_work_but_runs_with_repeat_window_in_exec_options(self, monkeypatch):
+        """run() should skip section with no work unless exec_options has repeat_window."""
+        calls = []
+
+        class MockProcess:
+            def __init__(self, engine):
+                self.engine = engine
+
+            def get_data(self, time_range):
+                calls.append((self.engine, time_range))
+
+            def get_last_ts(self):
+                class MockTimeStep:
+                    def __init__(self, year, month, day):
+                        self.start = dt.datetime(year, month, day)
+                        self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+                    def __add__(self, n):
+                        next_day = self.start + dt.timedelta(days=n)
+                        return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+                    def __sub__(self, n):
+                        return self.__add__(-n)
+
+                    def __le__(self, other):
+                        return self.start <= other.start
+
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+        from d3tools.config import parsing_pipeline
+        from d3tools.config.workflow_section import WorkflowSection as RealWorkflowSection
+
+        process = MockProcess('door')
+        section = RealWorkflowSection(
+            "Download", "door",
+            {"engine": "door", "exec_options": {"repeat_window": "1d"}},
+            process,
+            exec_options={"repeat_window": "1d"}
+        )
+
+        parsed_config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_sections": [section],
+            "workflow_name": "test",
+            "workflow_log": None,
+        }
+
+        monkeypatch.setattr(
+            parsing_pipeline,
+            "parse_options",
+            lambda config, **kwargs: parsed_config,
+        )
+
+        monkeypatch.delenv("START_DATE", raising=False)
+        monkeypatch.delenv("END_DATE", raising=False)
+        monkeypatch.delenv("REPEAT_WINDOW", raising=False)
+
+        wf = WorkflowDefinition({})
+        wf.run()
+
+        assert len(calls) == 1
+        assert calls[0][0] == 'door'
