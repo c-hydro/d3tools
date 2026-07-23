@@ -6,6 +6,7 @@ from typing import Any
 import os
 
 from .parsers import workflow_section_from_config
+from .utils import get_timerange_from_run_state
 from ..parse.string_rendering import normalise_string
 from ..timestepping import TimeRange, TimeWindow
 
@@ -22,6 +23,12 @@ WORKFLOW_SECTION_ALIASES = {
     "calculate": "dryes",
 }
 
+AVAILBALE_EXECUTION_OPTIONS = {
+    "times_from_run": "Reference a prior workflow run's execution window for this section's execution range",
+    "all_available": "Execute for the entire available time range (currently only supported for 'dam' sections)",
+    "repeat_window": "Extend the execution time range backwards by this amount (e.g. '7d' or '1m') to re-process some prior timesteps",
+    "split": "If true and the execution time range is longer than 31 days, split into monthly sub-ranges for execution",
+}
 
 @dataclass
 class WorkflowSectionRunResult:
@@ -79,14 +86,14 @@ class WorkflowSection:
             strict_imports: If ``True``, propagate build/import errors.
         """
         # attempt to get the `engine` keyword from the definition key
-        engine = definition.get("engine", None)
+        engine = definition.pop("engine", None)
         if engine is None or engine not in ['door', 'dam', 'dryes']:
             # if not found, try to resolve from the section name
             engine = resolve_workflow_section_alias(name)
         if engine is None:
             raise ValueError(f"Key '{name}' is not a recognized workflow section")
         
-        exec_options = definition.get("exec_options", {})
+        exec_options = definition.pop("exec_options", {})
         value = workflow_section_from_config(
             engine,
             definition,
@@ -107,24 +114,59 @@ class WorkflowSection:
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
 
-        The section value is expected to provide ``get_last_ts()``, returning a
-        pair ``(last_available, last_done)``. The resulting range starts at the
-        first timestep that still needs processing and ends at the latest
-        available timestep.
+        Checks exec_options in the following priority order:
+
+        1. ``all_available``: If true, returns the full range from the first to
+           the last available timestep. Currently only supported for ``dam``
+           sections.
+        2. ``times_from_run``: References a prior workflow run's saved execution
+           window. If a valid range is found, it is returned immediately
+           (after applying ``repeat_window`` if set). If no prior run state is
+           found, resolution falls through to the normal logic below.
+        3. Normal resolution: Calls ``get_last_ts()`` on the section value,
+           which returns ``(last_available, last_done)``. The range spans from
+           the first unprocessed timestep to the last available one.
+
+        ``repeat_window`` (e.g. ``'7d'``, ``'1m'``) can be combined with either
+        ``times_from_run`` or normal resolution to extend the start of the range
+        backwards, re-processing some prior timesteps.
 
         Returns:
-            TimeRange spanning the timesteps that still need to be processed.
-            None if there are no timesteps to process (i.e. all available timesteps have already been processed).
+            TimeRange spanning the timesteps that still need to be processed,
+            or ``None`` if all available timesteps have already been processed
+            and no ``repeat_window`` is set.
 
         Raises:
-            ValueError: If the section has no available data.
+            ValueError: If the section has no available data, or if
+                ``all_available`` is used on a non-``dam`` section.
         """
-        process = self.value
-        last_available, last_done = process.get_last_ts()
+
+        all_available = self.get_exec_option("all_available", False, asbool=True)
+        if all_available:
+            if self.engine != "dam":
+                raise ValueError(f"exec_option 'all_available' is currently only supported for 'dam' sections, but section '{self.name}' has engine '{self.engine}'")
+            first_ts = self.value.get_first_ts()
+            last_ts  = self.value.get_last_ts()[0]
+            if first_ts is None or last_ts is None:
+                raise ValueError(f"Workflow section '{self.name}' has no available data to determine time range for execution")
+            return TimeRange(first_ts.start, last_ts.end)
         
         repeat_window = self.get_exec_option("repeat_window")
         if repeat_window is not None:
             repeat_window = TimeWindow.from_str(repeat_window)
+
+        # Check for times_from_run exec_option first
+        times_from_run = self.get_exec_option("times_from_run")
+        if times_from_run:
+            time_range = get_timerange_from_run_state(times_from_run)
+            if time_range is not None:
+                if repeat_window is not None:
+                    time_range = time_range.extend(repeat_window, before=True)
+                return time_range
+
+        # Normal resolution logic
+        process = self.value
+        last_available, last_done = process.get_last_ts()
 
         if last_available is None or last_done is None:
             raise ValueError(f"Workflow section '{self.name}' has not enough available data to determine time range for execution")
@@ -192,9 +234,10 @@ class WorkflowSection:
             time_ranges[-1].end = time_range.end
             results = []
             for tr in time_ranges:
-                result = self._execute_section(process, engine, section_name, tr)
+                result = self.run(tr)
                 results.append(result)
-            return output._replace(reason=f"split into {len(time_ranges)} sub-ranges")
+            output.reason = f"split into {len(time_ranges)} sub-ranges"
+            return output
             
         # Execute based on engine type
         match engine:

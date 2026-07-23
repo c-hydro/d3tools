@@ -14,15 +14,19 @@ Key features:
 """
 
 import datetime as dt
+import json
 import logging
+import os
 import time
 from contextlib import contextmanager
 from typing import Optional, Dict, Any, Union
 
-from .utils import configure_logger, LOG_FORMATS, DATE_FORMAT
-from ..parse import substitute_string
+from .utils import configure_logger, DATE_FORMAT
+from ..config.parsers import dataset_from_config
 from ..exit.exit_handler import run_at_exit
+from ..data import Dataset
 
+DatasetLike = Union[Dataset, str, Dict[str, Any]]
 
 class WorkflowLogManager:
     """
@@ -52,7 +56,8 @@ class WorkflowLogManager:
     
     def __init__(
         self,
-        log_file: Optional[str] = None,
+        log_file: Optional[DatasetLike] = None,
+        run_state_file: Optional[DatasetLike] = None,
         level: Union[int, str] = logging.INFO,
         console: bool = True,
         format_file: str = 'detailed',
@@ -64,22 +69,30 @@ class WorkflowLogManager:
         Initialize workflow log manager.
         
         Args:
-            log_file: Path to log file (None for console-only logging).
-                     Currently supports local file paths only.
-                     Future: Will support Dataset objects for remote logging
-                     (S3, SFTP, etc.) consistent with other d3tools patterns.
+            log_file: Optional workflow log destination. Supports:
+                     - Dataset instance (used as-is)
+                     - str key/path
+                     - Dataset config dict
+                     None disables file logging.
+            run_state_file: Optional workflow run-state destination. Supports:
+                     - Dataset instance (used as-is)
+                     - str key/path
+                     - Dataset config dict
+                     None disables run-state persistence.
             level: Logging level (e.g., 'INFO', 'DEBUG', logging.INFO)
             console: Whether to log to console
             format_file: Format style for file output (from LOG_FORMATS)
             format_console: Format style for console output
             logger_name: Root logger name (default: 'd3tools')
             **options: Additional options for future extension
-            
-        Note:
-            File logging currently only works with local file paths.
-            Remote logging via Dataset objects is planned for future versions.
         """
         self.log_file = log_file
+        self.run_state_file = run_state_file
+        if self.log_file:
+            self.log_file = dataset_from_config(self.log_file)
+        if self.run_state_file:
+            self.run_state_file = dataset_from_config(self.run_state_file)
+
         self.level = level
         self.console = console
         self.format_file = format_file
@@ -110,7 +123,11 @@ class WorkflowLogManager:
                    If None or empty dict, returns a console-only logger.
                    If string, treated as log file path with defaults.
                    If dict, expects keys:
-                       - file: Log file path (supports {now:...} formatting)
+                       - file: Log destination config (str, Dataset dict, or Dataset)
+                           with optional {now:...} formatting in strings
+                       - run_state_file: Run-state destination config
+                           (str, Dataset dict, or Dataset) with optional
+                           {now:...} formatting in strings
                        - level: Logging level (default: 'INFO')
                        - console: Enable console logging (default: True)
                        - format: Format style or separate format_file/format_console
@@ -134,23 +151,28 @@ class WorkflowLogManager:
                 'format': 'detailed'
             })
         """
+
         # Handle None or empty config with default console-only logging
         if config is None or (isinstance(config, dict) and len(config) == 0):
             return cls()
         
         # Handle string path
         if isinstance(config, str):
-            log_file = substitute_string(config, {'now': dt.datetime.now()})
-            return cls(log_file=log_file)
+            return cls(log_file = config)
         
         # Handle dict configuration
         if not isinstance(config, dict):
             raise TypeError(f"Config must be dict, str, or None, got {type(config)}")
         
+        # resolve {now} placeholders in paths before creating Dataset objects
+        from ..config.parsing_pipeline import resolve_now
+        config = resolve_now(config)
+
         # Extract and process file path
         log_file = config.get('file')
-        if log_file:
-            log_file = substitute_string(log_file, {'now': dt.datetime.now()})
+
+        # Extract and process optional run state path
+        run_state_file = config.get('run_state_file')
         
         # Extract other settings
         level = config.get('level', 'INFO')
@@ -165,10 +187,12 @@ class WorkflowLogManager:
         # Pass through any additional options
         extra_options = {k: v for k, v in config.items() 
                         if k not in ['file', 'level', 'console', 'format', 
-                                     'format_file', 'format_console', 'logger_name']}
+                                     'format_file', 'format_console', 'logger_name',
+                                     'run_state_file']}
         
         return cls(
             log_file=log_file,
+            run_state_file=run_state_file,
             level=level,
             console=console,
             format_file=format_file,
@@ -187,10 +211,22 @@ class WorkflowLogManager:
         Returns:
             Configured Logger instance
         """
+
+        file_path = None
+        if self.log_file:
+            if self.log_file.type == 'local':
+                file_path = self.log_file.get_key()
+            else:
+                from tempfile import NamedTemporaryFile
+                temp_file = NamedTemporaryFile(delete=False)
+                file_path = temp_file.name
+                temp_file.close()
+                self._temp_log_file = file_path  # Store for cleanup and upload after execution
+
         logger = configure_logger(
             logger_name=self.logger_name,
             level=self.level,
-            file_path=self.log_file,
+            file_path=file_path,
             console=self.console,
             format_file=self.format_file,
             format_console=self.format_console,
@@ -381,12 +417,45 @@ class WorkflowLogManager:
         for handler in self.logger.handlers:
             handler.setLevel(level)
     
+    def write_run_state(self, run_state: Dict[str, Any]):
+        """
+        Persist structured workflow run state to configured Dataset destination.
+        
+        Writes a single JSON file containing workflow metadata and section
+        execution results. This enables downstream runs to reference prior
+        execution windows for automated scheduling.
+        
+        Args:
+            run_state: Structured state dict with keys:
+                - version: Schema version (int)
+                - run_id: Workflow execution identifier (ISO timestamp)
+                - workflow: Workflow-level metadata (name, status, start, end)
+                - sections: List of section results (name, engine, executed, times, reason)
+        
+        No-op if run_state_file is not configured.
+        
+        Example:
+            run_state = {
+                "version": 1,
+                "run_id": "2024-05-07T14:30:00",
+                "workflow": {"name": "drought", "status": "success"},
+                "sections": [{"name": "download", "executed": true}]
+            }
+            logger.write_run_state(run_state)
+        """
+        if not self.run_state_file:
+            return  # No-op if not configured
+
+        self.run_state_file.write_data(run_state, as_is = True)
+    
     def close(self):
         """
         Close all handlers and clean up.
         
         Call this when workflow execution is complete to ensure
-        all log messages are flushed and files are closed.
+        all log messages are flushed and files are closed. For non-local
+        file logging targets, this also uploads the temporary log file to the
+        configured Dataset destination and removes the temporary file.
         """
         if not hasattr(self, '_closed'):
             self._closed = False
@@ -408,4 +477,16 @@ class WorkflowLogManager:
         for handler in handlers_to_close:
             handler.close()
         
+        if hasattr(self, '_temp_log_file'):
+            
+            # copy temp log file to final destination if using remote logging,
+            # then remove temp file
+            with open(self._temp_log_file, 'r') as f:
+                self.log_file.write_data(f, as_is = True)
+
+            try:
+                os.remove(self._temp_log_file)
+            except Exception as e:
+                print(f"Warning: Failed to remove temporary log file {self._temp_log_file}: {e}")
+
         self._closed = True

@@ -8,11 +8,26 @@ Separating parsing logic here makes it reusable across d3tools, door, dryes, and
 """
 
 import os
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, Union
 
 from ..errors import WorkflowEngineImportError
 
-def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any]] = None):
+# Create dataset_factory for nested dataset parsing
+# This allows manager configs to reference other datasets
+def dataset_factory(cfg, template_ds):
+
+    # use the type from parsed_config as default
+    defaults = template_ds._creation_kwargs.copy()
+    # remove the "name" key if present, since it should not be inherited by nested datasets
+    defaults.pop("name", None)
+
+    # if cfg is a string, assume it is the key_pattern
+    if isinstance(cfg, str):
+        cfg = {'key_pattern': cfg}
+
+    return dataset_from_config(cfg, defaults=defaults)
+
+def dataset_from_config(config: Union['Dataset', str, Dict[str, Any]], defaults: Optional[Dict[str, Any]] = None):
     """
     Create a Dataset from a configuration dictionary.
     
@@ -46,10 +61,14 @@ def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any
     """
     # Import here to avoid circular dependencies
     from ..data import Dataset
+
+    if isinstance(config, Dataset):
+        return config
     
     # Merge with defaults
     defaults = defaults or {}
     parsed_config = defaults.copy()
+    config = config if isinstance(config, dict) else {"key_pattern": config}
     parsed_config.update(config)
 
     # extract thumbnail and log configs before creating the dataset
@@ -65,29 +84,15 @@ def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any
     Subclass = Dataset.get_subclass(type_str)
     ds = Subclass(**parsed_config)
 
-    # Create dataset_factory for nested dataset parsing
-    # This allows manager configs to reference other datasets
-    def dataset_factory(cfg):
-
-        # use the type from parsed_config as default
-        defaults = ds._creation_kwargs.copy()
-
-        # if cfg is a string, assume it is the key_pattern
-        if isinstance(cfg, str):
-            cfg = {'key_pattern': cfg}
-
-        return dataset_from_config(cfg, defaults=defaults)
-
     # Parse manager configurations if present
-    ds.thumbnail = _manager_from_config(thumbnail_config, 'thumbnail', dataset_factory)
-    ds.log       = _manager_from_config(log_config, 'log', dataset_factory)
+    ds.thumbnail = _manager_from_config(thumbnail_config, 'thumbnail', lambda x : dataset_factory(x, template_ds=ds))
+    ds.log       = _manager_from_config(log_config, 'log',  lambda x : dataset_factory(x, template_ds=ds))
     
     # Handle fallback dataset if present
     if fallback_config is not None:
-        ds.fallback = dataset_factory(fallback_config)
+        ds.fallback = dataset_factory(fallback_config, template_ds=ds)
 
     return ds
-
 
 def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callable) -> Any:
     """
@@ -123,7 +128,6 @@ def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callab
     # Parse the config into a manager
     return manager_class.from_dict(config, dataset_factory)
 
-
 def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parse a complete workflow configuration.
@@ -149,11 +153,9 @@ def _build_door_downloader(section_options: Any) -> Any:
     from door import Downloader
     return Downloader.from_options(section_options)
 
-
 def _build_dam_workflow(section_options: Any) -> Any:
     from dam import DAMWorkflow
     return DAMWorkflow.from_options(section_options)
-
 
 def _build_dryes_index(section_options: Any) -> Any:
     from dryes import DRYESIndex
@@ -161,13 +163,11 @@ def _build_dryes_index(section_options: Any) -> Any:
         raise TypeError("DRYES section options must be a mapping")
     return DRYESIndex.from_options(**section_options)
 
-
 _WORKFLOW_ENGINE_BUILDERS = {
     "door": _build_door_downloader,
     "dam": _build_dam_workflow,
     "dryes": _build_dryes_index,
 }
-
 
 def workflow_section_from_config(
         engine: str,
@@ -203,3 +203,41 @@ def workflow_section_from_config(
         if strict_imports:
             raise WorkflowEngineImportError(engine, exc) from exc
         return section_options
+
+def parse_times_from_run_option(option_value: str|dict) -> tuple['Dataset', Optional[str]]:
+    """
+    Parse a times_from_run option value into Dataset and section references.
+    
+    Args:
+        option_value: The value of the times_from_run option, which can be either:
+            - A string in the format "section_name@file.json" (section optional)
+            - A dictionary with required key "file" and optional key "section"
+              where "file" can be a str, dict, or pre-built Dataset
+    
+    Returns:
+        A tuple of (dataset, section_name) where section_name may be None if not provided.
+        The dataset can be a LocalDataset, RemoteDataset, or other Dataset subclass.
+    
+    Raises:
+        ValueError: If the input format is invalid or required keys are missing.
+    """
+
+    if isinstance(option_value, str):
+        if "@" in option_value:
+            section, file  = option_value.split("@", 1)
+            file = file.strip()
+            section = section.strip()
+        else:
+            file = option_value.strip()
+            section = None
+
+    elif isinstance(option_value, dict):
+        file = option_value.get("file")
+        section = option_value.get("section")
+        if not file:
+            raise ValueError("times_from_run dict must contain 'file' key")
+
+    else:
+        raise ValueError("times_from_run option must be a string or dict")
+
+    return dataset_from_config(file), section

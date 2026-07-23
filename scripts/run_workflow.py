@@ -39,6 +39,8 @@ def main():
 
     for wf_section in options.workflow_sections:
         wf_section.value.get_last_ts()
+        if hasattr(wf_section.value, "get_first_ts"):
+            wf_section.value.get_first_ts()
 
     # set the start and end date
     start_date = args.start

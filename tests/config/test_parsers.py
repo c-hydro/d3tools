@@ -199,6 +199,64 @@ class TestDatasetFromConfig:
         
         assert dataset.timestep == Dekad 
 
+    def test_fallback_branch_passes_template_dataset_to_factory(self):
+        """Fallback parsing must call dataset_factory with template_ds."""
+        fallback_ds = LocalDataset(path="/fallback", file="fb.tif")
+
+        with mock.patch("d3tools.config.parsers.dataset_factory", return_value=fallback_ds) as factory_mock:
+            config = {
+                "type": "local",
+                "path": "/data",
+                "file": "primary.tif",
+                "fallback": "fb.tif",
+            }
+
+            dataset = dataset_from_config(config)
+
+            assert dataset.fallback is fallback_ds
+            factory_mock.assert_called_once()
+
+            _, kwargs = factory_mock.call_args
+            assert "template_ds" in kwargs
+            assert kwargs["template_ds"] is dataset
+
+    def test_fallback_dataset_does_not_inherit_parent_name(self):
+        """Nested fallback dataset should not inherit parent name from defaults."""
+        config = {
+            "type": "local",
+            "path": "/data",
+            "file": "primary.tif",
+            "fallback": "fallback.tif",
+        }
+
+        dataset = dataset_from_config(config)
+
+        assert hasattr(dataset, "fallback")
+        assert isinstance(dataset.fallback, LocalDataset)
+        assert dataset.fallback.name != "primary"
+        assert dataset.fallback.name == "fallback"
+
+    def test_nested_thumbnail_dataset_does_not_inherit_parent_name(self):
+        """Nested manager datasets should not inherit parent name from defaults."""
+        config = {
+            "type": "local",
+            "path": "/data",
+            "file": "primary.tif",
+            "name": "parent_name",
+            "thumbnail": {
+                "colors": "colors.json",
+                "destination": "thumb.png",
+            },
+        }
+
+        dataset = dataset_from_config(config)
+
+        assert isinstance(dataset.thumbnail, DatasetThumbnailManager)
+        assert dataset.thumbnail.colors.name != "parent_name"
+        assert dataset.thumbnail.destination.name != "parent_name"
+        assert dataset.thumbnail.colors.name == "colors"
+        assert dataset.thumbnail.destination.name == "thumb"
+
 class TestParseManagerConfig:
     """Test _parse_manager_config helper function."""
     

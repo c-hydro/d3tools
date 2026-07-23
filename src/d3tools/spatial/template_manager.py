@@ -397,13 +397,20 @@ class TemplateManager:
             Data with template spatial structure applied
         """
         if isinstance(data, xr.DataArray):
+            attrs = data.attrs.copy()
             data = TemplateManager.build_array(template_dict, data.data)
+            data.attrs.update(attrs)
         elif isinstance(data, np.ndarray):
             data = TemplateManager.build_array(template_dict, data)
         elif isinstance(data, xr.Dataset):
             vars = template_dict['variables']
             template = TemplateManager.build_array(template_dict, data[vars[0]].data)
-            data = xr.Dataset({var: template.copy(data=data[var]) for var in vars})
+            das = {}
+            for var in vars:
+                da = template.copy(data=data[var])
+                da.attrs.update(data[var].attrs)
+                das[var] = da
+            data = xr.Dataset(das)
         
         # Lazy import to avoid circular dependency
         from ..data.io_utils import set_type

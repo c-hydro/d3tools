@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 import os
 
 from ...timestepping import TimeRange, TimeStep, TimeWindow
-from ...parse import substitute_string, extract_date_and_tags, KeyParser
+from ...parse import substitute_string, extract_date_and_tags, KeyParser, increment_version
 from ..io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format, read_from_file
 from ..data_catalogue import DataCatalogue
 
@@ -521,30 +521,28 @@ class Dataset(metaclass=DatasetMeta):
                 available_versions.sort()
                 kwargs['file_version'] = available_versions[-1]
 
-        # parse the full key with the time and tags
-        full_key = self.get_key(time, **kwargs)
-
-        # first check that the data is available
-        if self._check_data(full_key):
-            # if so, read it
+        # find if the the data is available in the main dataset (1), the parents (2) or the fallback (3)
+        where_code = self.catalogue._find_data_source(time, **kwargs)
+        if where_code == 0:
+            raise FileNotFoundError(f'Could not find data for {self.get_key(time, **kwargs)} in dataset {self.name} or its parents or fallback')
+        elif where_code == 1:
+            full_key = self.get_key(time, **kwargs)
             raw_data = self._read_data(full_key)
-        # if not, check if it has parents to inherit from
-        elif hasattr(self, 'parents') and self.parents is not None:
+            # data extracted from the main dataset should be formatted unless as_is is True 
+            # or this is a memory dataset (which means the data is already in the correct format)
+            as_is = as_is or self.type == 'memory'
+        elif where_code == 2:
             raw_data = self.make_data(time, **kwargs)
-        # if not, try fallback dataset if configured
-        elif hasattr(self, 'fallback') and self.fallback is not None:
-            return self.fallback.get_data(time, as_is = as_is, **kwargs)
-        # if the data is not available and there are no parents, raise an error
-        else:
-            raise FileNotFoundError(f'Could not resolve data from {full_key}.')
+        elif where_code == 3:
+            raw_data = self.fallback.get_data(time, as_is = True, **kwargs)
 
         # if we are not reading the data as is, we need to process it
-        if as_is or self.type == 'memory':
+        if as_is :
             return raw_data
         else:
             # self._format_after_read is implemented in the mixins to handle any
             # format-specific processing after reading
-            return self._format_after_read(raw_data, full_key = full_key, time = time, **kwargs)
+            return self._format_after_read(raw_data, source = where_code, time = time, **kwargs)
     
     def write_data(self, data,
                    time: Optional[dt.datetime|TimeStep] = None,
@@ -553,6 +551,15 @@ class Dataset(metaclass=DatasetMeta):
                    **kwargs):
 
         if metadata is None: metadata = {}
+
+        # if this is a versioned file, and the version is not specified, compute the next version
+        if self.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions:
+                available_versions.sort()
+                kwargs['file_version'] = increment_version(available_versions[-1])
+            else:
+                kwargs['file_version'] = '01'
 
         # check the data format (this will check if the type of the data is compatible with the dataset format)
         check_data_format(data, self.format)

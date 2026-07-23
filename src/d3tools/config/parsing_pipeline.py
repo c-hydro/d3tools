@@ -15,14 +15,12 @@ from ..parse import flatten_dict, set_dataset, set_env, substitute_values, norma
 from .workflow_section import WorkflowSection
 from .workflow_definition import WorkflowDefinition
 
-
 def resolve_env(options: Any):
     """Resolve environment-variable placeholders in options."""
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
         options = Options(options)
     return options.__class__(set_env(options))
-
 
 def resolve_tags(options: Any):
     """Resolve tag placeholders in options using the tags section itself."""
@@ -34,6 +32,15 @@ def resolve_tags(options: Any):
     tags = substitute_values(tags, tags, rec=True)
     return options.__class__(substitute_values(options, tags, rec=True))
 
+def resolve_now(options: Any):
+    """Resolve {now} placeholders in options to current datetime."""
+    # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
+    if not isinstance(options, Options):
+        options = Options(options)
+
+    import datetime as dt
+    now = dt.datetime.now()
+    return options.__class__(substitute_values(options, {"now": now}, rec=True))
 
 def build_datasets(options: Any):
     """Instantiate datasets defined under the datasets section."""
@@ -100,7 +107,7 @@ def prepare_workflow_log(options: Any):
     elif isinstance(workflow_log, dict):
         # Valid keys for workflow_log config
         valid_keys = {'file', 'level', 'console', 'format', 'format_file', 
-                     'format_console', 'logger_name'}
+                     'format_console', 'logger_name', 'run_state_file'}
         
         # Check for unknown keys (warn but don't fail)
         unknown_keys = set(workflow_log.keys()) - valid_keys
@@ -219,6 +226,7 @@ def parse_options(
         os.environ[str(key)] = str(value)
 
     parsed = resolve_env(options)
+    parsed = resolve_now(parsed)
     parsed = resolve_tags(parsed)
     parsed = build_datasets(parsed)
     parsed = resolve_dataset_refs(parsed)

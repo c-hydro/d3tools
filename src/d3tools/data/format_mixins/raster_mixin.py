@@ -103,6 +103,19 @@ class RasterMixin(FormatMixin):
         # Convert nodata values
         data = set_type(data, self.nan_value, read=True)
         
+        # handle source metadata
+        where_code = kwargs.pop('source', 1)
+        if where_code == 1:
+            full_key = self.get_key(**kwargs)
+            metadata = {'source_key': full_key}
+        elif where_code == 2:
+            keys = [p.get_key(**kwargs) for p in self.parents.values()]
+            full_key = ", ".join(keys)
+            metadata = {'source_key': full_key, 'source': 'calculated_data'}
+        elif where_code == 3:
+            full_key = self.fallback.get_key(**kwargs)
+            metadata = {'source_key': full_key, 'source': 'fallback_data'}
+
         # Handle templates
         template_dict = self.get_template_dict(make_it=False, **kwargs)
         if template_dict is None:
@@ -115,8 +128,7 @@ class RasterMixin(FormatMixin):
             data.attrs.update(attrs)
         
         # Add source metadata -> move this to a more general place in Dataset.read_data after format-specific processing
-        if 'source_key' not in kwargs:
-            data.attrs.update({'source_key': kwargs.get('full_key', "")})
+        data.attrs.update(metadata)
         
         return data
 

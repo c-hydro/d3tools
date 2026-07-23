@@ -13,7 +13,7 @@ import os
 import pytest
 import tempfile
 
-from d3tools.config.parsing_pipeline import prepare_workflow_log
+from d3tools.config.parsing_pipeline import prepare_workflow_log, parse_options
 
 
 class TestPrepareWorkflowLogValidation:
@@ -230,3 +230,30 @@ class TestPrepareWorkflowLogEdgeCases:
         
         # Should be preserved as-is (will be validated at runtime)
         assert result['workflow_log'] == config
+
+
+class TestWorkflowLogNowResolution:
+    """Test now-resolution behavior across pipeline and manager paths."""
+
+    def test_parse_options_resolves_same_now_for_file_and_run_state(self, tmp_path):
+        """Global pipeline resolve_now should apply one timestamp to both targets."""
+        config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_log": {
+                "file": str(tmp_path / "wf_{now:%Y%m%d_%H%M%S_%f}.log"),
+                "run_state_file": str(tmp_path / "state_{now:%Y%m%d_%H%M%S_%f}.json"),
+            }
+        }
+
+        parsed = parse_options(config)
+        log_file = parsed["workflow_log"]["file"]
+        state_file = parsed["workflow_log"]["run_state_file"]
+
+        # Ensure placeholders were resolved in both paths.
+        assert "{now:" not in log_file
+        assert "{now:" not in state_file
+
+        log_stamp = os.path.basename(log_file).replace("wf_", "").replace(".log", "")
+        state_stamp = os.path.basename(state_file).replace("state_", "").replace(".json", "")
+        assert log_stamp == state_stamp

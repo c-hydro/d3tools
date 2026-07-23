@@ -138,7 +138,8 @@ class DataCatalogue:
                 files = []
                 for month in months:
                     t_start = max(month.start, time.start)
-                    t_end = min(month.end, time.end)
+                    month_end = month.end.replace(hour=23, minute=59, second=59)
+                    t_end = min(month_end, time.end)
                     files.extend(self.get_available_keys(TimeRange(t_start, t_end), **kwargs))
                 return files
         
@@ -250,6 +251,13 @@ class DataCatalogue:
                 if time not in all_times and time_range.contains(time):
                     yield time
 
+        # Add times from fallback dataset if available (union with main dataset)
+        if hasattr(self.dataset, 'fallback') and self.dataset.fallback is not None:
+            fallback_times = set(self.dataset.fallback.get_times(time_range,  **kwargs))
+            for time in fallback_times:
+                if time not in all_times and time_range.contains(time):
+                    yield time
+
     @withcases
     def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
         """
@@ -307,12 +315,10 @@ class DataCatalogue:
         timesteps = [timestep.from_date(t) for t in times]
         
         # Filter to ensure timesteps overlap with requested range
-        for ts in timesteps:
-            end = time_range.end
-            if end.hour == 0 and end.minute == 0:
-                end = end + dt.timedelta(minutes=1439)
-            if ts.start > end or ts.end < time_range.start:
-                timesteps.remove(ts)
+        end = time_range.end
+        if end.hour == 0 and end.minute == 0:
+            end = end + dt.timedelta(minutes = 1439)
+        timesteps = [ts for ts in timesteps if not (ts.start > end or ts.end < time_range.start)]
 
         return timesteps
 
@@ -377,7 +383,7 @@ class DataCatalogue:
         while start_month <= end_month:
             # Calculate midpoint
             months_diff = (end_month.start.year - start_month.start.year) * 12 + \
-                         (end_month.start.month - start_month.start.month)
+                          (end_month.start.month - start_month.start.month)
             
             if months_diff <= 1:
                 # Adjacent or same months - we're done
@@ -407,6 +413,15 @@ class DataCatalogue:
                     # Searching for first: move start forward
                     start_month = mid_month + 1
         
+        if direction < 0:
+            # if searching for first, ensure we return the earliest month with data
+            # this could be boundary_month or start_month depending on the final check
+            if len(self.get_times(start_month, **kwargs)) > 0:
+                return start_month
+        else:
+            if len(self.get_times(end_month, **kwargs)) > 0:
+                return end_month
+             
         return boundary_month
 
     @withcases
@@ -435,7 +450,8 @@ class DataCatalogue:
             [datetime(2024, 2, 15), datetime(2024, 2, 14), datetime(2024, 2, 13)]
         """
         if now is None:
-            now = dt.datetime.now()
+            # Add buffer to include forecast data (+1 month for now, this will need to be adjusted because it is a bit hacky)
+            now = dt.datetime.now() + dt.timedelta(days=31) 
         
         # Find ANY date first using exponential backoff
         any_date = self.get_any_date(now=now, lim=lim, **kwargs)
@@ -492,7 +508,8 @@ class DataCatalogue:
             datetime(2024, 1, 15)  # Some recent date, not necessarily the last
         """
         if now is None:
-            now = dt.datetime.now()
+            # Add buffer to include forecast data (+1 month for now, this will need to be adjusted because it is a bit hacky)
+            now = dt.datetime.now() + dt.timedelta(days=31) 
         
         # Default limit: 5 years back (reasonable for most datasets)
         if lim is None:
@@ -715,7 +732,6 @@ class DataCatalogue:
             >>> catalogue.check_data(datetime(2024, 1, 1))  # Checks all tiles
             False  # Only returns True if ALL tiles exist
         """
-        from ..timestepping import TimeStep
         
         # Handle versioned files - get latest version if not specified
         if self.dataset.has_version and 'file_version' not in kwargs:
@@ -726,21 +742,46 @@ class DataCatalogue:
 
         # If specific tile is requested, check that tile
         if 'tile' in kwargs:
-            full_key = self.dataset.get_key(time, **kwargs)
-            if self.dataset._check_data(full_key):
-                return True
-            # Check parent datasets if available
-            elif hasattr(self.dataset, 'parents') and self.dataset.parents is not None:
-                return all([parent.catalogue.check_data(time, **kwargs) 
-                           for parent in self.dataset.parents.values()])
-            else:
-                return False
+            return self._find_data_source(time, **kwargs) > 0
 
         # If no tile specified, check all tiles (returns True only if ALL exist)
         for tile in self.dataset.tile_names:
-            if not self.check_data(time, tile=tile, **kwargs):
+            if self._find_data_source(time, tile=tile, **kwargs) == 0:
                 return False
         return True
+
+    def _find_data_source(self, time: Optional[dt.datetime] = None, **kwargs) -> bool:
+        """
+        Check if data is available for a given time and tags and returns its source:
+        0. data not found
+        1. main dataset
+        2. parent datasets (if any)
+        3. fallback dataset (if any) 
+        
+        """
+        
+        # Handle versioned files - get latest version if not specified
+        if self.dataset.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions is not None:
+                available_versions.sort()
+                kwargs['file_version'] = available_versions[-1]
+
+        full_key = self.dataset.get_key(time, **kwargs)
+        if self.dataset._check_data(full_key):
+            return 1
+        
+        # Check parent datasets if available
+        if hasattr(self.dataset, 'parents') and self.dataset.parents is not None:
+            if all([parent.catalogue.check_data(time, **kwargs) for parent in self.dataset.parents.values()]):
+                return 2
+        
+        # Check fallback datasets if available
+        if hasattr(self.dataset, 'fallback') and self.dataset.fallback is not None:
+            if self.dataset.fallback.check_data(time, **kwargs):
+                return 3
+        
+        return 0
 
     @withcases
     def find_times(self, times: list[dt.datetime], id: bool = False, rev: bool = False, **kwargs) -> list[dt.datetime] | list[int]:

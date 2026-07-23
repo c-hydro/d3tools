@@ -2,7 +2,9 @@
 
 import datetime as dt
 
-from d3tools.parse.string_rendering import substitute_string, substitute_values, normalise_string
+import pytest
+
+from d3tools.parse.string_rendering import substitute_string, substitute_values, normalise_string, increment_version
 
 
 class TestSubstituteString:
@@ -81,3 +83,37 @@ class TestNormaliseString:
         """Normalisation should convert all characters to lowercase."""
         assert normalise_string("ExampleString") == "examplestring"
         assert normalise_string("EXAMPLESTRING") == "examplestring"
+
+
+class TestIncrementVersion:
+    """Test version string incrementing."""
+
+    def test_simple_zero_padded(self):
+        """Standard zero-padded version increments correctly."""
+        assert increment_version("v01") == "v02"
+
+    def test_padding_is_preserved(self):
+        """Zero-padding width is maintained when there is room."""
+        assert increment_version("v007") == "v008"
+
+    def test_padding_overflows_naturally(self):
+        """Incrementing past the padded width produces an extra digit."""
+        assert increment_version("v99") == "v100"
+        assert increment_version("v009") == "v010"
+
+    def test_no_prefix(self):
+        """Version with no leading characters still increments."""
+        assert increment_version("003") == "004"
+
+    def test_suffix_after_number(self):
+        """Characters after the number are preserved unchanged."""
+        assert increment_version("v01_final") == "v02_final"
+
+    def test_last_number_is_incremented(self):
+        """When multiple integers are present, the last one is incremented."""
+        assert increment_version("run3_v01") == "run3_v02"
+
+    def test_no_integer_raises(self):
+        """A version string with no digits raises ValueError."""
+        with pytest.raises(ValueError, match="No integer found"):
+            increment_version("latest")

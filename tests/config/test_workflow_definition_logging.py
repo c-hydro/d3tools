@@ -88,7 +88,8 @@ class TestWorkflowDefinitionLoggingIntegration:
         
         assert wf.logger is not None
         assert isinstance(wf.logger, WorkflowLogManager)
-        assert wf.logger.log_file == str(log_file)
+        assert hasattr(wf.logger.log_file, 'get_key')
+        assert wf.logger.log_file.get_key() == str(log_file)
 
     def test_run_uses_logger_for_workflow_execution(self, config_with_logging):
         """run() should use logger to log workflow execution."""
