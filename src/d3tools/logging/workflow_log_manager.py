@@ -53,6 +53,7 @@ class WorkflowLogManager:
     def __init__(
         self,
         log_file: Optional[str] = None,
+        run_state_file: Optional[str] = None,
         level: Union[int, str] = logging.INFO,
         console: bool = True,
         format_file: str = 'detailed',
@@ -68,6 +69,11 @@ class WorkflowLogManager:
                      Currently supports local file paths only.
                      Future: Will support Dataset objects for remote logging
                      (S3, SFTP, etc.) consistent with other d3tools patterns.
+            run_state_file: Optional JSONpath used to persist structured
+                     workflow run state for downstream time-range resolution.
+                     Currently supports local file paths only.
+                     Future: Will support Dataset objects for remote logging
+                     (S3, SFTP, etc.) consistent with other d3tools patterns.
             level: Logging level (e.g., 'INFO', 'DEBUG', logging.INFO)
             console: Whether to log to console
             format_file: Format style for file output (from LOG_FORMATS)
@@ -80,6 +86,7 @@ class WorkflowLogManager:
             Remote logging via Dataset objects is planned for future versions.
         """
         self.log_file = log_file
+        self.run_state_file = run_state_file
         self.level = level
         self.console = console
         self.format_file = format_file
@@ -111,6 +118,8 @@ class WorkflowLogManager:
                    If string, treated as log file path with defaults.
                    If dict, expects keys:
                        - file: Log file path (supports {now:...} formatting)
+                       - run_state_file: Structured run-state file path
+                            (supports {now:...} formatting)
                        - level: Logging level (default: 'INFO')
                        - console: Enable console logging (default: True)
                        - format: Format style or separate format_file/format_console
@@ -151,6 +160,11 @@ class WorkflowLogManager:
         log_file = config.get('file')
         if log_file:
             log_file = substitute_string(log_file, {'now': dt.datetime.now()})
+
+        # Extract and process optional run state path
+        run_state_file = config.get('run_state_file')
+        if run_state_file:
+            run_state_file = substitute_string(run_state_file, {'now': dt.datetime.now()})
         
         # Extract other settings
         level = config.get('level', 'INFO')
@@ -165,10 +179,12 @@ class WorkflowLogManager:
         # Pass through any additional options
         extra_options = {k: v for k, v in config.items() 
                         if k not in ['file', 'level', 'console', 'format', 
-                                     'format_file', 'format_console', 'logger_name']}
+                                     'format_file', 'format_console', 'logger_name',
+                                     'run_state_file']}
         
         return cls(
             log_file=log_file,
+            run_state_file=run_state_file,
             level=level,
             console=console,
             format_file=format_file,

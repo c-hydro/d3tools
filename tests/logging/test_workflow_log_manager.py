@@ -32,6 +32,7 @@ class TestWorkflowLogManagerInit:
         log_mgr = WorkflowLogManager(console=True, log_file=None)
         
         assert log_mgr.log_file is None
+        assert log_mgr.run_state_file is None
         assert log_mgr.console is True
         assert log_mgr.level == logging.INFO
         assert log_mgr.logger_name == 'd3tools'
@@ -50,6 +51,7 @@ class TestWorkflowLogManagerInit:
             log_mgr = WorkflowLogManager(log_file=log_file, console=False)
             
             assert log_mgr.log_file == log_file
+            assert log_mgr.run_state_file is None
             assert log_mgr.console is False
             
             # Should have file handler but no console handler
@@ -57,6 +59,16 @@ class TestWorkflowLogManagerInit:
             assert len(handlers) == 1
             assert isinstance(handlers[0], logging.FileHandler)
             
+            log_mgr.close()
+
+    def test_init_with_run_state_file(self):
+        """Test initialization stores run_state_file option."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_state_file = os.path.join(tmpdir, 'workflow_state.jsonl')
+            log_mgr = WorkflowLogManager(run_state_file=run_state_file, console=False)
+
+            assert log_mgr.run_state_file == run_state_file
+
             log_mgr.close()
     
     def test_init_file_and_console(self):
@@ -130,6 +142,7 @@ class TestWorkflowLogManagerFromDict:
         log_mgr = WorkflowLogManager.from_dict(None)
         assert log_mgr is not None
         assert log_mgr.log_file is None
+        assert log_mgr.run_state_file is None
         assert log_mgr.console is True
 
         log_mgr.close()
@@ -139,6 +152,7 @@ class TestWorkflowLogManagerFromDict:
         log_mgr = WorkflowLogManager.from_dict({})
         assert log_mgr is not None
         assert log_mgr.log_file is None
+        assert log_mgr.run_state_file is None
         assert log_mgr.console is True
 
         log_mgr.close()
@@ -175,6 +189,7 @@ class TestWorkflowLogManagerFromDict:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = {
                 'file': os.path.join(tmpdir, 'test.log'),
+                'run_state_file': os.path.join(tmpdir, 'workflow_state.jsonl'),
                 'level': 'DEBUG',
                 'console': False,
                 'format': 'minimal',
@@ -183,6 +198,7 @@ class TestWorkflowLogManagerFromDict:
             log_mgr = WorkflowLogManager.from_dict(config)
             
             assert log_mgr.log_file == config['file']
+            assert log_mgr.run_state_file == config['run_state_file']
             assert log_mgr.level == 'DEBUG'
             assert log_mgr.console is False
             assert log_mgr.format_file == 'minimal'
@@ -203,6 +219,20 @@ class TestWorkflowLogManagerFromDict:
             assert log_mgr.format_file == 'detailed'
             assert log_mgr.format_console == 'simple'
             
+            log_mgr.close()
+
+    def test_from_dict_with_run_state_now_placeholder(self):
+        """Test from_dict substitutes {now:...} in run_state_file path."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = {
+                'run_state_file': os.path.join(tmpdir, 'state_{now:%Y%m%d}.jsonl')
+            }
+
+            log_mgr = WorkflowLogManager.from_dict(config)
+
+            expected_date = dt.datetime.now().strftime('%Y%m%d')
+            assert expected_date in log_mgr.run_state_file
+
             log_mgr.close()
     
     def test_from_dict_invalid_type(self):
