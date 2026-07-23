@@ -317,6 +317,116 @@ class TestWorkflowSection:
         # 5-day window from 2024-01-04 starts from 2023-12-31
         assert time_range.start == dt.datetime(2023, 12, 31)
 
+    def test_get_run_timerange_all_available_for_dam_uses_full_available_window(self):
+        """all_available should run from first available to latest available for dam."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+        class MockProcess:
+            def get_first_ts(self):
+                return MockTimeStep(2023, 12, 29)
+
+            def get_last_ts(self):
+                # last_done is intentionally newer than first_ts to verify it is ignored.
+                return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 3)
+
+        section = WorkflowSection(
+            "Process",
+            "dam",
+            {},
+            MockProcess(),
+            exec_options={"all_available": True},
+        )
+
+        time_range = section.get_run_timerange()
+
+        assert time_range.start == dt.datetime(2023, 12, 29)
+        assert time_range.end == dt.datetime(2024, 1, 4, 23, 59, 59)
+
+    def test_get_run_timerange_all_available_raises_for_non_dam_engine(self):
+        """all_available should fail fast for engines other than dam."""
+
+        section = WorkflowSection(
+            "Download",
+            "door",
+            {},
+            object(),
+            exec_options={"all_available": True},
+        )
+
+        with pytest.raises(ValueError, match="only supported for 'dam' sections"):
+            section.get_run_timerange()
+
+    def test_get_run_timerange_all_available_raises_when_first_ts_is_missing(self):
+        """all_available should raise when no first available timestep can be resolved."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+        class MockProcess:
+            def get_first_ts(self):
+                return None
+
+            def get_last_ts(self):
+                return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 3)
+
+        section = WorkflowSection(
+            "Process",
+            "dam",
+            {},
+            MockProcess(),
+            exec_options={"all_available": True},
+        )
+
+        with pytest.raises(ValueError, match="has no available data"):
+            section.get_run_timerange()
+
+    def test_get_run_timerange_all_available_honors_env_override(self, monkeypatch):
+        """ALL_AVAILABLE env var should override exec_options when resolving run timerange."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_first_ts(self):
+                return MockTimeStep(2023, 12, 29)
+
+            def get_last_ts(self):
+                # If ALL_AVAILABLE is honored, end date should be 2024-01-04.
+                return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 3)
+
+        monkeypatch.setenv("ALL_AVAILABLE", "true")
+
+        section = WorkflowSection(
+            "Process",
+            "dam",
+            {},
+            MockProcess(),
+            exec_options={"all_available": False},
+        )
+
+        time_range = section.get_run_timerange()
+
+        assert time_range.start == dt.datetime(2023, 12, 29)
+        assert time_range.end == dt.datetime(2024, 1, 4, 23, 59, 59)
+
     def test_get_run_timerange_returns_missing_output_window(self):
         """get_run_timerange should span the timesteps still missing from output."""
 

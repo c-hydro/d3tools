@@ -23,6 +23,12 @@ WORKFLOW_SECTION_ALIASES = {
     "calculate": "dryes",
 }
 
+AVAILBALE_EXECUTION_OPTIONS = {
+    "times_from_run": "Reference a prior workflow run's execution window for this section's execution range",
+    "all_available": "Execute for the entire available time range (currently only supported for 'dam' sections)",
+    "repeat_window": "Extend the execution time range backwards by this amount (e.g. '7d' or '1m') to re-process some prior timesteps",
+    "split": "If true and the execution time range is longer than 31 days, split into monthly sub-ranges for execution",
+}
 
 @dataclass
 class WorkflowSectionRunResult:
@@ -129,7 +135,17 @@ class WorkflowSection:
             time_range = get_timerange_from_run_state(times_from_run)
             if time_range is not None:
                 return time_range
-                    
+
+        all_available = self.get_exec_option("all_available", False, asbool=True)
+        if all_available:
+            if self.engine != "dam":
+                raise ValueError(f"exec_option 'all_available' is currently only supported for 'dam' sections, but section '{self.name}' has engine '{self.engine}'")
+            first_ts = self.value.get_first_ts()
+            last_ts  = self.value.get_last_ts()[0]
+            if first_ts is None or last_ts is None:
+                raise ValueError(f"Workflow section '{self.name}' has no available data to determine time range for execution")
+            return TimeRange(first_ts.start, last_ts.end)
+
         # Normal resolution logic
         process = self.value
         last_available, last_done = process.get_last_ts()
