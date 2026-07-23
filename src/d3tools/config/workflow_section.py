@@ -95,11 +95,14 @@ class WorkflowSection:
         )
         return cls(name=name, engine=engine, definition=definition, value=value, exec_options=exec_options)
     
-    def get_exec_option(self, option_name: str, default: Any = None) -> Any:
+    def get_exec_option(self, option_name: str, default: Any = None, asbool=False) -> Any:
         """Helper to get an execution option for this section."""
 
         option_env_name = f"{option_name.upper()}"
-        return os.getenv(option_env_name, (self.exec_options or {}).get(option_name, default))
+        value = os.getenv(option_env_name, (self.exec_options or {}).get(option_name, default))
+        if asbool:
+            value = str(value).lower() in ("true", "1", "yes", "on")
+        return value
 
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
