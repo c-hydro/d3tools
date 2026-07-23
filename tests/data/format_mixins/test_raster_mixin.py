@@ -17,6 +17,7 @@ import rioxarray as rxr
 import numpy as np
 import datetime as dt
 from pathlib import Path
+from rasterio.errors import NotGeoreferencedWarning
 
 from d3tools.data import LocalDataset, MemoryDataset
 
@@ -186,7 +187,12 @@ class TestRasterReadGeoTIFF:
         """Test that CRS is preserved when reading GeoTIFF."""
         data = xr.DataArray(
             np.random.rand(1, 10, 10),
-            dims=['band', 'y', 'x']
+            dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(45, 35, 10),
+                'x': np.linspace(5, 15, 10)
+            }
         )
         data.rio.write_crs("EPSG:4326", inplace=True)
         data.rio.write_coordinate_system(inplace=True)
@@ -206,9 +212,15 @@ class TestRasterReadGeoTIFF:
         # Instead create small file and test with low threshold
         data = xr.DataArray(
             np.random.rand(1, 100, 100),
-            dims=['band', 'y', 'x']
+            dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(50, 40, 100),
+                'x': np.linspace(0, 10, 100)
+            }
         )
         data.rio.write_crs("EPSG:4326", inplace=True)
+        data.rio.write_coordinate_system(inplace=True)
         tif_file = tmp_path / "large.tif"
         data.rio.to_raster(tif_file)
         
@@ -326,6 +338,11 @@ class TestRasterWriteGeoTIFF:
         data = xr.DataArray(
             np.random.rand(1, 10, 10),
             dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(45, 35, 10),
+                'x': np.linspace(5, 15, 10)
+            },
             attrs={'_FillValue': -9999}
         )
         data.rio.write_crs("EPSG:4326", inplace=True)
@@ -437,8 +454,8 @@ class TestRasterCoordinateHandling:
         data.rio.write_crs("EPSG:4326", inplace=True)
         data.rio.write_coordinate_system(inplace=True)
 
-        nc_file = tmp_path / "ascending.tif"
-        data.to_netcdf(nc_file, engine = 'h5netcdf')
+        tif_file = tmp_path / "ascending.tif"
+        data.rio.to_raster(tif_file)
         
         dataset = LocalDataset(path=str(tmp_path), file="ascending.tif")
         read_data = dataset.get_data()
@@ -451,10 +468,16 @@ class TestRasterCoordinateHandling:
         data = xr.DataArray(
             np.array([[1, 2, -9999], [4, 5, 6]]),
             dims=['y', 'x'],
+            coords={
+                'y': np.linspace(20, 10, 2),
+                'x': np.linspace(0, 20, 3)
+            },
             attrs={'_FillValue': -9999}
         )
-        nc_file = tmp_path / "nodata.tif"
-        data.to_netcdf(nc_file, engine = 'h5netcdf')
+        data.rio.write_crs("EPSG:4326", inplace=True)
+        data.rio.write_coordinate_system(inplace=True)
+        tif_file = tmp_path / "nodata.tif"
+        data.rio.to_raster(tif_file)
         
         dataset = LocalDataset(path=str(tmp_path), file="nodata.tif")
         read_data = dataset.get_data()
@@ -655,10 +678,11 @@ class TestRasterEdgeCases:
             dims=['y', 'x'],
             attrs={'_FillValue': -9999}
         )
-        nc_file = tmp_path / "empty.tif"
-        data.to_netcdf(nc_file, engine = 'h5netcdf')
+
+        netcdf_file = tmp_path / "empty.nc"
+        data.to_netcdf(netcdf_file, engine = 'h5netcdf')
         
-        dataset = LocalDataset(path=str(tmp_path), file="empty.tif")
+        dataset = LocalDataset(path=str(tmp_path), file="empty.nc")
         with pytest.raises(Exception):
             read_data = dataset.get_data()
     
@@ -667,11 +691,18 @@ class TestRasterEdgeCases:
         # Create moderately large array (not huge for test speed)
         data = xr.DataArray(
             np.random.rand(100, 100),
+            coords={
+                'y': np.linspace(10, 0, 100),
+                'x': np.linspace(0, 10, 100)
+            },
             dims=['y', 'x'],
             attrs={'_FillValue': -9999}
         )
-        nc_file = tmp_path / "large.tif"
-        data.to_netcdf(nc_file, engine = 'h5netcdf')
+        data.rio.write_crs("EPSG:4326", inplace=True)
+        data.rio.write_coordinate_system(inplace=True)
+
+        tif_file = tmp_path / "large.tif"
+        data.rio.to_raster(tif_file)
         
         dataset = LocalDataset(path=str(tmp_path), file="large.tif")
         read_data = dataset.get_data()

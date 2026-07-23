@@ -175,7 +175,10 @@ class TestGetWindow:
         win = get_window(dt, 2, 't', start=False)
         assert isinstance(win, TimeRange)
         
-        win = get_window(dt, 2, 't', start=True)
+        # this should give a warning but work
+        with pytest.warns(UserWarning, match='The given time does not correspond to the start of a dekad'):
+            win = get_window(dt, 2, 't', start=True)
+
         assert isinstance(win, TimeRange)
 
     def test_get_window_various_units(self):
