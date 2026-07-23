@@ -167,18 +167,25 @@ class WorkflowDefinition:
         # Run workflow with logging context if logger exists
         if self.logger:
             with self.logger.workflow_execution(self.workflow_name):
-                self._run_sections(time_range)
+                section_results = self._run_sections(time_range)
+                # Persist run state if logger is configured for it
+                self._write_workflow_state(section_results, time_range)
         else:
             self._run_sections(time_range)
 
-    def _run_sections(self, time_range: TimeRange | None):
+    def _run_sections(self, time_range: TimeRange | None) -> list:
         """Execute workflow sections with optional logging.
 
         Args:
             time_range: TimeRange for workflow execution. If ``None``, each
                 section determines its own range from input/output data
                 availability.
+        
+        Returns:
+            List of WorkflowSectionRunResult objects from section execution
         """
+        section_results = []
+        
         for section in self.workflow_sections:
             # Keep section-level context around actual section execution.
             if self.logger:
@@ -191,12 +198,65 @@ class WorkflowDefinition:
             if result is None:
                 continue
 
+            # Collect result for state persistence
+            section_results.append(result)
+
             # New run contract: log explicit skips.
             if not result.executed and self.logger:
                 self.logger.get_logger().info(
                     f"Skipped workflow section '{result.section_name}' with engine '{result.engine}': "
                     f"{result.reason or 'nothing to do'}"
                 )
+        
+        return section_results
+
+    def _write_workflow_state(self, section_results: list, time_range: TimeRange | None):
+        """Build and persist workflow run state.
+        
+        Args:
+            section_results: List of WorkflowSectionRunResult from execution
+            time_range: Original execution time range
+        """
+        if not self.logger:
+            return
+        
+        # Determine workflow status from section results
+        workflow_status = "success" if all(r.executed for r in section_results) else "partial"
+        
+        # Calculate workflow start/end from section results
+        workflow_start = None
+        workflow_end = None
+        
+        for result in section_results:
+            if result.time_range:
+                if workflow_start is None or result.time_range.start < workflow_start:
+                    workflow_start = result.time_range.start
+                if workflow_end is None or result.time_range.end > workflow_end:
+                    workflow_end = result.time_range.end
+        
+        # Build run state structure
+        run_state = {
+            "version": 1,
+            "run_id": dt.datetime.now().isoformat(),
+            "name": self.workflow_name,
+            "status": workflow_status,
+            "start": workflow_start.isoformat() if workflow_start else None,
+            "end": workflow_end.isoformat() if workflow_end else None,
+            "sections": [
+                {
+                    "name": result.section_name,
+                    "engine": result.engine,
+                    "executed": result.executed,
+                    "start": result.time_range.start.isoformat() if result.time_range else None,
+                    "end": result.time_range.end.isoformat() if result.time_range else None,
+                    "reason": result.reason,
+                }
+                for result in section_results
+            ]
+        }
+        
+        # Write to file if configured
+        self.logger.write_run_state(run_state)
 
     @staticmethod
     def _get_run_timerange(

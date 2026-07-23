@@ -14,9 +14,12 @@ Key features:
 """
 
 import datetime as dt
+import json
 import logging
+import os
 import time
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional, Dict, Any, Union
 
 from .utils import configure_logger, LOG_FORMATS, DATE_FORMAT
@@ -396,6 +399,49 @@ class WorkflowLogManager:
 
         for handler in self.logger.handlers:
             handler.setLevel(level)
+    
+    def write_run_state(self, run_state: Dict[str, Any]):
+        """
+        Persist structured workflow run state to configured file path.
+        
+        Writes a single JSON file containing workflow metadata and section
+        execution results. This enables downstream runs to reference prior
+        execution windows for automated scheduling.
+        
+        Args:
+            run_state: Structured state dict with keys:
+                - version: Schema version (int)
+                - run_id: Workflow execution identifier (ISO timestamp)
+                - workflow: Workflow-level metadata (name, status, start, end)
+                - sections: List of section results (name, engine, executed, times, reason)
+        
+        No-op if run_state_file is not configured. Creates parent directories
+        as needed for local file paths.
+        
+        Example:
+            run_state = {
+                "version": 1,
+                "run_id": "2024-05-07T14:30:00",
+                "workflow": {"name": "drought", "status": "success"},
+                "sections": [{"name": "download", "executed": true}]
+            }
+            logger.write_run_state(run_state)
+        """
+        if not self.run_state_file:
+            return  # No-op if not configured
+        
+        # Ensure parent directory exists
+        output_path = Path(self.run_state_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write JSON to file
+        try:
+            with open(output_path, 'w') as f:
+                json.dump(run_state, f, indent=2, default=str)
+            self.logger.info(f"Wrote workflow run state to: {output_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to write run state to {output_path}: {e}")
+            raise
     
     def close(self):
         """

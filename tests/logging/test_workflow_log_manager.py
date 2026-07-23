@@ -620,3 +620,198 @@ class TestWorkflowLogManagerIntegration:
             assert "Data module message" in content
             assert "Config module message" in content
             assert "Parse module warning" in content
+
+
+class TestWorkflowRunStateWriting:
+    """Test write_run_state() method for persisting workflow run state."""
+    
+    def test_write_run_state_creates_file(self):
+        """Test that write_run_state creates a JSON file with run state."""
+        import json
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = os.path.join(tmpdir, 'run_state.json')
+            log_mgr = WorkflowLogManager(run_state_file=state_file, console=False)
+            
+            run_state = {
+                "version": 1,
+                "run_id": "2024-05-07T14:30:00",
+                "workflow": {
+                    "name": "test_workflow",
+                    "status": "success",
+                    "start": "2024-05-07T00:00:00",
+                    "end": "2024-05-07T23:59:59"
+                },
+                "sections": [
+                    {
+                        "name": "download",
+                        "engine": "door",
+                        "executed": True,
+                        "start": "2024-05-07T00:00:00",
+                        "end": "2024-05-07T06:00:00",
+                        "reason": None
+                    }
+                ]
+            }
+            
+            log_mgr.write_run_state(run_state)
+            log_mgr.close()
+            
+            # Verify file was created
+            assert os.path.exists(state_file)
+            
+            # Verify JSON structure
+            with open(state_file, 'r') as f:
+                loaded_state = json.load(f)
+            
+            assert loaded_state["version"] == 1
+            assert loaded_state["workflow"]["name"] == "test_workflow"
+            assert len(loaded_state["sections"]) == 1
+            assert loaded_state["sections"][0]["name"] == "download"
+    
+    def test_write_run_state_no_op_if_not_configured(self):
+        """Test that write_run_state is a no-op if run_state_file is not configured."""
+        log_mgr = WorkflowLogManager(console=False, run_state_file=None)
+        
+        run_state = {
+            "version": 1,
+            "run_id": "test",
+            "name": "test",
+            "sections": []
+        }
+        
+        # Should not raise, just silently skip
+        log_mgr.write_run_state(run_state)
+        log_mgr.close()
+    
+    def test_write_run_state_creates_parent_directories(self):
+        """Test that write_run_state creates missing parent directories."""
+        import json
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = os.path.join(tmpdir, 'subdir', 'nested', 'run_state.json')
+            log_mgr = WorkflowLogManager(run_state_file=state_file, console=False)
+            
+            run_state = {
+                "version": 1,
+                "run_id": "test_id",
+                "name": "test",
+                "sections": []
+            }
+            
+            log_mgr.write_run_state(run_state)
+            log_mgr.close()
+            
+            # Parent directories should have been created
+            assert os.path.exists(os.path.dirname(state_file))
+            assert os.path.exists(state_file)
+    
+    def test_write_run_state_with_multiple_sections(self):
+        """Test write_run_state with multiple sections."""
+        import json
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = os.path.join(tmpdir, 'run_state.json')
+            log_mgr = WorkflowLogManager(run_state_file=state_file, console=False)
+            
+            run_state = {
+                "version": 1,
+                "run_id": "2024-05-07T14:30:00",
+                "name": "multi_section",
+                "status": "success",
+                "sections": [
+                    {"name": "download", "engine": "door", "executed": True},
+                    {"name": "process", "engine": "dam", "executed": True},
+                    {"name": "calculate", "engine": "dryes", "executed": True}
+                ]
+            }
+            
+            log_mgr.write_run_state(run_state)
+            log_mgr.close()
+            
+            with open(state_file, 'r') as f:
+                loaded_state = json.load(f)
+            
+            assert len(loaded_state["sections"]) == 3
+            assert [s["name"] for s in loaded_state["sections"]] == ["download", "process", "calculate"]
+    
+    def test_write_run_state_with_skipped_sections(self):
+        """Test write_run_state with skipped sections."""
+        import json
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = os.path.join(tmpdir, 'run_state.json')
+            log_mgr = WorkflowLogManager(run_state_file=state_file, console=False)
+            
+            run_state = {
+                "version": 1,
+                "run_id": "2024-05-07T14:30:00",
+                "name": "partial_workflow",
+                "status": "partial",
+                "sections": [
+                    {"name": "download", "engine": "door", "executed": True, "reason": None},
+                    {"name": "process", "engine": "dam", "executed": False, "reason": "No data available"}
+                ]
+            }
+            
+            log_mgr.write_run_state(run_state)
+            log_mgr.close()
+            
+            with open(state_file, 'r') as f:
+                loaded_state = json.load(f)
+            
+            assert loaded_state["status"] == "partial"
+            assert loaded_state["sections"][0]["executed"] is True
+            assert loaded_state["sections"][1]["executed"] is False
+            assert loaded_state["sections"][1]["reason"] == "No data available"
+    
+    def test_write_run_state_error_handling(self):
+        """Test write_run_state raises error when file write fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a read-only directory to cause write failure
+            state_file = os.path.join(tmpdir, 'readonly_dir', 'run_state.json')
+            os.makedirs(os.path.dirname(state_file))
+            os.chmod(os.path.dirname(state_file), 0o444)  # Read-only
+            
+            try:
+                log_mgr = WorkflowLogManager(run_state_file=state_file, console=False)
+                
+                run_state = {
+                    "version": 1,
+                    "run_id": "test",
+                    "name": "test",
+                    "sections": []
+                }
+                
+                # Should raise an error
+                with pytest.raises(Exception):  # PermissionError or OSError
+                    log_mgr.write_run_state(run_state)
+                
+                log_mgr.close()
+            finally:
+                # Restore permissions for cleanup
+                os.chmod(os.path.dirname(state_file), 0o755)
+    
+    def test_write_run_state_formats_json_nicely(self):
+        """Test that write_run_state formats JSON with indentation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = os.path.join(tmpdir, 'run_state.json')
+            log_mgr = WorkflowLogManager(run_state_file=state_file, console=False)
+            
+            run_state = {
+                "version": 1,
+                "run_id": "test",
+                "workflow": {"name": "test", "nested": {"key": "value"}},
+                "sections": []
+            }
+            
+            log_mgr.write_run_state(run_state)
+            log_mgr.close()
+            
+            # Read and verify formatting (indentation = 2)
+            with open(state_file, 'r') as f:
+                content = f.read()
+            
+            # Should have indented formatting
+            assert '  ' in content  # 2-space indentation
+            assert '\n' in content  # Multiple lines

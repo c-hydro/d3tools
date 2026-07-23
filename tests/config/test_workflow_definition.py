@@ -407,7 +407,11 @@ class TestWorkflowDefinitionRunExecution:
         wf = WorkflowDefinition(minimal_config)
         
         captured = {}
-        monkeypatch.setattr(wf, "_run_sections", lambda time_range: captured.setdefault("time_range", time_range))
+        def capture_run_sections(time_range):
+            captured["time_range"] = time_range
+            return []  # Return empty list (no sections in minimal_config)
+        
+        monkeypatch.setattr(wf, "_run_sections", capture_run_sections)
 
         before = dt.datetime.now()
         wf.run(start="2024-01-01")
