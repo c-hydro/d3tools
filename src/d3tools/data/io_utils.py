@@ -38,6 +38,7 @@ FORMAT_MIXIN_MAP = {
     'geojson': VectorMixin,
     'json': StructuredTextMixin,
     'txt': PlainTextMixin,
+    'log': PlainTextMixin,
     'file': FileMixin,  # Generic file, no format processing
 }
 

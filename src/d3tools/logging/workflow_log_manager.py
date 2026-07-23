@@ -23,9 +23,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Union
 
 from .utils import configure_logger, LOG_FORMATS, DATE_FORMAT
-from ..parse import substitute_string
+from ..config.parsers import dataset_from_config
 from ..exit.exit_handler import run_at_exit
-
 
 class WorkflowLogManager:
     """
@@ -90,6 +89,11 @@ class WorkflowLogManager:
         """
         self.log_file = log_file
         self.run_state_file = run_state_file
+        if self.log_file:
+            self.log_file = dataset_from_config(self.log_file)
+        if self.run_state_file:
+            self.run_state_file = dataset_from_config(self.run_state_file)
+
         self.level = level
         self.console = console
         self.format_file = format_file
@@ -146,28 +150,28 @@ class WorkflowLogManager:
                 'format': 'detailed'
             })
         """
+
         # Handle None or empty config with default console-only logging
         if config is None or (isinstance(config, dict) and len(config) == 0):
             return cls()
         
         # Handle string path
         if isinstance(config, str):
-            log_file = substitute_string(config, {'now': dt.datetime.now()})
-            return cls(log_file=log_file)
+            return cls(log_file = config)
         
         # Handle dict configuration
         if not isinstance(config, dict):
             raise TypeError(f"Config must be dict, str, or None, got {type(config)}")
         
+        # resolve {now} placeholders in file paths before creating Dataset objects
+        from ..config.parsing_pipeline import resolve_now
+        config = resolve_now(config)
+
         # Extract and process file path
         log_file = config.get('file')
-        if log_file:
-            log_file = substitute_string(log_file, {'now': dt.datetime.now()})
 
         # Extract and process optional run state path
         run_state_file = config.get('run_state_file')
-        if run_state_file:
-            run_state_file = substitute_string(run_state_file, {'now': dt.datetime.now()})
         
         # Extract other settings
         level = config.get('level', 'INFO')
@@ -209,7 +213,7 @@ class WorkflowLogManager:
         logger = configure_logger(
             logger_name=self.logger_name,
             level=self.level,
-            file_path=self.log_file,
+            file_path=self.log_file.get_key() if self.log_file else None, # temporary workaround until Dataset-backed log targets are fully supported
             console=self.console,
             format_file=self.format_file,
             format_console=self.format_console,
@@ -431,7 +435,7 @@ class WorkflowLogManager:
             return  # No-op if not configured
         
         # Ensure parent directory exists
-        output_path = Path(self.run_state_file)
+        output_path = Path(self.run_state_file.get_key())
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Write JSON to file

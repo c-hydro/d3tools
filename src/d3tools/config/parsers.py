@@ -12,7 +12,20 @@ from typing import Optional, Dict, Any, Callable
 
 from ..errors import WorkflowEngineImportError
 
-def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any]] = None):
+# Create dataset_factory for nested dataset parsing
+# This allows manager configs to reference other datasets
+def dataset_factory(cfg, template_ds):
+
+    # use the type from parsed_config as default
+    defaults = template_ds._creation_kwargs.copy()
+
+    # if cfg is a string, assume it is the key_pattern
+    if isinstance(cfg, str):
+        cfg = {'key_pattern': cfg}
+
+    return dataset_from_config(cfg, defaults=defaults)
+
+def dataset_from_config(config: str|Dict[str, Any], defaults: Optional[Dict[str, Any]] = None):
     """
     Create a Dataset from a configuration dictionary.
     
@@ -50,6 +63,7 @@ def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any
     # Merge with defaults
     defaults = defaults or {}
     parsed_config = defaults.copy()
+    config = config if isinstance(config, dict) else {"key_pattern": config}
     parsed_config.update(config)
 
     # extract thumbnail and log configs before creating the dataset
@@ -65,29 +79,15 @@ def dataset_from_config(config: Dict[str, Any], defaults: Optional[Dict[str, Any
     Subclass = Dataset.get_subclass(type_str)
     ds = Subclass(**parsed_config)
 
-    # Create dataset_factory for nested dataset parsing
-    # This allows manager configs to reference other datasets
-    def dataset_factory(cfg):
-
-        # use the type from parsed_config as default
-        defaults = ds._creation_kwargs.copy()
-
-        # if cfg is a string, assume it is the key_pattern
-        if isinstance(cfg, str):
-            cfg = {'key_pattern': cfg}
-
-        return dataset_from_config(cfg, defaults=defaults)
-
     # Parse manager configurations if present
-    ds.thumbnail = _manager_from_config(thumbnail_config, 'thumbnail', dataset_factory)
-    ds.log       = _manager_from_config(log_config, 'log', dataset_factory)
+    ds.thumbnail = _manager_from_config(thumbnail_config, 'thumbnail', lambda x : dataset_factory(x, template_ds=ds))
+    ds.log       = _manager_from_config(log_config, 'log',  lambda x : dataset_factory(x, template_ds=ds))
     
     # Handle fallback dataset if present
     if fallback_config is not None:
         ds.fallback = dataset_factory(fallback_config)
 
     return ds
-
 
 def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callable) -> Any:
     """
@@ -122,7 +122,6 @@ def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callab
     
     # Parse the config into a manager
     return manager_class.from_dict(config, dataset_factory)
-
 
 def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """
