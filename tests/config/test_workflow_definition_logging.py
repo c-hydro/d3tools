@@ -81,7 +81,6 @@ def config_with_sections_and_logging(tmp_path, monkeypatch):
 class TestWorkflowDefinitionLoggingIntegration:
     """Test WorkflowDefinition integration with WorkflowLogManager."""
 
-    @pytest.mark.xfail(reason="Runtime handler compatibility for Dataset-backed workflow log targets is not implemented yet")
     def test_logger_initialized_from_config(self, config_with_logging):
         """WorkflowDefinition should initialize logger from workflow_log config."""
         config, log_file = config_with_logging
@@ -92,7 +91,6 @@ class TestWorkflowDefinitionLoggingIntegration:
         assert hasattr(wf.logger.log_file, 'get_key')
         assert wf.logger.log_file.get_key() == str(log_file)
 
-    @pytest.mark.xfail(reason="Runtime handler compatibility for Dataset-backed workflow log targets is not implemented yet")
     def test_run_uses_logger_for_workflow_execution(self, config_with_logging):
         """run() should use logger to log workflow execution."""
         config, log_file = config_with_logging
@@ -106,7 +104,6 @@ class TestWorkflowDefinitionLoggingIntegration:
         content = log_file.read_text()
         assert "'my_test_workflow' starting" in content
 
-    @pytest.mark.xfail(reason="Runtime handler compatibility for Dataset-backed workflow log targets is not implemented yet")
     def test_run_uses_logger_for_section_execution(self, config_with_sections_and_logging):
         """run() should use logger to log section execution."""
         config, log_file = config_with_sections_and_logging
