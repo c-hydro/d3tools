@@ -114,27 +114,32 @@ class WorkflowSection:
     def get_run_timerange(self) -> TimeRange:
         """Determine the execution range for this workflow section.
 
-        Checks for ``times_from_run`` exec_option first, which allows referencing
-        a prior workflow run's execution window.
+        Checks exec_options in the following priority order:
 
-        The section value is expected to provide ``get_last_ts()``, returning a
-        pair ``(last_available, last_done)``. The resulting range starts at the
-        first timestep that still needs processing and ends at the latest
-        available timestep.
+        1. ``all_available``: If true, returns the full range from the first to
+           the last available timestep. Currently only supported for ``dam``
+           sections.
+        2. ``times_from_run``: References a prior workflow run's saved execution
+           window. If a valid range is found, it is returned immediately
+           (after applying ``repeat_window`` if set). If no prior run state is
+           found, resolution falls through to the normal logic below.
+        3. Normal resolution: Calls ``get_last_ts()`` on the section value,
+           which returns ``(last_available, last_done)``. The range spans from
+           the first unprocessed timestep to the last available one.
+
+        ``repeat_window`` (e.g. ``'7d'``, ``'1m'``) can be combined with either
+        ``times_from_run`` or normal resolution to extend the start of the range
+        backwards, re-processing some prior timesteps.
 
         Returns:
-            TimeRange spanning the timesteps that still need to be processed.
-            None if there are no timesteps to process (i.e. all available timesteps have already been processed).
+            TimeRange spanning the timesteps that still need to be processed,
+            or ``None`` if all available timesteps have already been processed
+            and no ``repeat_window`` is set.
 
         Raises:
-            ValueError: If the section has no available data.
+            ValueError: If the section has no available data, or if
+                ``all_available`` is used on a non-``dam`` section.
         """
-        # Check for times_from_run exec_option first
-        times_from_run = self.get_exec_option("times_from_run")
-        if times_from_run:
-            time_range = get_timerange_from_run_state(times_from_run)
-            if time_range is not None:
-                return time_range
 
         all_available = self.get_exec_option("all_available", False, asbool=True)
         if all_available:
@@ -145,14 +150,23 @@ class WorkflowSection:
             if first_ts is None or last_ts is None:
                 raise ValueError(f"Workflow section '{self.name}' has no available data to determine time range for execution")
             return TimeRange(first_ts.start, last_ts.end)
-
-        # Normal resolution logic
-        process = self.value
-        last_available, last_done = process.get_last_ts()
         
         repeat_window = self.get_exec_option("repeat_window")
         if repeat_window is not None:
             repeat_window = TimeWindow.from_str(repeat_window)
+
+        # Check for times_from_run exec_option first
+        times_from_run = self.get_exec_option("times_from_run")
+        if times_from_run:
+            time_range = get_timerange_from_run_state(times_from_run)
+            if time_range is not None:
+                if repeat_window is not None:
+                    time_range = time_range.extend(repeat_window, before=True)
+                return time_range
+
+        # Normal resolution logic
+        process = self.value
+        last_available, last_done = process.get_last_ts()
 
         if last_available is None or last_done is None:
             raise ValueError(f"Workflow section '{self.name}' has not enough available data to determine time range for execution")
