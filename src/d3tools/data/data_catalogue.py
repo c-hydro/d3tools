@@ -738,10 +738,16 @@ class DataCatalogue:
             full_key = self.dataset.get_key(time, **kwargs)
             if self.dataset._check_data(full_key):
                 return True
+            
             # Check parent datasets if available
             elif hasattr(self.dataset, 'parents') and self.dataset.parents is not None:
                 return all([parent.catalogue.check_data(time, **kwargs) 
                            for parent in self.dataset.parents.values()])
+            
+            # Check fallback datasets if available
+            elif hasattr(self.dataset, 'fallback') and self.dataset.fallback is not None:
+                return self.dataset.fallback.check_data(time, **kwargs)
+            
             else:
                 return False
 
