@@ -80,14 +80,14 @@ class WorkflowSection:
             strict_imports: If ``True``, propagate build/import errors.
         """
         # attempt to get the `engine` keyword from the definition key
-        engine = definition.get("engine", None)
+        engine = definition.pop("engine", None)
         if engine is None or engine not in ['door', 'dam', 'dryes']:
             # if not found, try to resolve from the section name
             engine = resolve_workflow_section_alias(name)
         if engine is None:
             raise ValueError(f"Key '{name}' is not a recognized workflow section")
         
-        exec_options = definition.get("exec_options", {})
+        exec_options = definition.pop("exec_options", {})
         value = workflow_section_from_config(
             engine,
             definition,
