@@ -151,11 +151,9 @@ def _build_door_downloader(section_options: Any) -> Any:
     from door import Downloader
     return Downloader.from_options(section_options)
 
-
 def _build_dam_workflow(section_options: Any) -> Any:
     from dam import DAMWorkflow
     return DAMWorkflow.from_options(section_options)
-
 
 def _build_dryes_index(section_options: Any) -> Any:
     from dryes import DRYESIndex
@@ -163,13 +161,11 @@ def _build_dryes_index(section_options: Any) -> Any:
         raise TypeError("DRYES section options must be a mapping")
     return DRYESIndex.from_options(**section_options)
 
-
 _WORKFLOW_ENGINE_BUILDERS = {
     "door": _build_door_downloader,
     "dam": _build_dam_workflow,
     "dryes": _build_dryes_index,
 }
-
 
 def workflow_section_from_config(
         engine: str,
@@ -205,3 +201,41 @@ def workflow_section_from_config(
         if strict_imports:
             raise WorkflowEngineImportError(engine, exc) from exc
         return section_options
+
+def parse_times_from_run_option(option_value: str|dict) -> tuple['Dataset', Optional[str]]:
+    """
+    Parse a times_from_run option value into Dataset and section references.
+    
+    Args:
+        option_value: The value of the times_from_run option, which can be either:
+            - A string in the format "section_name@file.json" (section optional)
+            - A dictionary with required key "file" and optional key "section"
+              where "file" can be a str, dict, or pre-built Dataset
+    
+    Returns:
+        A tuple of (dataset, section_name) where section_name may be None if not provided.
+        The dataset can be a LocalDataset, RemoteDataset, or other Dataset subclass.
+    
+    Raises:
+        ValueError: If the input format is invalid or required keys are missing.
+    """
+
+    if isinstance(option_value, str):
+        if "@" in option_value:
+            section, file  = option_value.split("@", 1)
+            file = file.strip()
+            section = section.strip()
+        else:
+            file = option_value.strip()
+            section = None
+
+    elif isinstance(option_value, dict):
+        file = option_value.get("file")
+        section = option_value.get("section")
+        if not file:
+            raise ValueError("times_from_run dict must contain 'file' key")
+
+    else:
+        raise ValueError("times_from_run option must be a string or dict")
+
+    return dataset_from_config(file), section

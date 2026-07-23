@@ -1,5 +1,7 @@
 import json
-from typing import Optional
+from typing import Optional, Any
+
+from .parsers import parse_times_from_run_option
 
 from ..timestepping import TimeRange
 
@@ -35,36 +37,30 @@ def load_jsons(*json_objects) -> dict:
     return merged_dict
 
 def get_timerange_from_run_state(
-    run_state_file: str,
-) -> Optional[TimeRange]:
+    times_from_run_option: Any
+    ) -> Optional[TimeRange]:
     
     """
-    Read a section or workflow time range from a persisted run-state file.
+    Read a section or workflow time range from a persisted run-state Dataset.
     
     Args:
-        run_state_file: JSON run-state reference.
-            Supports either:
-            - "section_name@section_run_state.json"
-            - "section_run_state.json"
+        times_from_run_option: Specification for the run-state file and optional section.
+            Can be either:
+            - A string: "section_name@file.json" or just "file.json"
+            - A dictionary with "file" and optional "section" keys
+            Both formats are parsed via parse_times_from_run_option().
         
     Returns:
-        TimeRange for the section, or None if not found or times missing
+        TimeRange for the specified section (if provided), or the workflow-level
+        timerange (if no section specified). Returns None if times are missing.
         
     Example:
-        time_range = get_timerange_from_run_state(
-            "download@prior_workflow_state.json"
-        )
+        time_range = get_timerange_from_run_state("download@prior_state.json")
+        time_range = get_timerange_from_run_state({"file": dataset_obj, "section": "download"})
     """
-
-    if "@" in run_state_file:
-        section_name, run_file = run_state_file.split("@", 1)
-        section_name = section_name.strip()
-        run_file = run_file.strip()
-    else:
-        section_name = None
-        run_file = run_state_file.strip()
     
-    json_data = load_jsons(run_file)
+    file, section_name = parse_times_from_run_option(times_from_run_option)
+    json_data = file.get_data(as_is = True)
     start_str = json_data.get("start")
     end_str = json_data.get("end")
 

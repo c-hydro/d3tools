@@ -277,3 +277,58 @@ class TestGetTimerangeFromRunStateIntegration:
         # Overall workflow should still work
         workflow_range = get_timerange_from_run_state(str(state_file))
         assert workflow_range is not None
+
+    def test_dict_input_with_string_path(self, tmp_path, sample_run_state):
+        """Test dict input format with string file path."""
+        state_file = tmp_path / "run_state.json"
+        state_file.write_text(json.dumps(sample_run_state))
+        
+        # Dict with section specified
+        time_range = get_timerange_from_run_state({
+            "file": str(state_file),
+            "section": "download"
+        })
+        assert isinstance(time_range, TimeRange)
+        assert "2024-05-01" in str(time_range.start)
+        assert "2024-05-02" in str(time_range.end)
+        
+        # Dict without section (workflow-level)
+        time_range = get_timerange_from_run_state({
+            "file": str(state_file)
+        })
+        assert isinstance(time_range, TimeRange)
+        assert "2024-05-01" in str(time_range.start)
+        assert "2024-05-07" in str(time_range.end)
+
+    def test_dict_input_with_dataset_instance(self, tmp_path, sample_run_state):
+        """Test dict input format with pre-built Dataset instance."""
+        from d3tools.config.parsers import dataset_from_config
+        
+        state_file = tmp_path / "run_state.json"
+        state_file.write_text(json.dumps(sample_run_state))
+        
+        # Create a Dataset instance
+        dataset = dataset_from_config(str(state_file))
+        
+        # Use dataset instance in dict input
+        time_range = get_timerange_from_run_state({
+            "file": dataset,
+            "section": "process"
+        })
+        assert isinstance(time_range, TimeRange)
+        assert "2024-05-02" in str(time_range.start)
+        assert "2024-05-05" in str(time_range.end)
+
+    def test_dict_input_with_dataset_config(self, tmp_path, sample_run_state):
+        """Test dict input format with Dataset config dict."""
+        state_file = tmp_path / "run_state.json"
+        state_file.write_text(json.dumps(sample_run_state))
+        
+        # Use dataset config dict in times_from_run dict
+        time_range = get_timerange_from_run_state({
+            "file": {"key_pattern": str(state_file)},
+            "section": "calculate"
+        })
+        assert isinstance(time_range, TimeRange)
+        assert "2024-05-05" in str(time_range.start)
+        assert "2024-05-07" in str(time_range.end)
