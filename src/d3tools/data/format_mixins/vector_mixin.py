@@ -118,6 +118,8 @@ class VectorMixin(FormatMixin):
 
             # ensure time columns are converted to strings
             for col in data.columns:
+                if len(data) == 0:
+                    continue
                 if isinstance(data[col].iloc[0], np.datetime64):
                     data[col] = data[col].apply(lambda x: x.astype('O'))
                 if isinstance(data[col].iloc[0], (dt.datetime, dt.date)):
