@@ -7,6 +7,6 @@ Phase-1 note:
 
 from .parse_utils import *
 
-from .string_rendering import substitute_string, substitute_values, normalise_string
+from .string_rendering import substitute_string, substitute_values, normalise_string, increment_version
 from .config_resolution import set_env, set_dataset
 from .key_parser import ParsedKey, KeyParser

@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 import os
 
 from ...timestepping import TimeRange, TimeStep, TimeWindow
-from ...parse import substitute_string, extract_date_and_tags, KeyParser
+from ...parse import substitute_string, extract_date_and_tags, KeyParser, increment_version
 from ..io_utils import get_format_from_path, check_data_format, get_mixin_class_from_format, read_from_file
 from ..data_catalogue import DataCatalogue
 
@@ -553,6 +553,15 @@ class Dataset(metaclass=DatasetMeta):
                    **kwargs):
 
         if metadata is None: metadata = {}
+
+        # if this is a versioned file, and the version is not specified, compute the next version
+        if self.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions:
+                available_versions.sort()
+                kwargs['file_version'] = increment_version(available_versions[-1])
+            else:
+                kwargs['file_version'] = '01'
 
         # check the data format (this will check if the type of the data is compatible with the dataset format)
         check_data_format(data, self.format)
