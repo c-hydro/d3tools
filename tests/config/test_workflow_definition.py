@@ -514,3 +514,55 @@ class TestWorkflowDefinitionRunTimerangeResolution:
         wf.run()
 
         assert calls == [("door", first_range), ("dam", second_range)]
+
+    def test_run_skips_section_when_section_timerange_is_none(self, monkeypatch):
+        """run() should skip sections that resolve to no pending timestep range."""
+        calls = []
+
+        class MockProcess:
+            def __init__(self, engine):
+                self.engine = engine
+
+            def get_data(self, time_range):
+                calls.append((self.engine, time_range))
+
+            def run(self, time_range):
+                calls.append((self.engine, time_range))
+
+        class MockSection:
+            def __init__(self, name, engine, time_range):
+                self.name = name
+                self.engine = engine
+                self.value = MockProcess(engine)
+                self._time_range = time_range
+
+            def get_run_timerange(self):
+                return self._time_range
+
+        from d3tools.config import parsing_pipeline
+
+        second_range = TimeRange("2024-02-01", "2024-02-29")
+        parsed_config = {
+            "TAGS": {},
+            "DATASETS": {},
+            "workflow_sections": [
+                MockSection("Download", "door", None),
+                MockSection("Process", "dam", second_range),
+            ],
+            "workflow_name": "test",
+            "workflow_log": None,
+        }
+
+        monkeypatch.setattr(
+            parsing_pipeline,
+            "parse_options",
+            lambda config, **kwargs: parsed_config,
+        )
+
+        monkeypatch.delenv("START_DATE", raising=False)
+        monkeypatch.delenv("END_DATE", raising=False)
+
+        wf = WorkflowDefinition({})
+        wf.run()
+
+        assert calls == [("dam", second_range)]
