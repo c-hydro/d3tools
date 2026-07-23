@@ -528,13 +528,16 @@ class Dataset(metaclass=DatasetMeta):
         elif where_code == 1:
             full_key = self.get_key(time, **kwargs)
             raw_data = self._read_data(full_key)
+            # data extracted from the main dataset should be formatted unless as_is is True 
+            # or this is a memory dataset (which means the data is already in the correct format)
+            as_is = as_is or self.type == 'memory'
         elif where_code == 2:
             raw_data = self.make_data(time, **kwargs)
         elif where_code == 3:
             raw_data = self.fallback.get_data(time, as_is = True, **kwargs)
 
         # if we are not reading the data as is, we need to process it
-        if as_is or self.type == 'memory':
+        if as_is :
             return raw_data
         else:
             # self._format_after_read is implemented in the mixins to handle any
