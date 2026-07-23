@@ -116,6 +116,7 @@ class TestWorkflowSection:
                 "source": "ERA5",
                 "exec_options": {"repeat_window": "3d", "other_option": "value"}
             },
+            build_object=False,  # skip building workflow objects for this test
         )
 
         assert section.exec_options == {"repeat_window": "3d", "other_option": "value"}
@@ -125,6 +126,7 @@ class TestWorkflowSection:
         section = WorkflowSection.from_config(
             name="Download",
             definition={"source": "ERA5"},
+            build_object=False,  # skip building workflow objects for this test
         )
 
         assert section.exec_options == {}
@@ -134,6 +136,7 @@ class TestWorkflowSection:
         section = WorkflowSection.from_config(
             name="Download",
             definition={"engine": "door", "source": "ERA5"},
+            build_object=False,  # skip building workflow objects for this test
         )
 
         # Should be able to call .get() without checking for None
