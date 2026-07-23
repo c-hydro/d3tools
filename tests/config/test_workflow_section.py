@@ -8,6 +8,7 @@ from d3tools.timestepping import TimeWindow
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
+    WorkflowSectionRunResult,
     resolve_workflow_section_alias,
 )
 
@@ -443,3 +444,157 @@ class TestWorkflowSection:
         assert time_range is not None
         assert time_range.start == dt.datetime(2024, 1, 2)
         assert time_range.end == dt.datetime(2024, 1, 4, 23, 59, 59)
+
+    def test_run_calls_door_get_data(self):
+        """run() should call get_data() for door engine."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def get_data(self, time_range):
+                calls.append(("get_data", time_range))
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert len(calls) == 1
+        assert calls[0][0] == "get_data"
+        assert calls[0][1] == time_range
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+        assert result.section_name == "Download"
+        assert result.engine == "door"
+        assert result.time_range == time_range
+        assert result.reason is None
+
+    def test_run_calls_dam_run(self):
+        """run() should call run() for dam engine."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def run(self, time_range):
+                calls.append(("run", time_range))
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Process", "dam", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert len(calls) == 1
+        assert calls[0][0] == "run"
+        assert calls[0][1] == time_range
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+
+    def test_run_calls_dryes_compute(self):
+        """run() should call compute() for dryes engine."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def compute(self, time_range):
+                calls.append(("compute", time_range))
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Calculate", "dryes", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert len(calls) == 1
+        assert calls[0][0] == "compute"
+        assert calls[0][1] == time_range
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+
+    def test_run_returns_skipped_contract_when_no_timerange(self):
+        """run() should return skipped result when no section range is available."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        class MockProcess:
+            def get_last_ts(self):
+                ts = MockTimeStep(2024, 1, 4)
+                return ts, ts
+
+            def get_data(self, _):
+                raise AssertionError("get_data should not be called when section is skipped")
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(None)
+
+        assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is False
+        assert result.section_name == "Download"
+        assert result.engine == "door"
+        assert result.time_range is None
+        assert result.reason == "nothing to do"
+
+    def test_run_resolves_timerange_when_argument_is_none(self):
+        """run(None) should resolve section timerange and execute with it."""
+
+        class MockTimeStep:
+            def __init__(self, year, month, day):
+                self.start = dt.datetime(year, month, day)
+                self.end = dt.datetime(year, month, day, 23, 59, 59)
+
+            def __add__(self, n):
+                next_day = self.start + dt.timedelta(days=n)
+                return MockTimeStep(next_day.year, next_day.month, next_day.day)
+
+            def __sub__(self, n):
+                return self.__add__(-n)
+
+            def __le__(self, other):
+                return self.start <= other.start
+
+        calls = []
+
+        class MockProcess:
+            def get_last_ts(self):
+                return MockTimeStep(2024, 1, 4), MockTimeStep(2024, 1, 2)
+
+            def get_data(self, time_range):
+                calls.append(time_range)
+
+        section = WorkflowSection("Download", "door", {}, MockProcess())
+
+        result = section.run(None)
+
+        assert len(calls) == 1
+        assert calls[0].start == dt.datetime(2024, 1, 3)
+        assert calls[0].end == dt.datetime(2024, 1, 4, 23, 59, 59)
+        assert result.executed is True
+        assert result.time_range.start == dt.datetime(2024, 1, 3)
+
+    def test_run_raises_for_unrecognized_engine(self):
+        """run() should raise TypeError for unrecognized engine."""
+        from d3tools.timestepping import TimeRange
+
+        class MockProcess:
+            pass
+
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Unknown", "unknown_engine", {}, MockProcess())
+
+        with pytest.raises(TypeError, match="unrecognized engine 'unknown_engine'"):
+            section.run(time_range)
