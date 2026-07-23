@@ -443,7 +443,8 @@ class DataCatalogue:
             [datetime(2024, 2, 15), datetime(2024, 2, 14), datetime(2024, 2, 13)]
         """
         if now is None:
-            now = dt.datetime.now()
+            # Add buffer to include forecast data (+1 month for now, this will need to be adjusted because it is a bit hacky)
+            now = dt.datetime.now() + dt.timedelta(days=31) 
         
         # Find ANY date first using exponential backoff
         any_date = self.get_any_date(now=now, lim=lim, **kwargs)
@@ -500,7 +501,8 @@ class DataCatalogue:
             datetime(2024, 1, 15)  # Some recent date, not necessarily the last
         """
         if now is None:
-            now = dt.datetime.now()
+            # Add buffer to include forecast data (+1 month for now, this will need to be adjusted because it is a bit hacky)
+            now = dt.datetime.now() + dt.timedelta(days=31) 
         
         # Default limit: 5 years back (reasonable for most datasets)
         if lim is None:
