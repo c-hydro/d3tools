@@ -19,12 +19,14 @@ import logging
 import os
 import time
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Optional, Dict, Any, Union
 
-from .utils import configure_logger, LOG_FORMATS, DATE_FORMAT
+from .utils import configure_logger, DATE_FORMAT
 from ..config.parsers import dataset_from_config
 from ..exit.exit_handler import run_at_exit
+from ..data import Dataset
+
+DatasetLike = Union[Dataset, str, Dict[str, Any]]
 
 class WorkflowLogManager:
     """
@@ -54,8 +56,8 @@ class WorkflowLogManager:
     
     def __init__(
         self,
-        log_file: Optional[str] = None,
-        run_state_file: Optional[str] = None,
+        log_file: Optional[DatasetLike] = None,
+        run_state_file: Optional[DatasetLike] = None,
         level: Union[int, str] = logging.INFO,
         console: bool = True,
         format_file: str = 'detailed',
@@ -67,25 +69,22 @@ class WorkflowLogManager:
         Initialize workflow log manager.
         
         Args:
-            log_file: Path to log file (None for console-only logging).
-                     Currently supports local file paths only.
-                     Future: Will support Dataset objects for remote logging
-                     (S3, SFTP, etc.) consistent with other d3tools patterns.
-            run_state_file: Optional JSONpath used to persist structured
-                     workflow run state for downstream time-range resolution.
-                     Currently supports local file paths only.
-                     Future: Will support Dataset objects for remote logging
-                     (S3, SFTP, etc.) consistent with other d3tools patterns.
+            log_file: Optional workflow log destination. Supports:
+                     - Dataset instance (used as-is)
+                     - str key/path
+                     - Dataset config dict
+                     None disables file logging.
+            run_state_file: Optional workflow run-state destination. Supports:
+                     - Dataset instance (used as-is)
+                     - str key/path
+                     - Dataset config dict
+                     None disables run-state persistence.
             level: Logging level (e.g., 'INFO', 'DEBUG', logging.INFO)
             console: Whether to log to console
             format_file: Format style for file output (from LOG_FORMATS)
             format_console: Format style for console output
             logger_name: Root logger name (default: 'd3tools')
             **options: Additional options for future extension
-            
-        Note:
-            File logging currently only works with local file paths.
-            Remote logging via Dataset objects is planned for future versions.
         """
         self.log_file = log_file
         self.run_state_file = run_state_file
@@ -124,9 +123,11 @@ class WorkflowLogManager:
                    If None or empty dict, returns a console-only logger.
                    If string, treated as log file path with defaults.
                    If dict, expects keys:
-                       - file: Log file path (supports {now:...} formatting)
-                       - run_state_file: Structured run-state file path
-                            (supports {now:...} formatting)
+                       - file: Log destination config (str, Dataset dict, or Dataset)
+                           with optional {now:...} formatting in strings
+                       - run_state_file: Run-state destination config
+                           (str, Dataset dict, or Dataset) with optional
+                           {now:...} formatting in strings
                        - level: Logging level (default: 'INFO')
                        - console: Enable console logging (default: True)
                        - format: Format style or separate format_file/format_console
@@ -163,7 +164,7 @@ class WorkflowLogManager:
         if not isinstance(config, dict):
             raise TypeError(f"Config must be dict, str, or None, got {type(config)}")
         
-        # resolve {now} placeholders in file paths before creating Dataset objects
+        # resolve {now} placeholders in paths before creating Dataset objects
         from ..config.parsing_pipeline import resolve_now
         config = resolve_now(config)
 
@@ -418,7 +419,7 @@ class WorkflowLogManager:
     
     def write_run_state(self, run_state: Dict[str, Any]):
         """
-        Persist structured workflow run state to configured file path.
+        Persist structured workflow run state to configured Dataset destination.
         
         Writes a single JSON file containing workflow metadata and section
         execution results. This enables downstream runs to reference prior
@@ -431,8 +432,7 @@ class WorkflowLogManager:
                 - workflow: Workflow-level metadata (name, status, start, end)
                 - sections: List of section results (name, engine, executed, times, reason)
         
-        No-op if run_state_file is not configured. Creates parent directories
-        as needed for local file paths.
+        No-op if run_state_file is not configured.
         
         Example:
             run_state = {
@@ -453,7 +453,9 @@ class WorkflowLogManager:
         Close all handlers and clean up.
         
         Call this when workflow execution is complete to ensure
-        all log messages are flushed and files are closed.
+        all log messages are flushed and files are closed. For non-local
+        file logging targets, this also uploads the temporary log file to the
+        configured Dataset destination and removes the temporary file.
         """
         if not hasattr(self, '_closed'):
             self._closed = False

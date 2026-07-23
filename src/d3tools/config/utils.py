@@ -39,19 +39,20 @@ def get_timerange_from_run_state(
 ) -> Optional[TimeRange]:
     
     """
-    Read a specific section's time range from a persisted workflow run state file.
+    Read a section or workflow time range from a persisted run-state file.
     
     Args:
-        run_state_file: Path to JSON run-state file
-            it may conain the section name as "section_name@section_run_state.json" or just "section_run_state.json"
+        run_state_file: JSON run-state reference.
+            Supports either:
+            - "section_name@section_run_state.json"
+            - "section_run_state.json"
         
     Returns:
         TimeRange for the section, or None if not found or times missing
         
     Example:
-        time_range = read_section_timerange_from_run_state(
-            "prior_workflow_state.json",
-            "download"
+        time_range = get_timerange_from_run_state(
+            "download@prior_workflow_state.json"
         )
     """
 

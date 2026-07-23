@@ -23,6 +23,7 @@ from unittest.mock import Mock
 import pytest
 
 from d3tools.logging import WorkflowLogManager
+from d3tools.config.parsers import dataset_from_config
 
 
 class TestWorkflowLogManagerInit:
@@ -145,6 +146,29 @@ class TestWorkflowLogManagerInit:
 
             assert hasattr(log_mgr.log_file, 'get_key')
             assert log_mgr.log_file.get_key() == log_file
+
+            log_mgr.close()
+
+    def test_init_accepts_dataset_instances_directly(self, monkeypatch):
+        """Test initialization uses Dataset instances as-is without re-parsing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_ds = dataset_from_config(os.path.join(tmpdir, 'test.log'))
+            state_ds = dataset_from_config(os.path.join(tmpdir, 'state.json'))
+
+            # If __init__ tries to re-parse Dataset instances, this test fails.
+            monkeypatch.setattr(
+                'd3tools.logging.workflow_log_manager.dataset_from_config',
+                lambda _cfg: (_ for _ in ()).throw(AssertionError('should not re-parse Dataset'))
+            )
+
+            log_mgr = WorkflowLogManager(
+                log_file=log_ds,
+                run_state_file=state_ds,
+                console=False,
+            )
+
+            assert log_mgr.log_file is log_ds
+            assert log_mgr.run_state_file is state_ds
 
             log_mgr.close()
 

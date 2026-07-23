@@ -8,7 +8,7 @@ Separating parsing logic here makes it reusable across d3tools, door, dryes, and
 """
 
 import os
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, Union
 
 from ..errors import WorkflowEngineImportError
 
@@ -25,7 +25,7 @@ def dataset_factory(cfg, template_ds):
 
     return dataset_from_config(cfg, defaults=defaults)
 
-def dataset_from_config(config: str|Dict[str, Any], defaults: Optional[Dict[str, Any]] = None):
+def dataset_from_config(config: Union['Dataset', str, Dict[str, Any]], defaults: Optional[Dict[str, Any]] = None):
     """
     Create a Dataset from a configuration dictionary.
     
@@ -59,6 +59,9 @@ def dataset_from_config(config: str|Dict[str, Any], defaults: Optional[Dict[str,
     """
     # Import here to avoid circular dependencies
     from ..data import Dataset
+
+    if isinstance(config, Dataset):
+        return config
     
     # Merge with defaults
     defaults = defaults or {}
