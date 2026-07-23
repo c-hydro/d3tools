@@ -18,6 +18,7 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -146,6 +147,82 @@ class TestWorkflowLogManagerInit:
             assert log_mgr.log_file.get_key() == log_file
 
             log_mgr.close()
+
+
+class TestRemoteLogging:
+    """Test remote Dataset logging with temp file handling."""
+
+    def test_configure_logger_creates_temp_file_for_remote_dataset(self, monkeypatch):
+        """Test that remote Datasets trigger temp file creation."""
+        # Create a mock Dataset with type='remote'
+        mock_dataset = Mock()
+        mock_dataset.type = 'remote'
+        mock_dataset.get_key = Mock(return_value='/remote/path.log')
+
+        # Monkeypatch dataset_from_config to return our mock
+        def mock_dataset_from_config(config):
+            return mock_dataset if config else None
+
+        monkeypatch.setattr(
+            'd3tools.logging.workflow_log_manager.dataset_from_config',
+            mock_dataset_from_config
+        )
+
+        log_mgr = WorkflowLogManager(log_file='/remote/path.log', console=False)
+
+        assert hasattr(log_mgr, '_temp_log_file')
+        assert os.path.exists(log_mgr._temp_log_file)
+
+        log_mgr.close()
+
+    def test_close_uploads_temp_log_file_to_remote_dataset(self, monkeypatch):
+        """Test that close() uploads temp file to remote Dataset and cleans up."""
+        # Create a mock Dataset that captures write_data calls
+        mock_dataset = Mock()
+        mock_dataset.type = 'remote'
+        mock_dataset.write_data = Mock()
+
+        def mock_dataset_from_config(config):
+            return mock_dataset if config else None
+
+        monkeypatch.setattr(
+            'd3tools.logging.workflow_log_manager.dataset_from_config',
+            mock_dataset_from_config
+        )
+
+        log_mgr = WorkflowLogManager(log_file='/remote/path.log', console=False)
+        temp_file = log_mgr._temp_log_file
+
+        log_mgr.logger.info("Test message")
+        log_mgr.close()
+
+        # Verify write_data was called
+        assert mock_dataset.write_data.called
+
+        # Verify temp file was deleted
+        assert not os.path.exists(temp_file)
+
+    def test_close_handles_temp_file_cleanup_error(self, monkeypatch):
+        """Test that a cleanup error is logged but doesn't crash close()."""
+        mock_dataset = Mock()
+        mock_dataset.type = 'remote'
+        mock_dataset.write_data = Mock()
+
+        def mock_dataset_from_config(config):
+            return mock_dataset if config else None
+
+        monkeypatch.setattr(
+            'd3tools.logging.workflow_log_manager.dataset_from_config',
+            mock_dataset_from_config
+        )
+
+        monkeypatch.setattr('os.remove', Mock(side_effect=OSError("Permission denied")))
+
+        log_mgr = WorkflowLogManager(log_file='/remote/path.log', console=False)
+
+        # Should not raise, just log a warning
+        log_mgr.close()
+        assert log_mgr._closed
 
 
 class TestWorkflowLogManagerFromDict:

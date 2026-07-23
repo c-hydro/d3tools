@@ -210,10 +210,22 @@ class WorkflowLogManager:
         Returns:
             Configured Logger instance
         """
+
+        file_path = None
+        if self.log_file:
+            if self.log_file.type == 'local':
+                file_path = self.log_file.get_key()
+            else:
+                from tempfile import NamedTemporaryFile
+                temp_file = NamedTemporaryFile(delete=False)
+                file_path = temp_file.name
+                temp_file.close()
+                self._temp_log_file = file_path  # Store for cleanup and upload after execution
+
         logger = configure_logger(
             logger_name=self.logger_name,
             level=self.level,
-            file_path=self.log_file.get_key() if self.log_file else None, # temporary workaround until Dataset-backed log targets are fully supported
+            file_path=file_path,
             console=self.console,
             format_file=self.format_file,
             format_console=self.format_console,
@@ -433,19 +445,8 @@ class WorkflowLogManager:
         """
         if not self.run_state_file:
             return  # No-op if not configured
-        
-        # Ensure parent directory exists
-        output_path = Path(self.run_state_file.get_key())
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Write JSON to file
-        try:
-            with open(output_path, 'w') as f:
-                json.dump(run_state, f, indent=2, default=str)
-            self.logger.info(f"Wrote workflow run state to: {output_path}")
-        except Exception as e:
-            self.logger.error(f"Failed to write run state to {output_path}: {e}")
-            raise
+
+        self.run_state_file.write_data(run_state, as_is = True)
     
     def close(self):
         """
@@ -474,4 +475,16 @@ class WorkflowLogManager:
         for handler in handlers_to_close:
             handler.close()
         
+        if hasattr(self, '_temp_log_file'):
+            
+            # copy temp log file to final destination if using remote logging,
+            # then remove temp file
+            with open(self._temp_log_file, 'r') as f:
+                self.log_file.write_data(f, as_is = True)
+
+            try:
+                os.remove(self._temp_log_file)
+            except Exception as e:
+                print(f"Warning: Failed to remove temporary log file {self._temp_log_file}: {e}")
+
         self._closed = True
