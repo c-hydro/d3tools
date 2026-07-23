@@ -377,7 +377,7 @@ class DataCatalogue:
         while start_month <= end_month:
             # Calculate midpoint
             months_diff = (end_month.start.year - start_month.start.year) * 12 + \
-                         (end_month.start.month - start_month.start.month)
+                          (end_month.start.month - start_month.start.month)
             
             if months_diff <= 1:
                 # Adjacent or same months - we're done
@@ -407,6 +407,15 @@ class DataCatalogue:
                     # Searching for first: move start forward
                     start_month = mid_month + 1
         
+        if direction < 0:
+            # if searching for first, ensure we return the earliest month with data
+            # this could be boundary_month or start_month depending on the final check
+            if len(self.get_times(start_month, **kwargs)) > 0:
+                return start_month
+        else:
+            if len(self.get_times(end_month, **kwargs)) > 0:
+                return end_month
+             
         return boundary_month
 
     @withcases

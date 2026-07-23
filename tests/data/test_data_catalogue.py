@@ -842,9 +842,11 @@ class TestGetFirstDate:
         )
         
         # Create files
-        (tmp_path / "data_20240105.tif").touch()
+        (tmp_path / "data_20240501.tif").touch()
+        (tmp_path / "data_20240401.tif").touch()
+        (tmp_path / "data_20240301.tif").touch()
+        (tmp_path / "data_20240201.tif").touch()
         (tmp_path / "data_20240101.tif").touch()
-        (tmp_path / "data_20240103.tif").touch()
         
         result = dataset.get_first_date()
         
