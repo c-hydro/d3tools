@@ -251,6 +251,13 @@ class DataCatalogue:
                 if time not in all_times and time_range.contains(time):
                     yield time
 
+        # Add times from fallback dataset if available (union with main dataset)
+        if hasattr(self.dataset, 'fallback') and self.dataset.fallback is not None:
+            fallback_times = set(self.dataset.fallback.get_times(time_range,  **kwargs))
+            for time in fallback_times:
+                if time not in all_times and time_range.contains(time):
+                    yield time
+
     @withcases
     def get_times(self, time_range: TimeRange, **kwargs) -> list[dt.datetime]:
         """
