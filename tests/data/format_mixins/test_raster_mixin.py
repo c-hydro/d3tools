@@ -33,7 +33,7 @@ class TestRasterInstantiation:
             coords={'y': np.arange(10), 'x': np.arange(10)}
         )
         nc_file = tmp_path / "test.nc"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="test.nc")
         
@@ -72,7 +72,7 @@ class TestRasterInstantiation:
         """Test that RasterMixin initializes template_manager."""
         data = xr.DataArray(np.random.rand(10, 10), dims=['y', 'x'])
         nc_file = tmp_path / "test.nc"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="test.nc")
         
@@ -92,7 +92,7 @@ class TestRasterReadNetCDF:
             attrs={'units': 'meters', '_FillValue': -9999}
         )
         nc_file = tmp_path / "simple.nc"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="simple.nc")
         read_data = dataset.get_data()
@@ -111,7 +111,7 @@ class TestRasterReadNetCDF:
         )
         ds = da.to_dataset()
         nc_file = tmp_path / "single_var.nc"
-        ds.to_netcdf(nc_file)
+        ds.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="single_var.nc")
         read_data = dataset.get_data()
@@ -132,7 +132,7 @@ class TestRasterReadNetCDF:
             }
         )
         nc_file = tmp_path / "attrs.nc"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="attrs.nc")
         read_data = dataset.get_data()
@@ -149,7 +149,7 @@ class TestRasterReadNetCDF:
             coords={'time': times, 'y': np.arange(10), 'x': np.arange(10)}
         )
         nc_file = tmp_path / "timeseries.nc"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="timeseries.nc")
         read_data = dataset.get_data()
@@ -243,14 +243,14 @@ class TestRasterWriteNetCDF:
         assert nc_file.exists()
         
         # Read back and verify
-        written_data = xr.open_dataarray(nc_file)
+        written_data = xr.open_dataarray(nc_file, engine = 'h5netcdf')
         assert written_data.shape == (4, 5)
     
     def test_write_netcdf_overwrites(self, tmp_path):
         """Test that write overwrites existing NetCDF."""
         data1 = xr.DataArray(np.ones((3, 3)), dims=['y', 'x'])
         nc_file = tmp_path / "overwrite.nc"
-        data1.to_netcdf(nc_file)
+        data1.to_netcdf(nc_file, engine = 'h5netcdf')
         
         data2 = xr.DataArray(np.ones((5, 5)) * 2, dims=['y', 'x'], attrs={'_FillValue': -9999})
         
@@ -258,7 +258,7 @@ class TestRasterWriteNetCDF:
         dataset.write_data(data2, as_is=True)
         
         # Read back and verify it was overwritten
-        written_data = xr.open_dataarray(nc_file)
+        written_data = xr.open_dataarray(nc_file, engine = 'h5netcdf')
         assert written_data.shape == (5, 5)
         assert float(written_data.mean()) == 2.0
     
@@ -288,7 +288,7 @@ class TestRasterWriteNetCDF:
         dataset = LocalDataset(path=str(tmp_path), file="attrs.nc")
         dataset.write_data(data, as_is=True)
         
-        written_data = xr.open_dataarray(tmp_path / "attrs.nc")
+        written_data = xr.open_dataarray(tmp_path / "attrs.nc", engine = 'h5netcdf')
         assert written_data.attrs['units'] == 'mm'
         assert written_data.attrs['source'] == 'test'
 
@@ -378,7 +378,7 @@ class TestRasterTemplateManagement:
             attrs={'_FillValue': -9999}
         )
         nc_file = tmp_path / "test.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="test.tif")
         
@@ -400,7 +400,7 @@ class TestRasterTemplateManagement:
         )
         data.rio.write_crs("EPSG:4326", inplace=True)
         nc_file = tmp_path / "template_test.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="template_test.tif")
         
@@ -438,7 +438,7 @@ class TestRasterCoordinateHandling:
         data.rio.write_coordinate_system(inplace=True)
 
         nc_file = tmp_path / "ascending.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="ascending.tif")
         read_data = dataset.get_data()
@@ -454,7 +454,7 @@ class TestRasterCoordinateHandling:
             attrs={'_FillValue': -9999}
         )
         nc_file = tmp_path / "nodata.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="nodata.tif")
         read_data = dataset.get_data()
@@ -474,7 +474,7 @@ class TestRasterMetadataMethods:
             attrs={'_FillValue': -9999}
         )
         nc_file = tmp_path / "meta_test.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="meta_test.tif")
         
@@ -492,7 +492,7 @@ class TestRasterMetadataMethods:
             attrs={'old_key': 'old_value', '_FillValue': -9999}
         )
         nc_file = tmp_path / "update_test.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="update_test.tif")
         
@@ -509,7 +509,7 @@ class TestRasterMetadataMethods:
             attrs={'key1': 'value1', 'key2': 'value2', '_FillValue': -9999}
         )
         nc_file = tmp_path / "get_meta.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="get_meta.tif")
         
@@ -596,7 +596,7 @@ class TestRasterEdgeCases:
             attrs={'_FillValue': -9999}
         )
         nc_file = tmp_path / "empty.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="empty.tif")
         with pytest.raises(Exception):
@@ -611,7 +611,7 @@ class TestRasterEdgeCases:
             attrs={'_FillValue': -9999}
         )
         nc_file = tmp_path / "large.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="large.tif")
         read_data = dataset.get_data()
@@ -631,7 +631,7 @@ class TestRasterEdgeCases:
             attrs={'_FillValue': -9999}
         )
         nc_file = tmp_path / "3d.nc"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="3d.nc")
         read_data = dataset.get_data()
@@ -647,7 +647,7 @@ class TestRasterFormatMethods:
         """Test _init_format_properties initializes template_manager."""
         data = xr.DataArray(np.random.rand(5, 5), dims=['y', 'x'], attrs={'_FillValue': -9999})
         nc_file = tmp_path / "test.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="test.tif")
         
@@ -663,7 +663,7 @@ class TestRasterFormatMethods:
         )
         data.rio.write_crs("EPSG:4326", inplace=True)
         nc_file = tmp_path / "validate.tif"
-        data.to_netcdf(nc_file)
+        data.to_netcdf(nc_file, engine = 'h5netcdf')
         
         dataset = LocalDataset(path=str(tmp_path), file="validate.tif")
         
