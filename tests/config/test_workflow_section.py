@@ -2,7 +2,6 @@
 Tests for workflow-section aliasing and WorkflowSection behavior.
 """
 import datetime as dt
-from dataclasses import replace
 
 import pytest
 from d3tools.timestepping import TimeWindow
@@ -627,21 +626,11 @@ class TestWorkflowSection:
         """run() should split long ranges into monthly chunks when split is enabled."""
         from d3tools.timestepping import TimeRange
 
-        executed_ranges = []
+        calls = []
 
         class MockProcess:
-            def get_data(self, _):
-                raise AssertionError("direct get_data should not be used in split mode")
-
-        def mock_execute(self, process, engine, section_name, tr):
-            executed_ranges.append((engine, section_name, tr.start, tr.end))
-            return {"executed": True}
-
-        def mock_replace(self, **kwargs):
-            return replace(self, **kwargs)
-
-        monkeypatch.setattr(WorkflowSection, "_execute_section", mock_execute, raising=False)
-        monkeypatch.setattr(WorkflowSectionRunResult, "_replace", mock_replace, raising=False)
+            def get_data(self, tr):
+                calls.append(tr)
 
         section = WorkflowSection(
             "Download",
@@ -653,7 +642,9 @@ class TestWorkflowSection:
 
         result = section.run(TimeRange("2024-01-01", "2024-03-31"))
 
-        assert len(executed_ranges) == 3
+        assert len(calls) == 3
+        assert calls[0].start == dt.datetime(2024, 1, 1)
+        assert calls[-1].end == dt.datetime(2024, 3, 31, 23, 59, 59)
         assert result.executed is True
         assert result.reason == "split into 3 sub-ranges"
 
@@ -661,21 +652,12 @@ class TestWorkflowSection:
         """run() should honor SPLIT environment variable and override exec_options."""
         from d3tools.timestepping import TimeRange
 
-        executed_ranges = []
+        calls = []
 
         class MockProcess:
-            def get_data(self, _):
-                raise AssertionError("direct get_data should not be used in split mode")
+            def get_data(self, tr):
+                calls.append(tr)
 
-        def mock_execute(self, process, engine, section_name, tr):
-            executed_ranges.append(tr)
-            return {"executed": True}
-
-        def mock_replace(self, **kwargs):
-            return replace(self, **kwargs)
-
-        monkeypatch.setattr(WorkflowSection, "_execute_section", mock_execute, raising=False)
-        monkeypatch.setattr(WorkflowSectionRunResult, "_replace", mock_replace, raising=False)
         monkeypatch.setenv("SPLIT", "true")
 
         section = WorkflowSection(
@@ -688,7 +670,7 @@ class TestWorkflowSection:
 
         result = section.run(TimeRange("2024-01-01", "2024-03-31"))
 
-        assert len(executed_ranges) == 3
+        assert len(calls) == 3
         assert result.reason == "split into 3 sub-ranges"
 
     def test_run_split_does_not_apply_to_short_ranges(self, monkeypatch):
@@ -717,21 +699,11 @@ class TestWorkflowSection:
         """Split chunks should preserve original start on first chunk and original end on last chunk."""
         from d3tools.timestepping import TimeRange
 
-        executed_ranges = []
+        calls = []
 
         class MockProcess:
-            def get_data(self, _):
-                raise AssertionError("direct get_data should not be used in split mode")
-
-        def mock_execute(self, process, engine, section_name, tr):
-            executed_ranges.append(tr)
-            return {"executed": True}
-
-        def mock_replace(self, **kwargs):
-            return replace(self, **kwargs)
-
-        monkeypatch.setattr(WorkflowSection, "_execute_section", mock_execute, raising=False)
-        monkeypatch.setattr(WorkflowSectionRunResult, "_replace", mock_replace, raising=False)
+            def get_data(self, tr):
+                calls.append(tr)
 
         original_range = TimeRange("2024-01-15", "2024-03-10")
         section = WorkflowSection(
@@ -744,9 +716,9 @@ class TestWorkflowSection:
 
         section.run(original_range)
 
-        assert len(executed_ranges) >= 2
-        assert executed_ranges[0].start == original_range.start
-        assert executed_ranges[-1].end == original_range.end
+        assert len(calls) >= 2
+        assert calls[0].start == original_range.start
+        assert calls[-1].end == original_range.end
 
     def test_run_returns_skipped_contract_when_no_timerange(self):
         """run() should return skipped result when no section range is available."""

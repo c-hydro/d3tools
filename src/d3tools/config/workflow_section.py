@@ -220,9 +220,10 @@ class WorkflowSection:
             time_ranges[-1].end = time_range.end
             results = []
             for tr in time_ranges:
-                result = self._execute_section(process, engine, section_name, tr)
+                result = self.run(tr)
                 results.append(result)
-            return output._replace(reason=f"split into {len(time_ranges)} sub-ranges")
+            output.reason = f"split into {len(time_ranges)} sub-ranges"
+            return output
             
         # Execute based on engine type
         match engine:
