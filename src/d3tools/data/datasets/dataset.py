@@ -531,7 +531,7 @@ class Dataset(metaclass=DatasetMeta):
         elif where_code == 2:
             raw_data = self.make_data(time, **kwargs)
         elif where_code == 3:
-            return self.fallback.get_data(time, as_is = as_is, **kwargs)
+            raw_data = self.fallback.get_data(time, as_is = True, **kwargs)
 
         # if we are not reading the data as is, we need to process it
         if as_is or self.type == 'memory':
@@ -539,7 +539,7 @@ class Dataset(metaclass=DatasetMeta):
         else:
             # self._format_after_read is implemented in the mixins to handle any
             # format-specific processing after reading
-            return self._format_after_read(raw_data, full_key = full_key, time = time, **kwargs)
+            return self._format_after_read(raw_data, source = where_code, time = time, **kwargs)
     
     def write_data(self, data,
                    time: Optional[dt.datetime|TimeStep] = None,

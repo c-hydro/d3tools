@@ -465,6 +465,17 @@ class TestRasterCoordinateHandling:
 
 class TestRasterMetadataMethods:
     """Test metadata operations on raster data."""
+
+    @staticmethod
+    def _sample_data(seed: int = 0) -> xr.DataArray:
+        rng = np.random.default_rng(seed)
+        data = xr.DataArray(
+            rng.random((5, 5)),
+            dims=['y', 'x'],
+            coords={'y': np.arange(5), 'x': np.arange(5)},
+            attrs={'_FillValue': -9999}
+        )
+        return data
     
     def test_set_metadata(self, tmp_path):
         """Test set_metadata method."""
@@ -521,6 +532,55 @@ class TestRasterMetadataMethods:
         # Get specific keys
         metadata = dataset.get_metadata(data, keys=['key1'])
         assert metadata == {'key1': 'value1'}
+
+    def test_get_data_main_sets_source_key_only(self, tmp_path):
+        """Main dataset reads should set source_key and not set source provenance flag."""
+        fallback = LocalDataset(path=str(tmp_path), file='fallback_{region}.nc')
+        primary = LocalDataset(path=str(tmp_path), file='primary_{region}.nc', fallback=fallback)
+
+        primary.write_data(self._sample_data(1), as_is=True, region='eu')
+        fallback.write_data(self._sample_data(2), as_is=True, region='eu')
+
+        read_data = primary.get_data(region='eu')
+
+        assert read_data.attrs.get('source_key') == primary.get_key(region='eu')
+        assert 'source' not in read_data.attrs
+
+    def test_get_data_fallback_sets_source_and_source_key(self, tmp_path):
+        """Fallback reads should expose fallback source metadata."""
+        fallback = LocalDataset(path=str(tmp_path), file='fallback_{region}.nc')
+        primary = LocalDataset(path=str(tmp_path), file='primary_{region}.nc', fallback=fallback)
+
+        fallback.write_data(self._sample_data(3), as_is=True, region='eu')
+
+        read_data = primary.get_data(region='eu')
+
+        assert read_data.attrs.get('source_key') == fallback.get_key(region='eu')
+        assert read_data.attrs.get('source') == 'fallback_data'
+
+    def test_get_data_parents_set_source_and_include_parent_keys(self, tmp_path, monkeypatch):
+        """Parent-derived reads should mark calculated source and list all parent keys."""
+        parent_a = LocalDataset(path=str(tmp_path), file='parent_a_{region}.nc')
+        parent_b = LocalDataset(path=str(tmp_path), file='parent_b_{region}.nc')
+        child = LocalDataset(path=str(tmp_path), file='child_{region}.nc')
+        child.set_parents({'a': parent_a, 'b': parent_b}, lambda a, b: a + b)
+
+        parent_a.write_data(self._sample_data(4), as_is=True, region='eu')
+        parent_b.write_data(self._sample_data(5), as_is=True, region='eu')
+
+        # Avoid recursion through write/template creation in make_data;
+        # this test is focused on read-time provenance metadata.
+        monkeypatch.setattr(child, 'make_data', lambda *args, **kw: self._sample_data(6))
+
+        read_data = child.get_data(region='eu')
+
+        parent_a_key = parent_a.get_key(region='eu')
+        parent_b_key = parent_b.get_key(region='eu')
+        source_key = read_data.attrs.get('source_key', '')
+
+        assert read_data.attrs.get('source') == 'calculated_data'
+        assert parent_a_key in source_key
+        assert parent_b_key in source_key
 
 
 class TestRasterMemoryDataset:
