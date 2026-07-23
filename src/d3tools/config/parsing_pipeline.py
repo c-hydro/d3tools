@@ -100,7 +100,7 @@ def prepare_workflow_log(options: Any):
     elif isinstance(workflow_log, dict):
         # Valid keys for workflow_log config
         valid_keys = {'file', 'level', 'console', 'format', 'format_file', 
-                     'format_console', 'logger_name'}
+                     'format_console', 'logger_name', 'run_state_file'}
         
         # Check for unknown keys (warn but don't fail)
         unknown_keys = set(workflow_log.keys()) - valid_keys
