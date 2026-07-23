@@ -138,7 +138,8 @@ class DataCatalogue:
                 files = []
                 for month in months:
                     t_start = max(month.start, time.start)
-                    t_end = min(month.end, time.end)
+                    month_end = month.end.replace(hour=23, minute=59, second=59)
+                    t_end = min(month_end, time.end)
                     files.extend(self.get_available_keys(TimeRange(t_start, t_end), **kwargs))
                 return files
         
@@ -307,12 +308,10 @@ class DataCatalogue:
         timesteps = [timestep.from_date(t) for t in times]
         
         # Filter to ensure timesteps overlap with requested range
-        for ts in timesteps:
-            end = time_range.end
-            if end.hour == 0 and end.minute == 0:
-                end = end + dt.timedelta(minutes=1439)
-            if ts.start > end or ts.end < time_range.start:
-                timesteps.remove(ts)
+        end = time_range.end
+        if end.hour == 0 and end.minute == 0:
+            end = end + dt.timedelta(minutes = 1439)
+        timesteps = [ts for ts in timesteps if not (ts.start > end or ts.end < time_range.start)]
 
         return timesteps
 
