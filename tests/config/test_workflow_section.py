@@ -164,6 +164,48 @@ class TestWorkflowSection:
 
         assert section.exec_options is None
 
+    def test_get_exec_option_reads_from_exec_options_when_env_missing(self, monkeypatch):
+        """get_exec_option should use section exec_options when env var is not set."""
+        monkeypatch.delenv("REPEAT_WINDOW", raising=False)
+
+        section = WorkflowSection(
+            name="Download",
+            engine="door",
+            definition={},
+            value={},
+            exec_options={"repeat_window": "2d"},
+        )
+
+        assert section.get_exec_option("repeat_window") == "2d"
+
+    def test_get_exec_option_env_overrides_exec_options(self, monkeypatch):
+        """get_exec_option should prioritize environment variable over exec_options."""
+        monkeypatch.setenv("REPEAT_WINDOW", "5d")
+
+        section = WorkflowSection(
+            name="Download",
+            engine="door",
+            definition={},
+            value={},
+            exec_options={"repeat_window": "2d"},
+        )
+
+        assert section.get_exec_option("repeat_window") == "5d"
+
+    def test_get_exec_option_returns_default_when_missing(self, monkeypatch):
+        """get_exec_option should return explicit default when env and config are missing."""
+        monkeypatch.delenv("SPLIT", raising=False)
+
+        section = WorkflowSection(
+            name="Download",
+            engine="door",
+            definition={},
+            value={},
+            exec_options={},
+        )
+
+        assert section.get_exec_option("split", default="none") == "none"
+
     def test_get_run_timerange_uses_repeat_window_from_exec_options(self, monkeypatch):
         """get_run_timerange should use repeat_window from exec_options."""
 
@@ -236,8 +278,8 @@ class TestWorkflowSection:
         assert time_range is not None
         assert time_range.start == dt.datetime(2024, 1, 4)
 
-    def test_get_run_timerange_prefers_exec_options_over_env_var(self, monkeypatch):
-        """get_run_timerange should prefer repeat_window from exec_options over REPEAT_WINDOW env var."""
+    def test_get_run_timerange_prefers_env_var_over_exec_options(self, monkeypatch):
+        """get_run_timerange should prefer REPEAT_WINDOW env var over exec_options repeat_window."""
 
         class MockTimeStep:
             def __init__(self, year, month, day):
@@ -261,7 +303,7 @@ class TestWorkflowSection:
 
         monkeypatch.setenv("REPEAT_WINDOW", "5d")
 
-        # Section with exec_options should use that, not env var
+        # Section with exec_options should still use env var when present
         section = WorkflowSection(
             "Download", "door", {}, MockProcess(),
             exec_options={"repeat_window": "2d"}
@@ -269,8 +311,8 @@ class TestWorkflowSection:
         time_range = section.get_run_timerange()
 
         assert time_range is not None
-        # 5-day window would start from 2023-12-31, 2-day window starts from 2024-01-03
-        assert time_range.start == dt.datetime(2024, 1, 3)
+        # 5-day window from 2024-01-04 starts from 2023-12-31
+        assert time_range.start == dt.datetime(2023, 12, 31)
 
     def test_get_run_timerange_returns_missing_output_window(self):
         """get_run_timerange should span the timesteps still missing from output."""
