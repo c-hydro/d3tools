@@ -521,22 +521,17 @@ class Dataset(metaclass=DatasetMeta):
                 available_versions.sort()
                 kwargs['file_version'] = available_versions[-1]
 
-        # parse the full key with the time and tags
-        full_key = self.get_key(time, **kwargs)
-
-        # first check that the data is available
-        if self._check_data(full_key):
-            # if so, read it
+        # find if the the data is available in the main dataset (1), the parents (2) or the fallback (3)
+        where_code = self.catalogue._find_data_source(time, **kwargs)
+        if where_code == 0:
+            raise FileNotFoundError(f'Could not find data for {self.get_key(time, **kwargs)} in dataset {self.name} or its parents or fallback')
+        elif where_code == 1:
+            full_key = self.get_key(time, **kwargs)
             raw_data = self._read_data(full_key)
-        # if not, check if it has parents to inherit from
-        elif hasattr(self, 'parents') and self.parents is not None:
+        elif where_code == 2:
             raw_data = self.make_data(time, **kwargs)
-        # if not, try fallback dataset if configured
-        elif hasattr(self, 'fallback') and self.fallback is not None:
+        elif where_code == 3:
             return self.fallback.get_data(time, as_is = as_is, **kwargs)
-        # if the data is not available and there are no parents, raise an error
-        else:
-            raise FileNotFoundError(f'Could not resolve data from {full_key}.')
 
         # if we are not reading the data as is, we need to process it
         if as_is or self.type == 'memory':

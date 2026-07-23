@@ -9,6 +9,56 @@ from d3tools.data import MemoryDataset
 
 class TestDatasetFallbackBehavior:
     """Test fallback delegation when primary dataset cannot resolve data."""
+    
+    def test_cyclic_fallback_detection(self):
+        """Should raise RuntimeError or FileNotFoundError on cyclic fallback."""
+        a = MemoryDataset(key_pattern='a_{region}.txt')
+        b = MemoryDataset(key_pattern='b_{region}.txt', fallback=a)
+        a.fallback = b  # create a cycle
+
+        import pytest
+        with pytest.raises((RuntimeError, RecursionError, FileNotFoundError)):
+            a.get_data(region='eu')
+
+    def test_deep_fallback_chain_with_missing_intermediate(self):
+        """Should find data in a deep fallback chain even if intermediate fallback is empty."""
+        c = MemoryDataset(key_pattern='c_{region}.txt')
+        b = MemoryDataset(key_pattern='b_{region}.txt', fallback=c)
+        a = MemoryDataset(key_pattern='a_{region}.txt', fallback=b)
+
+        c.data_dict['c_eu.txt'] = 'c-data'
+        # b has no data
+
+        data = a.get_data(region='eu')
+        assert data == 'c-data'
+
+    def test_parent_and_fallback_priority(self, monkeypatch):
+        """Fallback is used only if parents cannot provide data."""
+        fallback = MemoryDataset(key_pattern='fallback_{region}.txt')
+        parent = MemoryDataset(key_pattern='parent_{region}.txt')
+        child = MemoryDataset(key_pattern='child_{region}.txt', fallback=fallback)
+        child.set_parents({'p': parent}, lambda p: p)
+
+        fallback.data_dict['fallback_eu.txt'] = 'fallback-data'
+        parent.data_dict['parent_eu.txt'] = 'parent-data'
+
+        # Should use parent, not fallback
+        data = child.get_data(region='eu')
+        assert data == 'parent-data'
+
+        # Remove parent data, should now use fallback
+        parent.data_dict.clear()
+        data = child.get_data(region='eu')
+        assert data == 'fallback-data'
+
+    def test_get_data_without_tile_on_tiled_dataset(self):
+        """Should raise if get_data is called without tile on a tiled dataset."""
+        ds = MemoryDataset(key_pattern='data_{tile}.txt')
+        ds.data_dict['data_a.txt'] = 'a'
+        import pytest
+        with pytest.raises(Exception):
+            ds.get_data()
+    
 
     def test_primary_data_is_used_when_available(self):
         """Primary dataset should return its own data without using fallback."""
@@ -52,7 +102,7 @@ class TestDatasetFallbackBehavior:
         primary = MemoryDataset(key_pattern='primary_{region}.txt', fallback=fallback)
 
         called = {}
-
+        fallback.data_dict['fallback_eu.txt'] = 'fallback-data'
         def _mock_get_data(time=None, as_is=False, **kwargs):
             called['time'] = time
             called['as_is'] = as_is

@@ -724,7 +724,6 @@ class DataCatalogue:
             >>> catalogue.check_data(datetime(2024, 1, 1))  # Checks all tiles
             False  # Only returns True if ALL tiles exist
         """
-        from ..timestepping import TimeStep
         
         # Handle versioned files - get latest version if not specified
         if self.dataset.has_version and 'file_version' not in kwargs:
@@ -735,27 +734,46 @@ class DataCatalogue:
 
         # If specific tile is requested, check that tile
         if 'tile' in kwargs:
-            full_key = self.dataset.get_key(time, **kwargs)
-            if self.dataset._check_data(full_key):
-                return True
-            
-            # Check parent datasets if available
-            elif hasattr(self.dataset, 'parents') and self.dataset.parents is not None:
-                return all([parent.catalogue.check_data(time, **kwargs) 
-                           for parent in self.dataset.parents.values()])
-            
-            # Check fallback datasets if available
-            elif hasattr(self.dataset, 'fallback') and self.dataset.fallback is not None:
-                return self.dataset.fallback.check_data(time, **kwargs)
-            
-            else:
-                return False
+            return self._find_data_source(time, **kwargs) > 0
 
         # If no tile specified, check all tiles (returns True only if ALL exist)
         for tile in self.dataset.tile_names:
-            if not self.check_data(time, tile=tile, **kwargs):
+            if self._find_data_source(time, tile=tile, **kwargs) == 0:
                 return False
         return True
+
+    def _find_data_source(self, time: Optional[dt.datetime] = None, **kwargs) -> bool:
+        """
+        Check if data is available for a given time and tags and returns its source:
+        0. data not found
+        1. main dataset
+        2. parent datasets (if any)
+        3. fallback dataset (if any) 
+        
+        """
+        
+        # Handle versioned files - get latest version if not specified
+        if self.dataset.has_version and 'file_version' not in kwargs:
+            available_versions = self.get_available_tags(time, **kwargs).get('file_version')
+            if available_versions is not None:
+                available_versions.sort()
+                kwargs['file_version'] = available_versions[-1]
+
+        full_key = self.dataset.get_key(time, **kwargs)
+        if self.dataset._check_data(full_key):
+            return 1
+        
+        # Check parent datasets if available
+        if hasattr(self.dataset, 'parents') and self.dataset.parents is not None:
+            if all([parent.catalogue.check_data(time, **kwargs) for parent in self.dataset.parents.values()]):
+                return 2
+        
+        # Check fallback datasets if available
+        if hasattr(self.dataset, 'fallback') and self.dataset.fallback is not None:
+            if self.dataset.fallback.check_data(time, **kwargs):
+                return 3
+        
+        return 0
 
     @withcases
     def find_times(self, times: list[dt.datetime], id: bool = False, rev: bool = False, **kwargs) -> list[dt.datetime] | list[int]:
