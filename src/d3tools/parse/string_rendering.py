@@ -122,4 +122,32 @@ def substitute_values(structure: Any, tag_dict: dict[str, Any], **kwargs):
     return structure
 
 
-__all__ = ["substitute_string", "substitute_values"]
+def increment_version(version: str) -> str:
+    """Increment the last integer found in a version string.
+
+    The number is incremented by 1 and zero-padded to the same width as the
+    original.  If the incremented value requires more digits than the original
+    width, the extra digit is kept (e.g. ``"v99"`` → ``"v100"``).
+
+    Args:
+        version: Version string containing at least one integer (e.g. ``"v01"``).
+
+    Returns:
+        Version string with the last integer incremented.
+
+    Raises:
+        ValueError: If no integer is found in *version*.
+    """
+    match = None
+    for match in re.finditer(r'(\d+)', version):
+        pass  # keep iterating to find the last match
+
+    if match is None:
+        raise ValueError(f"No integer found in version string: {version!r}")
+
+    original = match.group(1)
+    incremented = str(int(original) + 1).zfill(len(original))
+    return version[:match.start()] + incremented + version[match.end():]
+
+
+__all__ = ["substitute_string", "substitute_values", "increment_version"]
