@@ -4,7 +4,7 @@ Tests for workflow-section aliasing and WorkflowSection behavior.
 import datetime as dt
 
 import pytest
-from d3tools.timestepping import TimeWindow
+from d3tools.timestepping import TimeRange
 from d3tools.config.workflow_section import (
     WORKFLOW_SECTION_ALIASES,
     WorkflowSection,
@@ -785,8 +785,8 @@ class TestWorkflowSection:
 
         assert section.get_run_timerange() == stored_range
 
-    def test_get_run_timerange_times_from_run_falls_through_to_normal_when_none(self, monkeypatch):
-        """get_run_timerange should fall through to normal resolution when times_from_run returns None."""
+    def test_get_run_timerange_times_from_run_skips_when_none(self, monkeypatch):
+        """get_run_timerange should skip (i.e. return None) when times_from_run returns None."""
         monkeypatch.setattr(
             "d3tools.config.workflow_section.get_timerange_from_run_state",
             lambda _: None,
@@ -819,9 +819,9 @@ class TestWorkflowSection:
 
         result = section.get_run_timerange()
 
-        assert result is not None
-        assert result.start == dt.datetime(2024, 1, 3)
-        assert result.end == dt.datetime(2024, 1, 4, 23, 59, 59)
+        assert result is None
+        # assert result.start == dt.datetime(2024, 1, 3)
+        # assert result.end == dt.datetime(2024, 1, 4, 23, 59, 59)
 
     def test_get_run_timerange_times_from_run_applies_repeat_window(self, monkeypatch):
         """repeat_window should extend the stored times_from_run range backwards."""

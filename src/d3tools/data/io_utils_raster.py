@@ -184,8 +184,9 @@ def set_type(data: xr.DataArray, nan_value = None, read = True) -> xr.DataArray:
     Make sure that the data is the smallest possible.
     """
 
-    max_value = data.max()
-    min_value = data.min()
+    finite_data = data.where(np.isfinite(data))
+    max_value = finite_data.max(skipna=True)
+    min_value = finite_data.min(skipna=True)
 
     # check if output contains floats or integers
     if np.issubdtype(data.dtype, np.floating):

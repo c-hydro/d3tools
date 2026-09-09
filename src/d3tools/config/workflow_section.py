@@ -163,6 +163,9 @@ class WorkflowSection:
                 if repeat_window is not None:
                     time_range = time_range.extend(repeat_window, before=True)
                 return time_range
+            else:
+                # if the prior state file has no times, it means it was skipped or had an error, so we should skip this section too
+                return None
 
         # Normal resolution logic
         process = self.value

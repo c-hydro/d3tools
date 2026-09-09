@@ -20,6 +20,23 @@ from pathlib import Path
 from rasterio.errors import NotGeoreferencedWarning
 
 from d3tools.data import LocalDataset, MemoryDataset
+from d3tools.data.io_utils_raster import set_type
+
+
+class TestRasterTypeHandling:
+    """Test raster dtype selection and special floating-point values."""
+
+    def test_set_type_ignores_infinities_when_selecting_float_dtype(self):
+        data = xr.DataArray(
+            np.array([1.0, np.inf, -np.inf, 2.0], dtype=np.float64),
+            dims=['pixels']
+        )
+
+        result = set_type(data)
+
+        assert result.dtype == np.float32
+        assert np.isposinf(result.values[1])
+        assert np.isneginf(result.values[2])
 
 
 class TestRasterInstantiation:
