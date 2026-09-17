@@ -8,6 +8,8 @@ from .timeperiods import timestep as _timestep_mod
 from .timeperiods import fixed_num_timestep as _fixed_num_mod
 from .timeperiods import fixed_doy_timestep as _fixed_doy_mod
 from .timeperiods import fixed_len_timestep as _fixed_len_mod
+from .timeperiods import timerange as _timerange_mod
+from .timeperiods import timeperiod as _timeperiod_mod
 
 import sys
 
@@ -16,9 +18,13 @@ sys.modules.setdefault(__name__ + ".timestep", _timestep_mod)
 sys.modules.setdefault(__name__ + ".fixed_num_timestep", _fixed_num_mod)
 sys.modules.setdefault(__name__ + ".fixed_doy_timestep", _fixed_doy_mod)
 sys.modules.setdefault(__name__ + ".fixed_len_timestep", _fixed_len_mod)
+sys.modules.setdefault(__name__ + ".timerange", _timerange_mod)
+sys.modules.setdefault(__name__ + ".timeperiod", _timeperiod_mod)
 
 # Also expose them as attributes of d3tools.timestepping
 timestep = _timestep_mod
 fixed_num_timestep = _fixed_num_mod
 fixed_doy_timestep = _fixed_doy_mod
 fixed_len_timestep = _fixed_len_mod
+timerange = _timerange_mod
+timeperiod = _timeperiod_mod

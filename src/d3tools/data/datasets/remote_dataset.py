@@ -100,7 +100,7 @@ class RemoteDataset(Dataset):
         self._delete(key)
         if self.available_keys_are_cached:
             if key in self.available_keys:
-                self.available_keys.pop(key)
+                self.available_keys.remove(key)
 
     def _download(self, input_key, local_key):
         raise NotImplementedError
