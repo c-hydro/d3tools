@@ -16,3 +16,9 @@ sys.modules.setdefault(__name__ + ".timestep", _timestep_mod)
 sys.modules.setdefault(__name__ + ".fixed_num_timestep", _fixed_num_mod)
 sys.modules.setdefault(__name__ + ".fixed_doy_timestep", _fixed_doy_mod)
 sys.modules.setdefault(__name__ + ".fixed_len_timestep", _fixed_len_mod)
+
+# Also expose them as attributes of d3tools.timestepping
+timestep = _timestep_mod
+fixed_num_timestep = _fixed_num_mod
+fixed_doy_timestep = _fixed_doy_mod
+fixed_len_timestep = _fixed_len_mod
