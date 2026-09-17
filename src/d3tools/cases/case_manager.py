@@ -135,15 +135,18 @@ class CaseManager():
             seen_cases = []
 
     def get_subtree(self, start_id: str, depth: int = 999):
-            _, start_layer = self.find_case(start_id, get_layer=True)
-            end_layer = min(start_layer + depth+1, self.nlayers)
+        start = self.find_case(start_id, get_layer=True)
+        if start is None:
+            raise ValueError(f"Unknown case ID: {start_id}")
+        _, start_layer = start
+        end_layer = min(start_layer + depth+1, self.nlayers)
 
-            subtree = []
-            for layer_index in range(start_layer+1, end_layer):
-                these_cases = {id: case for id, case in self._cases[layer_index].items() if id.startswith(start_id)}
-                subtree.append(these_cases)
-            
-            return subtree
+        subtree = []
+        for layer_index in range(start_layer+1, end_layer):
+            these_cases = {id: case for id, case in self._cases[layer_index].items() if id.startswith(start_id)}
+            subtree.append(these_cases)
+
+        return subtree
     
     def iterate_subtree(self, start_id: str, depth: int = 999, get_layer = True):
         """
