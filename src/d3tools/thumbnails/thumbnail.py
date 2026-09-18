@@ -362,6 +362,9 @@ class Thumbnail:
         self.fig.tight_layout(pad=0)
         self.fig.patch.set_facecolor([0.5, 0.5, 0.5, 1.0])
     
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        parent = os.path.dirname(destination)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
         plt.close(self.fig)
+        return destination

@@ -53,6 +53,24 @@ def test_dataarray_without_nodata_saves_thumbnail(color_definition_file, tmp_pat
     assert_valid_png(output)
 
 
+def test_save_returns_destination(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+
+    destination = str(tmp_path / "nested" / "thumbnail.png")
+
+    assert thumbnail.save(destination) == destination
+
+
+def test_save_accepts_basename_destination(color_definition_file, tmp_path, monkeypatch):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    monkeypatch.chdir(tmp_path)
+
+    destination = "thumbnail.png"
+
+    assert thumbnail.save(destination) == destination
+    assert_valid_png(tmp_path / destination)
+
+
 def test_dataarray_nan_without_nodata_uses_missing_class(color_definition_file):
     thumbnail = Thumbnail(
         dataarray(
