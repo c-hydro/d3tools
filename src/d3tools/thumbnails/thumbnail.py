@@ -344,61 +344,60 @@ class Thumbnail:
 
         self.fig.legend(handles=patches, **kwargs)
 
+    def _close_figure(self):
+        if hasattr(self, 'fig'):
+            plt.close(self.fig)
+        for attr in ('fig', 'ax', 'im'):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
     def save(self, destination:str, **kwargs):
         self.thumbnail_file = destination
-        #breakpoint()
-        if self.allnan:
-            dpi = kwargs.pop('dpi', None)
-            self.make_no_data_image(dpi)
+        self._close_figure()
+        try:
+            if self.allnan:
+                dpi = kwargs.pop('dpi', None)
+                self.make_no_data_image(dpi)
+            else:
+                if "shape" in kwargs:
+                    self.shape = kwargs['shape']
+
+                size = kwargs.get('size', None)
+                dpi  = kwargs.pop('dpi', None)
+                self.make_image(size, dpi)
+
+                if 'overlay' in kwargs:
+                    if isinstance(kwargs['overlay'], dict):
+                        self.add_overlay(**kwargs.pop('overlay'))
+                    elif isinstance(kwargs['overlay'], Dataset) or isinstance(kwargs['overlay'], str):
+                        self.add_overlay(kwargs['overlay'])
+                    elif kwargs['overlay'] == False or kwargs['overlay'] is None:
+                        pass
+                
+                if 'annotation' in kwargs:
+                    annotation_txt, annotation_opts = self._annotation_text_and_options(kwargs['annotation'])
+                    if annotation_txt is not None:
+                        self.add_annotation(annotation_txt, **annotation_opts)
+                else:
+                    annotation_txt = self._infer_annotation_text()
+                    if annotation_txt is not None:
+                        self.add_annotation(annotation_txt)
+
+                if 'legend' in kwargs:
+                    legend_opts = self._legend_options(kwargs['legend'])
+                    if legend_opts is not None:
+                        self.add_legend(**legend_opts)
+                else:
+                    self.add_legend()
+
+            self.ax.axis('off')
             self.fig.tight_layout(pad=0)
             self.fig.patch.set_facecolor([0.5, 0.5, 0.5, 1.0])
-
+        
             parent = os.path.dirname(destination)
             if parent:
                 os.makedirs(parent, exist_ok=True)
             self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
-            plt.close(self.fig)
             return destination
-
-        if "shape" in kwargs:
-            self.shape = kwargs['shape']
-
-        if not hasattr(self, 'fig'):
-            size = kwargs.get('size', None)
-            dpi  = kwargs.pop('dpi', None)
-            self.make_image(size, dpi)
-
-        if 'overlay' in kwargs:
-            if isinstance(kwargs['overlay'], dict):
-                self.add_overlay(**kwargs.pop('overlay'))
-            elif isinstance(kwargs['overlay'], Dataset) or isinstance(kwargs['overlay'], str):
-                self.add_overlay(kwargs['overlay'])
-            elif kwargs['overlay'] == False or kwargs['overlay'] is None:
-                pass
-        
-        if 'annotation' in kwargs:
-            annotation_txt, annotation_opts = self._annotation_text_and_options(kwargs['annotation'])
-            if annotation_txt is not None:
-                self.add_annotation(annotation_txt, **annotation_opts)
-        else:
-            annotation_txt = self._infer_annotation_text()
-            if annotation_txt is not None:
-                self.add_annotation(annotation_txt)
-
-        if 'legend' in kwargs:
-            legend_opts = self._legend_options(kwargs['legend'])
-            if legend_opts is not None:
-                self.add_legend(**legend_opts)
-        else:
-            self.add_legend()
-
-        self.ax.axis('off')
-        self.fig.tight_layout(pad=0)
-        self.fig.patch.set_facecolor([0.5, 0.5, 0.5, 1.0])
-    
-        parent = os.path.dirname(destination)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
-        plt.close(self.fig)
-        return destination
+        finally:
+            self._close_figure()

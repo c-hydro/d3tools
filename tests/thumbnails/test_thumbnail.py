@@ -1,5 +1,6 @@
 import numpy as np
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import pytest
 import xarray as xr
 from PIL import Image
@@ -199,6 +200,79 @@ def test_invalid_legend_type_raises_clear_error(color_definition_file, tmp_path)
 
     with pytest.raises(TypeError, match="legend"):
         thumbnail.save(str(tmp_path / "thumbnail.png"), legend=12)
+
+
+def test_save_does_not_reuse_preexisting_figure_state(
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    thumbnail.make_image()
+    thumbnail.add_annotation("stale")
+    text_before_add = []
+    add_annotation = thumbnail.add_annotation
+
+    def spy_add_annotation(text, **kwargs):
+        text_before_add.append([item.get_text() for item in thumbnail.ax.texts])
+        add_annotation(text, **kwargs)
+
+    monkeypatch.setattr(thumbnail, "add_annotation", spy_add_annotation)
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), annotation="fresh", legend=False)
+
+    assert text_before_add == [[]]
+
+
+def test_repeated_saves_create_independent_figures(
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    axes = []
+    make_image = thumbnail.make_image
+
+    def spy_make_image(*args, **kwargs):
+        make_image(*args, **kwargs)
+        axes.append(thumbnail.ax)
+
+    monkeypatch.setattr(thumbnail, "make_image", spy_make_image)
+
+    thumbnail.save(str(tmp_path / "first.png"), annotation="first", legend=False)
+    thumbnail.save(str(tmp_path / "second.png"), annotation="second", legend=False)
+
+    assert len(axes) == 2
+    assert axes[0] is not axes[1]
+
+
+def test_save_closes_figure_after_save_failure(
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    figures = []
+    make_image = thumbnail.make_image
+
+    def spy_make_image(*args, **kwargs):
+        make_image(*args, **kwargs)
+        figures.append(thumbnail.fig)
+
+        def raise_error(*args, **kwargs):
+            raise RuntimeError("save failed")
+
+        monkeypatch.setattr(thumbnail.fig, "savefig", raise_error)
+
+    monkeypatch.setattr(thumbnail, "make_image", spy_make_image)
+
+    with pytest.raises(RuntimeError, match="save failed"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), legend=False)
+
+    assert not hasattr(thumbnail, "fig")
+    assert not hasattr(thumbnail, "ax")
+    assert not hasattr(thumbnail, "im")
+    assert not plt.fignum_exists(figures[0].number)
 
 
 def test_dataarray_nan_without_nodata_uses_missing_class(color_definition_file):
