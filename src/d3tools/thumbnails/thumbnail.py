@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 import geopandas as gpd
+from pandas.api.types import is_numeric_dtype
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -14,6 +15,9 @@ from .colors import parse_colors, keep_used_colors, create_colormap
 
 #TODO TEST
 class Thumbnail:
+    DEFAULT_VECTOR_SHORT_SIDE = 900
+    MAX_VECTOR_LONG_SIDE = 2400
+
     def __init__(self, data:str|xr.DataArray|gpd.GeoDataFrame, color_definition_file:str):
         if isinstance(data, xr.DataArray):
             self.src = data
@@ -34,71 +38,131 @@ class Thumbnail:
         # parse the color definition file
         self.txt_file = color_definition_file
         all_breaks, self.all_colors, all_labels = parse_colors(self.txt_file)
+        self.bins = self._get_bins(all_breaks)
+        self.nan_class = len(self.bins) + 1
 
         if self.type == 'vector':
-            # check if the vector is all nan
-            if np.all(np.isnan(self.src['value'])):
-                self.allnan = True
-            else:
-                self.allnan = False
-                self.crs = self.src.crs
-                self.digital_src = self.discretize(all_breaks)
+            if self.src.empty:
+                raise ValueError("Cannot create a thumbnail from an empty GeoDataFrame.")
+            if 'value' not in self.src.columns:
+                raise ValueError("GeoDataFrame thumbnail input must include a 'value' column.")
+            if not is_numeric_dtype(self.src['value']):
+                raise ValueError("GeoDataFrame thumbnail 'value' column must be numeric.")
 
-                self.breaks = np.unique(self.digital_src["value_discrete"])
-                has_nans = max(self.breaks) == len(all_breaks)
+            self.crs = self.src.crs
+            self.missing_mask = self.src['value'].isna().to_numpy()
+            self.allnan = bool(np.all(self.missing_mask))
+            self.digital_src = self.discretize(all_breaks)
 
-                # Assume a resolution of 0.01 and create shape from extent
-                x_min, y_min, x_max, y_max = self.src.total_bounds
-                res = 0.01
-                width = int(np.ceil((x_max - x_min) / res))
-                height = int(np.ceil((y_max - y_min) / res))
-                self.shape = (height, width)
-                self.extent = (x_min, x_max, y_min, y_max)
+            self.breaks = np.unique(self.digital_src["value_discrete"])
+
+            bounds = tuple(self.src.total_bounds)
+            self.shape = self._shape_from_bounds(bounds)
+            self.extent = self._extent_from_bounds(bounds)
 
         elif self.type == 'raster':
-            # check if the raster is all nan
-            if np.all(np.isclose(self.src.data, self.src.rio.nodata, equal_nan=True)):
-                self.allnan = True
-            else:
-                self.allnan = False
+            self.src = self.src.squeeze()
+            self.img = np.asarray(self.src.data)
+            if self.img.ndim != 2:
+                raise ValueError("Raster thumbnail input must be a single band. Select one band before creating a Thumbnail.")
 
-                self.transform = self.src.rio.transform()
-                self.img = self.src.data.squeeze()
-                self.nan_value = self.src.rio.nodata
-                self.shape = self.img.shape
-                self.crs = self.src.rio.crs
+            self.nan_value = self.src.rio.nodata
+            self.missing_mask = self._missing_mask(self.img, self.nan_value)
+            self.allnan = bool(np.all(self.missing_mask))
 
-                self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
-                               self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
+            self.transform = self.src.rio.transform()
+            self.shape = self.img.shape
+            self.crs = self.src.rio.crs
 
-                self.digital_img = self.discretize(all_breaks)
-                self.breaks = np.unique(self.digital_img)
+            self.extent = (self.transform[2], self.transform[2] + self.transform[0]*self.img.shape[1],
+                           self.transform[5] + self.transform[4]*self.img.shape[0], self.transform[5])
+
+            self.digital_img = self.discretize(all_breaks)
+            self.breaks = np.unique(self.digital_img)
                 
-        has_nans = max(self.breaks) == len(all_breaks)
+        has_nans = bool(np.any(self.missing_mask))
 
-        self.colors = keep_used_colors(self.breaks, self.all_colors)
         self.all_labels = all_labels.copy()
-
         all_labels.append('nan')
         self.labels = [all_labels[i] for i in range(min(self.breaks), max(self.breaks)+1)]
 
-        self.colormap = create_colormap(self.colors, include_nan = has_nans)
+        if self.allnan:
+            self.colors = []
+            self.colormap = None
+        else:
+            self.colors = keep_used_colors(self.breaks, self.all_colors)
+            self.colormap = create_colormap(self.colors, include_nan = has_nans)
+
+    def _get_bins(self, breaks: list) -> list[float]:
+        if len(breaks) == 0:
+            return []
+        if breaks[-1] == 'inf':
+            return [float(pos) for pos in breaks[:-1]]
+        return [float(pos) for pos in breaks]
+
+    def _missing_mask(self, data: np.ndarray, nodata) -> np.ndarray:
+        try:
+            missing = np.isnan(data)
+        except TypeError:
+            missing = np.zeros(data.shape, dtype=bool)
+
+        if nodata is not None:
+            missing = missing | np.isclose(data, nodata, equal_nan=True)
+
+        return missing
+
+    def _shape_from_bounds(self, bounds: tuple[float, float, float, float]) -> tuple[int, int]:
+        x_min, y_min, x_max, y_max = bounds
+        width = x_max - x_min
+        height = y_max - y_min
+
+        if not np.isfinite(width) or not np.isfinite(height) or width <= 0 or height <= 0:
+            return (self.DEFAULT_VECTOR_SHORT_SIDE, self.DEFAULT_VECTOR_SHORT_SIDE)
+
+        if width >= height:
+            shape_height = self.DEFAULT_VECTOR_SHORT_SIDE
+            shape_width = int(np.ceil(self.DEFAULT_VECTOR_SHORT_SIDE * width / height))
+        else:
+            shape_width = self.DEFAULT_VECTOR_SHORT_SIDE
+            shape_height = int(np.ceil(self.DEFAULT_VECTOR_SHORT_SIDE * height / width))
+
+        long_side = max(shape_height, shape_width)
+        if long_side > self.MAX_VECTOR_LONG_SIDE:
+            scale = self.MAX_VECTOR_LONG_SIDE / long_side
+            shape_height = max(1, int(round(shape_height * scale)))
+            shape_width = max(1, int(round(shape_width * scale)))
+
+        return (shape_height, shape_width)
+
+    def _extent_from_bounds(self, bounds: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        x_min, y_min, x_max, y_max = bounds
+        width = x_max - x_min
+        height = y_max - y_min
+
+        if not np.isfinite(width) or width <= 0:
+            x_center = x_min if np.isfinite(x_min) else 0
+            x_min = x_center - 0.5
+            x_max = x_center + 0.5
+        if not np.isfinite(height) or height <= 0:
+            y_center = y_min if np.isfinite(y_min) else 0
+            y_min = y_center - 0.5
+            y_max = y_center + 0.5
+
+        return (x_min, x_max, y_min, y_max)
 
     def discretize(self, breaks: list, nan_value = np.nan):
         # Create an array of bins from the positions
-        if len(breaks) == 0:
+        if len(self.bins) == 0:
             return np.zeros_like(self.img)
-        elif breaks[-1] == 'inf':
-            bins = [float(pos) for pos in breaks[:-1]]
         else:
-            bins = [float(pos) for pos in breaks]
+            bins = self.bins
 
         if self.type == 'raster':
             # Discretize the raster values
             raster_discrete = np.digitize(self.img, bins, right = True)
 
             # Set the nan values to the last bin
-            raster_discrete = np.where(np.isclose(self.img, nan_value, equal_nan= True), len(bins) + 1, raster_discrete)
+            raster_discrete = np.where(self.missing_mask, self.nan_class, raster_discrete)
 
             return raster_discrete
 
@@ -107,7 +171,7 @@ class Thumbnail:
             values = self.src['value'].to_numpy()
             vector_discrete = np.digitize(values, bins, right=True)
             # Set nan values to the last bin
-            vector_discrete = np.where(np.isnan(values), len(bins) + 1, vector_discrete)
+            vector_discrete = np.where(self.missing_mask, self.nan_class, vector_discrete)
             result = self.src.copy()
             result['value_discrete'] = vector_discrete
             return result
@@ -151,6 +215,20 @@ class Thumbnail:
         self.ax = ax
         self.fig = fig
         self.im = im
+
+    def make_no_data_image(self, dpi: Optional[float] = None):
+        if dpi is None:
+            dpi = 150
+
+        self.dpi = dpi
+        self.size_in_inches = (4, 4)
+        fig, ax = plt.subplots(figsize=self.size_in_inches, dpi=dpi)
+        ax.set_facecolor([0.5, 0.5, 0.5, 1.0])
+        ax.text(0.5, 0.5, "No data", ha='center', va='center', transform=ax.transAxes)
+        ax.axis('off')
+
+        self.ax = ax
+        self.fig = fig
 
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
 
@@ -222,7 +300,17 @@ class Thumbnail:
         self.thumbnail_file = destination
         #breakpoint()
         if self.allnan:
-           return
+            dpi = kwargs.pop('dpi', None)
+            self.make_no_data_image(dpi)
+            self.fig.tight_layout(pad=0)
+            self.fig.patch.set_facecolor([0.5, 0.5, 0.5, 1.0])
+
+            parent = os.path.dirname(destination)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            self.fig.savefig(destination, dpi=self.dpi, bbox_inches='tight', pad_inches=0)
+            plt.close(self.fig)
+            return destination
 
         if "shape" in kwargs:
             self.shape = kwargs['shape']
