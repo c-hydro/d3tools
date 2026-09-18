@@ -156,6 +156,9 @@ class RasterMixin(FormatMixin):
 
         if template_dict is None:
             if isinstance(data, (xr.DataArray, xr.Dataset)):
+                # Build the template from the same north-to-south orientation
+                # that will actually be written.
+                data = straighten_data(data)
                 self.set_template(data, **kwargs)
                 template_dict = self.get_template_dict(**kwargs, make_it=False)
             else:
@@ -197,7 +200,51 @@ class RasterMixin(FormatMixin):
 
         # write the data to a netcdf
         elif self.format == 'netcdf':
-            data.to_netcdf(path, engine = 'h5netcdf')
+            # A scalar ``spatial_ref`` variable is redundant for regular
+            # geographic lon/lat grids and can confuse some downstream readers.
+            # Keep projected grids untouched; only strip it when the coordinates
+            # themselves already identify a conventional geographic grid.
+            has_lon_lat = 'lon' in data.coords and 'lat' in data.coords
+            has_spatial_ref = (
+                'spatial_ref' in data.variables
+                if isinstance(data, xr.Dataset)
+                else 'spatial_ref' in data.coords
+            )
+            if has_lon_lat and has_spatial_ref:
+                data = data.drop_vars('spatial_ref')
+                if isinstance(data, xr.Dataset):
+                    for name in data.data_vars:
+                        if data[name].attrs.get('grid_mapping') == 'spatial_ref':
+                            data[name].attrs.pop('grid_mapping', None)
+                elif data.attrs.get('grid_mapping') == 'spatial_ref':
+                    data.attrs.pop('grid_mapping', None)
+
+            compress = self.options.get('compress', False)
+            if isinstance(compress, str):
+                compress = compress.strip().lower() in {'1', 'true', 'yes', 'on'}
+            else:
+                compress = bool(compress)
+
+            if compress:
+                if isinstance(data, xr.Dataset):
+                    variable_names = list(data.data_vars)
+                else:
+                    variable_names = [
+                        data.name
+                        if data.name is not None
+                        else '__xarray_dataarray_variable__'
+                    ]
+                encoding = {
+                    name: {
+                        'zlib': True,
+                        'complevel': 4,
+                        'shuffle': True,
+                    }
+                    for name in variable_names
+                }
+                data.to_netcdf(path, engine='h5netcdf', encoding=encoding)
+            else:
+                data.to_netcdf(path, engine='h5netcdf')
 
     @property
     def _template(self) -> dict:
@@ -373,25 +420,38 @@ class RasterMixin(FormatMixin):
         else:
             return {}
 
-    def validate_data(self, data: xr.DataArray|xr.Dataset|np.ndarray, **kwargs) -> xr.DataArray|xr.Dataset|np.ndarray:
+    def validate_data(self, data: xr.DataArray | xr.Dataset | np.ndarray, **kwargs) -> xr.DataArray | xr.Dataset | np.ndarray:
         """
-        Validate the data object in a format-specific way.
-        
-        This is a helper method that can be used to validate data before writing.
-        The implementation will depend on the data structure.
-        
-        Args:
-            data: Data object to validate
-            **kwargs: Additional arguments for validation
-            
-        Returns:
-            Validated data object
+        Validate raster data before writing.
         """
-        if isinstance(data, (xr.DataArray, xr.Dataset)):
-            output = data.rio.write_nodata(data.attrs.get('_FillValue', self.nan_value))
+
+        if isinstance(data, xr.DataArray):
+            nodata = data.attrs.get("_FillValue", self.nan_value)
+            return data.rio.write_nodata(nodata)
+
+        if isinstance(data, xr.Dataset):
+            output = data.copy()
+
+            dataset_nodata = data.attrs.get(
+                "_FillValue",
+                self.nan_value
+            )
+
+            for variable_name in output.data_vars:
+                variable = output[variable_name]
+
+                nodata = variable.attrs.get(
+                    "_FillValue",
+                    dataset_nodata
+                )
+
+                output[variable_name] = variable.rio.write_nodata(
+                    nodata
+                )
+
             return output
-        else:
-            return data
+
+        return data
     
     @staticmethod
     def estimate_tiff_decoded_mb(path: str) -> float:
