@@ -207,6 +207,36 @@ def test_legend_dict_is_not_mutated(color_definition_file, tmp_path, monkeypatch
     assert legend == expected
 
 
+def test_legend_position_is_applied_to_axes_legend(color_definition_file):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    thumbnail.make_image()
+
+    thumbnail.add_legend(loc="lower left")
+
+    legend = thumbnail.ax.get_legend()
+    assert legend is not None
+    assert legend._loc == 3
+    assert thumbnail.fig.legends == []
+
+
+def test_legacy_legend_bbox_to_anchor_is_ignored(color_definition_file, monkeypatch):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    thumbnail.make_image()
+    calls = []
+
+    def spy_legend(*args, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(thumbnail.ax, "legend", spy_legend)
+
+    thumbnail.add_legend(loc="lower left", bbox_to_anchor=(1, 1))
+
+    assert len(calls) == 1
+    assert calls[0]["loc"] == "lower left"
+    assert calls[0]["borderaxespad"] == 0
+    assert "bbox_to_anchor" not in calls[0]
+
+
 def test_invalid_legend_string_raises_clear_error(color_definition_file, tmp_path):
     thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
 

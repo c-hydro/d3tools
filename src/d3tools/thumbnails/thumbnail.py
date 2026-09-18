@@ -357,15 +357,16 @@ class Thumbnail:
 
         if 'loc' not in kwargs:
             kwargs['loc'] = 'upper right'
-        if 'bbox_to_anchor' not in kwargs:
-            kwargs['bbox_to_anchor'] = (1, 1)
         if 'borderaxespad' not in kwargs:
             kwargs['borderaxespad'] = 0
+        # for compatibility with older scripts that might have this option
+        if 'bbox_to_anchor' in kwargs:
+            kwargs.pop('bbox_to_anchor')
 
         colors_normalized = [np.array(color, dtype=int) / 255. for color in self.all_colors]
         patches = [mpatches.Patch(color=color, label=label) for color, label in zip(colors_normalized, self.all_labels)]
 
-        self.fig.legend(handles=patches, **kwargs)
+        self.ax.legend(handles=patches, **kwargs)
 
     def _close_figure(self):
         if hasattr(self, 'fig'):
