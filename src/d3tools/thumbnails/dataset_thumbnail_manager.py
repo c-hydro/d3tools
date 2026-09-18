@@ -61,10 +61,10 @@ class DatasetThumbnailManager:
         if dataset_factory is not None:
             colors = dataset_factory(colors)
             
-            if isinstance(destination, str):
+            if isinstance(destination, (str, dict)):
                 destination = dataset_factory(destination)
             
-            if overlay is not None and isinstance(overlay, str):
+            if overlay is not None and isinstance(overlay, (str, dict)):
                 overlay = dataset_factory(overlay)
         
         # Extract other options
@@ -87,6 +87,8 @@ class DatasetThumbnailManager:
         from .thumbnail import Thumbnail
         
         options = self.options.copy()
+        if self.overlay is not None and 'overlay' not in options:
+            options['overlay'] = self.overlay
         
         col_def = self.colors.update(**kwargs)
         if isinstance(data, dict):

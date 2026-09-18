@@ -49,6 +49,9 @@ def parse_colors(colors_definition: str|Dataset) -> tuple:
         except ValueError:
             pass
 
+    if not color_values:
+        raise ValueError("No valid color definitions were found.")
+
     # Sort the color values by key
     sorted_colors = sorted(color_values.items(), key=lambda x: np.inf if x[0] == 'inf' else float(x[0]))
 
