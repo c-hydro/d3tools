@@ -379,6 +379,39 @@ def test_dataarray_nan_without_nodata_uses_missing_class(color_definition_file):
     assert thumbnail.digital_img[1, 1] == 4
 
 
+def test_raster_classification_is_right_closed_with_terminal_inf(color_definition_file):
+    thumbnail = Thumbnail(
+        dataarray(
+            [
+                [-2, -1, -0.5, 0],
+                [0.5, 1, 1.5, np.nan],
+            ]
+        ),
+        color_definition_file,
+    )
+
+    np.testing.assert_array_equal(
+        thumbnail.digital_img,
+        np.array(
+            [
+                [0, 0, 1, 1],
+                [2, 2, 3, 4],
+            ]
+        ),
+    )
+
+
+def test_vector_classification_is_right_closed_with_terminal_inf(color_definition_file):
+    source = gpd.GeoDataFrame(
+        {"value": [-2, -1, -0.5, 0, 0.5, 1, 1.5, np.nan]},
+        geometry=[Point(i, 0) for i in range(8)],
+        crs="EPSG:4326",
+    )
+    thumbnail = Thumbnail(source, color_definition_file)
+
+    assert thumbnail.digital_src["value_discrete"].to_list() == [0, 0, 1, 1, 2, 2, 3, 4]
+
+
 def test_singleton_band_dataarray_is_accepted(color_definition_file):
     source = xr.DataArray(
         np.array(
