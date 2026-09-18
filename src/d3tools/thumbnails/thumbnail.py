@@ -56,9 +56,9 @@ class Thumbnail:
 
             self.breaks = np.unique(self.digital_src["value_discrete"])
 
-            bounds = tuple(self.src.total_bounds)
-            self.shape = self._shape_from_bounds(bounds)
-            self.extent = self._extent_from_bounds(bounds)
+            self.bounds = tuple(self.src.total_bounds)
+            self.shape = self._shape_from_bounds(self.bounds)
+            self.extent = self._extent_from_bounds(self.bounds)
 
         elif self.type == 'raster':
             self.src = self.src.squeeze()
@@ -111,24 +111,41 @@ class Thumbnail:
 
         return missing
 
-    def _shape_from_bounds(self, bounds: tuple[float, float, float, float]) -> tuple[int, int]:
+    def _positive_int_option(self, option_name: str, value: Optional[int]) -> int:
+        if value is None:
+            if option_name == 'vector_short_side':
+                return self.DEFAULT_VECTOR_SHORT_SIDE
+            return self.MAX_VECTOR_LONG_SIDE
+
+        value = int(value)
+        if value <= 0:
+            raise ValueError(f"{option_name} must be greater than zero.")
+        return value
+
+    def _shape_from_bounds(self,
+                           bounds: tuple[float, float, float, float],
+                           short_side: Optional[int] = None,
+                           max_long_side: Optional[int] = None) -> tuple[int, int]:
+        short_side = self._positive_int_option('vector_short_side', short_side)
+        max_long_side = self._positive_int_option('vector_max_long_side', max_long_side)
+
         x_min, y_min, x_max, y_max = bounds
         width = x_max - x_min
         height = y_max - y_min
 
         if not np.isfinite(width) or not np.isfinite(height) or width <= 0 or height <= 0:
-            return (self.DEFAULT_VECTOR_SHORT_SIDE, self.DEFAULT_VECTOR_SHORT_SIDE)
+            return (short_side, short_side)
 
         if width >= height:
-            shape_height = self.DEFAULT_VECTOR_SHORT_SIDE
-            shape_width = int(np.ceil(self.DEFAULT_VECTOR_SHORT_SIDE * width / height))
+            shape_height = short_side
+            shape_width = int(np.ceil(short_side * width / height))
         else:
-            shape_width = self.DEFAULT_VECTOR_SHORT_SIDE
-            shape_height = int(np.ceil(self.DEFAULT_VECTOR_SHORT_SIDE * height / width))
+            shape_width = short_side
+            shape_height = int(np.ceil(short_side * height / width))
 
         long_side = max(shape_height, shape_width)
-        if long_side > self.MAX_VECTOR_LONG_SIDE:
-            scale = self.MAX_VECTOR_LONG_SIDE / long_side
+        if long_side > max_long_side:
+            scale = max_long_side / long_side
             shape_height = max(1, int(round(shape_height * scale)))
             shape_width = max(1, int(round(shape_width * scale)))
 
@@ -184,7 +201,10 @@ class Thumbnail:
         target_inches = 6
         
         min_dim = min(self.shape)
-        if size is None and dpi is None:
+        if self.type == 'vector' and size is None and dpi is None:
+            dpi = target_dpi
+            size = 1
+        elif size is None and dpi is None:
             dpi = max(min_dim / target_inches, target_dpi) 
             size = target_inches / (min_dim / dpi)
         elif size is None:
@@ -383,8 +403,16 @@ class Thumbnail:
                 dpi = kwargs.pop('dpi', None)
                 self.make_no_data_image(dpi)
             else:
+                vector_short_side = kwargs.pop('vector_short_side', None)
+                vector_max_long_side = kwargs.pop('vector_max_long_side', None)
                 if "shape" in kwargs:
                     self.shape = kwargs['shape']
+                elif self.type == 'vector':
+                    self.shape = self._shape_from_bounds(
+                        self.bounds,
+                        short_side=vector_short_side,
+                        max_long_side=vector_max_long_side,
+                    )
 
                 size = kwargs.get('size', None)
                 dpi  = kwargs.pop('dpi', None)

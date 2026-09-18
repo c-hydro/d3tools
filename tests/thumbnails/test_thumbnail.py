@@ -548,6 +548,58 @@ def test_projected_geodataframe_shape_is_bounded(color_definition_file):
     assert min(height, width) > 0
 
 
+def test_vector_short_side_option_controls_render_shape(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(polygon_geodataframe(), color_definition_file)
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), vector_short_side=300, legend=False)
+
+    assert thumbnail.shape == (300, 600)
+
+
+def test_vector_short_side_option_controls_output_size(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(polygon_geodataframe(), color_definition_file)
+    output = tmp_path / "thumbnail.png"
+
+    thumbnail.save(str(output), vector_short_side=300, legend=False)
+
+    with Image.open(output) as image:
+        assert max(image.size) <= 600
+
+
+def test_vector_max_long_side_option_caps_render_shape(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(polygon_geodataframe(), color_definition_file)
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), vector_short_side=900, vector_max_long_side=500, legend=False)
+
+    assert thumbnail.shape == (250, 500)
+
+
+def test_explicit_shape_overrides_vector_size_options(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(polygon_geodataframe(), color_definition_file)
+
+    thumbnail.save(
+        str(tmp_path / "thumbnail.png"),
+        shape=(120, 180),
+        vector_short_side=300,
+        vector_max_long_side=500,
+        legend=False,
+    )
+
+    assert thumbnail.shape == (120, 180)
+
+
+@pytest.mark.parametrize("option_name", ["vector_short_side", "vector_max_long_side"])
+def test_vector_size_options_must_be_positive(
+    option_name,
+    color_definition_file,
+    tmp_path,
+):
+    thumbnail = Thumbnail(polygon_geodataframe(), color_definition_file)
+
+    with pytest.raises(ValueError, match=option_name):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), **{option_name: 0})
+
+
 def test_degenerate_geodataframe_uses_square_shape(color_definition_file):
     source = gpd.GeoDataFrame(
         {"value": [0.5]},
