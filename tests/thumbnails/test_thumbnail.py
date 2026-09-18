@@ -2,6 +2,7 @@ import numpy as np
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pytest
+from rasterio.transform import from_origin
 import xarray as xr
 from PIL import Image
 from shapely.geometry import LineString, Point, box
@@ -51,6 +52,24 @@ def test_dataarray_without_nodata_saves_thumbnail(color_definition_file, tmp_pat
     thumbnail.save(str(output))
 
     assert thumbnail.allnan is False
+    assert_valid_png(output)
+
+
+def test_raster_path_with_nodata_saves_thumbnail(color_definition_file, tmp_path):
+    source = dataarray(
+        [
+            [0, 1],
+            [2, -9999],
+        ]
+    ).rio.write_crs("EPSG:4326").rio.write_transform(from_origin(0, 2, 1, 1)).rio.write_nodata(-9999)
+    raster_path = tmp_path / "source.tif"
+    source.rio.to_raster(str(raster_path))
+
+    thumbnail = Thumbnail(str(raster_path), color_definition_file)
+
+    output = tmp_path / "thumbnail.png"
+    thumbnail.save(str(output))
+
     assert_valid_png(output)
 
 
