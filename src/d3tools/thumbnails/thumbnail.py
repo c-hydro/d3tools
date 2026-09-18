@@ -261,6 +261,23 @@ class Thumbnail:
 
         raise TypeError("Thumbnail annotation must be a string, dict, False, or None.")
 
+    def _legend_options(self, legend) -> Optional[dict]:
+        if legend is False or legend is None:
+            return None
+
+        if legend is True:
+            return {}
+
+        if isinstance(legend, str):
+            if legend.strip().lower() == 'none':
+                return None
+            raise ValueError("Thumbnail legend string option must be 'none'.")
+
+        if isinstance(legend, dict):
+            return legend.copy()
+
+        raise TypeError("Thumbnail legend must be True, False, None, 'none', or a dict.")
+
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
 
         if isinstance(shp_file, str):
@@ -369,10 +386,9 @@ class Thumbnail:
                 self.add_annotation(annotation_txt)
 
         if 'legend' in kwargs:
-            if isinstance(kwargs['legend'], dict):
-                self.add_legend(**kwargs.pop('legend'))
-            elif kwargs['legend'] == False or kwargs['legend'] is None or kwargs['legend'].lower == 'none':
-                pass
+            legend_opts = self._legend_options(kwargs['legend'])
+            if legend_opts is not None:
+                self.add_legend(**legend_opts)
         else:
             self.add_legend()
 

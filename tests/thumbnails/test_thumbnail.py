@@ -139,6 +139,68 @@ def test_invalid_annotation_type_raises_clear_error(color_definition_file, tmp_p
         thumbnail.save(str(tmp_path / "thumbnail.png"), annotation=12, legend=False)
 
 
+@pytest.mark.parametrize("legend", [False, None, "none", "NONE", "  none  "])
+def test_legend_disabled_values_do_not_add_legend(
+    legend,
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    monkeypatch.setattr(thumbnail, "add_legend", lambda **kwargs: calls.append(kwargs))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), legend=legend)
+
+    assert calls == []
+
+
+@pytest.mark.parametrize("legend", [True, {"loc": "lower left"}])
+def test_legend_enabled_values_add_legend(
+    legend,
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    monkeypatch.setattr(thumbnail, "add_legend", lambda **kwargs: calls.append(kwargs))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), legend=legend)
+
+    if legend is True:
+        assert calls == [{}]
+    else:
+        assert calls == [{"loc": "lower left"}]
+
+
+def test_legend_dict_is_not_mutated(color_definition_file, tmp_path, monkeypatch):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    legend = {"loc": "lower left", "borderaxespad": 1}
+    expected = legend.copy()
+    monkeypatch.setattr(thumbnail, "add_legend", lambda **kwargs: calls.append(kwargs))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), legend=legend)
+
+    assert calls == [expected]
+    assert legend == expected
+
+
+def test_invalid_legend_string_raises_clear_error(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+
+    with pytest.raises(ValueError, match="legend"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), legend="off")
+
+
+def test_invalid_legend_type_raises_clear_error(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+
+    with pytest.raises(TypeError, match="legend"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), legend=12)
+
+
 def test_dataarray_nan_without_nodata_uses_missing_class(color_definition_file):
     thumbnail = Thumbnail(
         dataarray(
