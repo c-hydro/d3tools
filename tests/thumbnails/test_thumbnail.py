@@ -202,6 +202,95 @@ def test_invalid_legend_type_raises_clear_error(color_definition_file, tmp_path)
         thumbnail.save(str(tmp_path / "thumbnail.png"), legend=12)
 
 
+@pytest.fixture
+def overlay_geodataframe():
+    return gpd.GeoDataFrame(
+        geometry=[box(0, 0, 1, 1)],
+        crs="EPSG:4326",
+    )
+
+
+@pytest.mark.parametrize("overlay", [False, None])
+def test_overlay_disabled_values_do_not_add_overlay(
+    overlay,
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    monkeypatch.setattr(thumbnail, "add_overlay", lambda shp_file, **kwargs: calls.append(shp_file))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), overlay=overlay, legend=False)
+
+    assert calls == []
+
+
+def test_overlay_dict_is_not_mutated(
+    color_definition_file,
+    overlay_geodataframe,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    overlay = {"shp_file": overlay_geodataframe, "edgecolor": "red"}
+    expected = overlay.copy()
+    monkeypatch.setattr(
+        thumbnail,
+        "add_overlay",
+        lambda shp_file, **kwargs: calls.append((shp_file, kwargs)),
+    )
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), overlay=overlay, legend=False)
+
+    assert calls == [(overlay_geodataframe, {"edgecolor": "red"})]
+    assert overlay == expected
+
+
+def test_geodataframe_overlay_saves_thumbnail(
+    color_definition_file,
+    overlay_geodataframe,
+    tmp_path,
+):
+    source = dataarray([[0, 1], [2, 3]]).rio.write_crs("EPSG:4326")
+    thumbnail = Thumbnail(source, color_definition_file)
+
+    output = tmp_path / "overlay.png"
+    thumbnail.save(str(output), overlay=overlay_geodataframe, legend=False)
+
+    assert_valid_png(output)
+
+
+def test_invalid_overlay_type_raises_clear_error(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+
+    with pytest.raises(TypeError, match="overlay"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), overlay=12, legend=False)
+
+
+def test_overlay_requires_source_crs(
+    color_definition_file,
+    overlay_geodataframe,
+    tmp_path,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+
+    with pytest.raises(ValueError, match="CRS"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), overlay=overlay_geodataframe, legend=False)
+
+
+def test_overlay_requires_overlay_crs(color_definition_file, tmp_path):
+    source = dataarray([[0, 1], [2, 3]]).rio.write_crs("EPSG:4326")
+    thumbnail = Thumbnail(source, color_definition_file)
+    overlay = gpd.GeoDataFrame(
+        geometry=[box(0, 0, 1, 1)],
+    )
+
+    with pytest.raises(ValueError, match="CRS"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), overlay=overlay, legend=False)
+
+
 def test_save_does_not_reuse_preexisting_figure_state(
     color_definition_file,
     tmp_path,

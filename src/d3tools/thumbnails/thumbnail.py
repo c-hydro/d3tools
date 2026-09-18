@@ -278,14 +278,37 @@ class Thumbnail:
 
         raise TypeError("Thumbnail legend must be True, False, None, 'none', or a dict.")
 
+    def _overlay_args_and_options(self, overlay) -> tuple[object, dict] | tuple[None, None]:
+        if overlay is False or overlay is None:
+            return None, None
+
+        if isinstance(overlay, dict):
+            overlay_opts = overlay.copy()
+            if 'shp_file' not in overlay_opts:
+                raise ValueError("Thumbnail overlay options must include 'shp_file'.")
+            shp_file = overlay_opts.pop('shp_file')
+            return shp_file, overlay_opts
+
+        if isinstance(overlay, (str, Dataset, gpd.GeoDataFrame)):
+            return overlay, {}
+
+        raise TypeError("Thumbnail overlay must be a string, Dataset, GeoDataFrame, dict, False, or None.")
+
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
 
         if isinstance(shp_file, str):
             shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
+        elif isinstance(shp_file, gpd.GeoDataFrame):
+            shapes = shp_file.copy()
         else:
             shapes = shp_file.get_data()
         
-        shapes = shapes.to_crs(self.crs.to_string())
+        if self.crs is None:
+            raise ValueError("Thumbnail source CRS is required to add an overlay.")
+        if shapes.crs is None:
+            raise ValueError("Overlay CRS is required to add an overlay.")
+
+        shapes = shapes.to_crs(self.crs)
 
         if 'facecolor' not in kwargs:
             kwargs['facecolor'] = 'none'
@@ -367,12 +390,9 @@ class Thumbnail:
                 self.make_image(size, dpi)
 
                 if 'overlay' in kwargs:
-                    if isinstance(kwargs['overlay'], dict):
-                        self.add_overlay(**kwargs.pop('overlay'))
-                    elif isinstance(kwargs['overlay'], Dataset) or isinstance(kwargs['overlay'], str):
-                        self.add_overlay(kwargs['overlay'])
-                    elif kwargs['overlay'] == False or kwargs['overlay'] is None:
-                        pass
+                    overlay_src, overlay_opts = self._overlay_args_and_options(kwargs['overlay'])
+                    if overlay_src is not None:
+                        self.add_overlay(overlay_src, **overlay_opts)
                 
                 if 'annotation' in kwargs:
                     annotation_txt, annotation_opts = self._annotation_text_and_options(kwargs['annotation'])
