@@ -71,6 +71,74 @@ def test_save_accepts_basename_destination(color_definition_file, tmp_path, monk
     assert_valid_png(tmp_path / destination)
 
 
+@pytest.mark.parametrize("annotation", ["none", "NONE", "", "   "])
+def test_annotation_disabled_strings_do_not_add_annotation(
+    annotation,
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    monkeypatch.setattr(thumbnail, "add_annotation", lambda text, **kwargs: calls.append(text))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), annotation=annotation, legend=False)
+
+    assert calls == []
+
+
+def test_empty_annotation_dict_without_inferred_text_is_disabled(
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    monkeypatch.setattr(thumbnail, "add_annotation", lambda text, **kwargs: calls.append(text))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), annotation={}, legend=False)
+
+    assert calls == []
+
+
+def test_annotation_dict_is_not_mutated(color_definition_file, tmp_path, monkeypatch):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    annotation = {"text": "Forecast", "xy": (0.1, 0.2)}
+    expected = annotation.copy()
+    monkeypatch.setattr(
+        thumbnail,
+        "add_annotation",
+        lambda text, **kwargs: calls.append((text, kwargs)),
+    )
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), annotation=annotation, legend=False)
+
+    assert calls == [("Forecast", {"xy": (0.1, 0.2)})]
+    assert annotation == expected
+
+
+def test_annotation_dict_empty_text_is_disabled(
+    color_definition_file,
+    tmp_path,
+    monkeypatch,
+):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+    calls = []
+    monkeypatch.setattr(thumbnail, "add_annotation", lambda text, **kwargs: calls.append(text))
+
+    thumbnail.save(str(tmp_path / "thumbnail.png"), annotation={"text": ""}, legend=False)
+
+    assert calls == []
+
+
+def test_invalid_annotation_type_raises_clear_error(color_definition_file, tmp_path):
+    thumbnail = Thumbnail(dataarray([[0, 1], [2, 3]]), color_definition_file)
+
+    with pytest.raises(TypeError, match="annotation"):
+        thumbnail.save(str(tmp_path / "thumbnail.png"), annotation=12, legend=False)
+
+
 def test_dataarray_nan_without_nodata_uses_missing_class(color_definition_file):
     thumbnail = Thumbnail(
         dataarray(

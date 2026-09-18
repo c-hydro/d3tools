@@ -230,6 +230,37 @@ class Thumbnail:
         self.ax = ax
         self.fig = fig
 
+    def _infer_annotation_text(self) -> Optional[str]:
+        if 'source_key' in self.src.attrs:
+            return os.path.basename(self.src.attrs['source_key'])
+        if hasattr(self, 'raster_file'):
+            return os.path.basename(self.raster_file)
+        return None
+
+    def _annotation_text_and_options(self, annotation) -> tuple[Optional[str], dict]:
+        if annotation is False or annotation is None:
+            return None, {}
+
+        if isinstance(annotation, str):
+            if annotation.strip() == '' or annotation.strip().lower() == 'none':
+                return None, {}
+            return annotation, {}
+
+        if isinstance(annotation, dict):
+            annotation_opts = annotation.copy()
+            text = annotation_opts.pop('text', None)
+            if text is None:
+                text = self._infer_annotation_text()
+            if text is None:
+                return None, annotation_opts
+            if not isinstance(text, str):
+                raise TypeError("Thumbnail annotation text must be a string.")
+            if text.strip() == '' or text.strip().lower() == 'none':
+                return None, annotation_opts
+            return text, annotation_opts
+
+        raise TypeError("Thumbnail annotation must be a string, dict, False, or None.")
+
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
 
         if isinstance(shp_file, str):
@@ -329,26 +360,13 @@ class Thumbnail:
                 pass
         
         if 'annotation' in kwargs:
-            if isinstance(kwargs['annotation'], dict):
-                annotation_opts = kwargs.pop('annotation')
-                if 'text' not in annotation_opts:
-                    if 'source_key' in self.src.attrs:
-                        text = os.path.basename(self.src.attrs['source_key'])
-                    elif hasattr(self, 'raster_file'):
-                        text = os.path.basename(self.raster_file)
-                else:
-                    text = annotation_opts.pop('text')
-                self.add_annotation(text, **annotation_opts)
-            elif isinstance(kwargs['annotation'], str):
-                self.add_annotation(kwargs['annotation'])
-            elif kwargs['annotation'] == False or kwargs['annotation'] is None or kwargs['annotation'].lower == 'none':
-                pass
-        elif 'source_key' in self.src.attrs:
-            annotation_txt = os.path.basename(self.src.attrs['source_key'])
-            self.add_annotation(annotation_txt)
-        elif hasattr(self, 'raster_file'):
-            annotation_txt = os.path.basename(self.raster_file)
-            self.add_annotation(annotation_txt)
+            annotation_txt, annotation_opts = self._annotation_text_and_options(kwargs['annotation'])
+            if annotation_txt is not None:
+                self.add_annotation(annotation_txt, **annotation_opts)
+        else:
+            annotation_txt = self._infer_annotation_text()
+            if annotation_txt is not None:
+                self.add_annotation(annotation_txt)
 
         if 'legend' in kwargs:
             if isinstance(kwargs['legend'], dict):
