@@ -112,7 +112,8 @@ class TemplateManager:
             'dims_starts': {},
             'dims_ends': {},
             'dims_steps': {},
-            'dims_lengths': {}
+            'dims_lengths': {},
+            'dims_values': {}
         }
         
         if vars is not None:
@@ -131,6 +132,7 @@ class TemplateManager:
                 template_dict['dims_starts'][dim] = float(start)
                 template_dict['dims_ends'][dim] = float(end)
                 template_dict['dims_steps'][dim] = float(step)
+                template_dict['dims_values'][dim] = np.asarray(this_dim_values).tolist()
             # if datetime:
             elif np.issubdtype(this_dim_values.dtype, np.datetime64):
                 # Convert to python datetimes: estimate_timestep and from_date
@@ -367,7 +369,10 @@ class TemplateManager:
             end = template_dict['dims_ends'][dim]
             length = template_dict['dims_lengths'][dim]
             step = template_dict['dims_steps'][dim]
-            if isinstance(start, float):
+            dim_values = template_dict.get('dims_values', {}).get(dim)
+            if dim_values is not None:
+                template[dim] = np.asarray(dim_values)
+            elif isinstance(start, (int, float)):
                 template[dim] = np.linspace(start, end, length)
             else:
                 start_ts = TimeStep.from_unit(step).from_date(start)
@@ -396,18 +401,58 @@ class TemplateManager:
         Returns:
             Data with template spatial structure applied
         """
+        def align_to_template(array: xr.DataArray, template: xr.DataArray) -> xr.DataArray:
+            """Align labelled data without losing cells to floating-point jitter.
+
+            Spatial coordinates decoded independently from GRIB can differ from
+            an otherwise identical template by a few ulps. Exact ``reindex``
+            turns those cells into NaN. For equal-size numeric axes, snap only
+            when the coordinates are equal within a very small fraction of the
+            grid spacing; also handle the same axis in reverse order. Genuine
+            grid differences still fall back to normal labelled reindexing.
+            """
+            template_dims = tuple(template.dims)
+            aligned = array.transpose(*template_dims)
+
+            for dim in template_dims:
+                source = np.asarray(aligned[dim].values)
+                target = np.asarray(template[dim].values)
+
+                if source.shape == target.shape and np.issubdtype(source.dtype, np.number) and np.issubdtype(target.dtype, np.number):
+                    if source.size > 1 and (np.issubdtype(source.dtype, np.floating) or np.issubdtype(target.dtype, np.floating)):
+                        step = float(np.nanmedian(np.abs(np.diff(target.astype(float)))))
+                        atol = max(step * 1e-8, 1e-10) if np.isfinite(step) else 1e-10
+                    else:
+                        atol = 0.0
+
+                    if np.allclose(source, target, rtol=0.0, atol=atol, equal_nan=True):
+                        aligned = aligned.assign_coords({dim: target})
+                        continue
+
+                    if source.size > 1 and np.allclose(source[::-1], target, rtol=0.0, atol=atol, equal_nan=True):
+                        aligned = aligned.isel({dim: slice(None, None, -1)})
+                        aligned = aligned.assign_coords({dim: target})
+                        continue
+
+                aligned = aligned.reindex({dim: target})
+
+            return aligned
+
         if isinstance(data, xr.DataArray):
             attrs = data.attrs.copy()
-            data = TemplateManager.build_array(template_dict, data.data)
+            template = TemplateManager.build_array(template_dict)
+            aligned = align_to_template(data, template)
+            data = template.copy(data=aligned.data)
             data.attrs.update(attrs)
         elif isinstance(data, np.ndarray):
             data = TemplateManager.build_array(template_dict, data)
         elif isinstance(data, xr.Dataset):
             vars = template_dict['variables']
-            template = TemplateManager.build_array(template_dict, data[vars[0]].data)
+            template = TemplateManager.build_array(template_dict)
             das = {}
             for var in vars:
-                da = template.copy(data=data[var])
+                aligned = align_to_template(data[var], template)
+                da = template.copy(data=aligned.data)
                 da.attrs.update(data[var].attrs)
                 das[var] = da
             data = xr.Dataset(das)
