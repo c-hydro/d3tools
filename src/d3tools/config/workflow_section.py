@@ -251,7 +251,7 @@ class WorkflowSection:
             case 'dryes':
                 # check for the env variable "SETUP" (as 1, True, 'true', etc.)
                 SETUP = os.getenv('SETUP', 'False').lower() in ('1', 'true', 'yes')
-                process.compute(time_range, setup=SETUP)
+                process.compute(time_range, make_parameters=SETUP)
             case _:
                 raise TypeError(
                     f"Workflow section '{section_name}' has unrecognized engine '{engine}'. "
