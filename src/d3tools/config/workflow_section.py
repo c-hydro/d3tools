@@ -1,4 +1,8 @@
-"""Workflow section recognition and metadata container."""
+"""Workflow section recognition, metadata, execution, and run results.
+
+The module maps section-name aliases to engine names and provides the
+``WorkflowSection`` container used by the configuration parsing pipeline.
+"""
 
 from dataclasses import dataclass
 
@@ -32,9 +36,14 @@ AVAILBALE_EXECUTION_OPTIONS = {
 
 @dataclass
 class WorkflowSectionRunResult:
-    """Outcome of a WorkflowSection run attempt.
+    """Outcome of a ``WorkflowSection`` run attempt.
 
-    Fields are intentionally minimal and logging-oriented.
+    Attributes:
+        section_name: Name reported for the section.
+        engine: Engine used by the section.
+        time_range: Range passed to the section, or ``None`` when skipped.
+        executed: Whether the section performed engine work.
+        reason: Skip or split explanation, when one is available.
     """
 
     section_name: str
@@ -44,7 +53,19 @@ class WorkflowSectionRunResult:
     reason: str | None = None
 
 def resolve_workflow_section_alias(section: str) -> str | None:
-    """Resolve a workflow-section alias to an engine keyword."""
+    """Resolve a section name containing an alias to an engine keyword.
+
+    Matching normalizes case and other string formatting through
+    :func:`d3tools.parse.string_rendering.normalise_string`. An alias may be
+    embedded in a longer section name, such as ``Download_01``.
+
+    Args:
+        section: Workflow section name to inspect.
+
+    Returns:
+        ``"door"``, ``"dam"``, or ``"dryes"`` when an alias matches;
+        otherwise ``None``.
+    """
 
     for alias, engine in WORKFLOW_SECTION_ALIASES.items():
         if normalise_string(alias) in normalise_string(section):
@@ -61,7 +82,8 @@ class WorkflowSection:
     - ``name``:    original top-level key name
     - ``engine``:  engine keyword (``door``, ``dam``, ``dryes``)
     - ``definition``: section payload for this section item
-    - ``value``:   parsed section payload (currently passthrough scaffold)
+    - ``value``:   parsed section payload or engine object
+    - ``exec_options``: section-level execution options, if provided
     """
     name: str
     engine: str
@@ -81,9 +103,19 @@ class WorkflowSection:
 
         Args:
             name: Original top-level workflow key.
-            definition: Parsed section payload.
-            build_object: If ``True``, try constructing runtime objects.
-            strict_imports: If ``True``, propagate build/import errors.
+            definition: Section payload. The method removes ``engine`` and
+                ``exec_options`` from this dictionary while parsing it.
+            build_object: If ``True``, try constructing an engine runtime
+                object; otherwise retain the parser's raw value.
+            strict_imports: If ``True``, propagate engine build/import errors.
+
+        Returns:
+            A normalized workflow section with the selected engine, parsed
+            value, and section execution options.
+
+        Raises:
+            ValueError: If neither the explicit engine nor the section name
+                identifies ``door``, ``dam``, or ``dryes``.
         """
         # attempt to get the `engine` keyword from the definition key
         engine = definition.pop("engine", None)
@@ -103,7 +135,20 @@ class WorkflowSection:
         return cls(name=name, engine=engine, definition=definition, value=value, exec_options=exec_options)
     
     def get_exec_option(self, option_name: str, default: Any = None, asbool=False) -> Any:
-        """Helper to get an execution option for this section."""
+        """Read one execution option, allowing an environment override.
+
+        Args:
+            option_name: Name of the section execution option.
+            default: Value returned when neither the environment nor section
+                options define the option.
+            asbool: Convert the value to a boolean. The strings ``true``,
+                ``1``, ``yes``, and ``on`` are true, case-insensitively.
+
+        Returns:
+            The environment value from the upper-case option name, the
+            configured section value, or ``default``. When ``asbool`` is true,
+            the result is a boolean.
+        """
 
         option_env_name = f"{option_name.upper()}"
         value = os.getenv(option_env_name, (self.exec_options or {}).get(option_name, default))
@@ -194,13 +239,15 @@ class WorkflowSection:
         """Execute a single workflow section using its engine-specific interface.
 
         Args:
-            time_range: TimeRange for execution
+            time_range: Range for execution. If omitted, resolve it from the
+                section's execution options and data availability.
 
         Returns:
             WorkflowSectionRunResult with execution/skipping details.
 
         Raises:
-            TypeError: If the section doesn't have a recognized engine
+            TypeError: If the section's engine is not recognized when the
+                section is executed.
         """
 
         # Get the actual workflow object
