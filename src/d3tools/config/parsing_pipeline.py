@@ -1,7 +1,8 @@
-"""Configuration parsing pipeline.
+"""Stages for resolving and normalizing workflow configuration.
 
-Phase-1 scaffolding for explicit parsing stages used by ``Options.parse``.
-Each stage preserves existing behavior while making responsibilities clearer.
+The public :func:`parse_options` function applies the environment, current-time,
+tag, dataset, dataset-reference, workflow-log, and workflow-section stages in
+that order.
 """
 
 from __future__ import annotations
@@ -16,14 +17,39 @@ from .workflow_section import WorkflowSection
 from .workflow_definition import WorkflowDefinition
 
 def resolve_env(options: Any):
-    """Resolve environment-variable placeholders in options."""
+    """Resolve environment placeholders recursively in a configuration mapping.
+
+    Args:
+        options: Mapping to process. Plain mappings are first wrapped in
+            :class:`Options`.
+
+    Returns:
+        An ``Options`` instance (or its subclass) with environment references
+        resolved in its keys and values.
+
+    Raises:
+        ValueError: A referenced environment variable is unset and has no
+            placeholder default.
+    """
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
         options = Options(options)
     return options.__class__(set_env(options))
 
 def resolve_tags(options: Any):
-    """Resolve tag placeholders in options using the tags section itself."""
+    """Resolve tag placeholders using the mapping's ``tags`` section.
+
+    Tag values are resolved against that same section first, then substituted
+    recursively throughout the configuration, including mapping keys.
+
+    Args:
+        options: Mapping to process. Plain mappings are first wrapped in
+            :class:`Options`.
+
+    Returns:
+        An ``Options`` instance (or its subclass) with tag references
+        substituted.
+    """
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
         options = Options(options)
@@ -33,7 +59,19 @@ def resolve_tags(options: Any):
     return options.__class__(substitute_values(options, tags, rec=True))
 
 def resolve_now(options: Any):
-    """Resolve {now} placeholders in options to current datetime."""
+    """Resolve current-time placeholders recursively throughout options.
+
+    A single current ``datetime`` value is used for all ``{now}`` references in
+    this call.
+
+    Args:
+        options: Mapping to process. Plain mappings are first wrapped in
+            :class:`Options`.
+
+    Returns:
+        An ``Options`` instance (or its subclass) with current-time references
+        substituted.
+    """
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
         options = Options(options)
@@ -43,7 +81,19 @@ def resolve_now(options: Any):
     return options.__class__(substitute_values(options, {"now": now}, rec=True))
 
 def build_datasets(options: Any):
-    """Instantiate datasets defined under the datasets section."""
+    """Replace dataset definitions with ``Dataset`` instances.
+
+    The optional ``__defaults__`` entry is removed from the datasets mapping
+    and passed as defaults when constructing each configured dataset.
+
+    Args:
+        options: Mapping to update. Plain mappings are first wrapped in
+            :class:`Options`.
+
+    Returns:
+        The same ``Options`` instance when one is supplied, otherwise the new
+        ``Options`` wrapper. The dataset entries are ``Dataset`` instances.
+    """
 
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
@@ -59,7 +109,20 @@ def build_datasets(options: Any):
 
 
 def resolve_dataset_refs(options: Any):
-    """Resolve dataset placeholders (e.g. ``{datasets.foo}``) in options."""
+    """Replace dataset references with their corresponding dataset objects.
+
+    References are resolved recursively from the configured datasets mapping.
+    Unmatched placeholders remain strings; references with tag assignments
+    apply those tags through the dataset object's ``update`` method.
+
+    Args:
+        options: Mapping to process. Plain mappings are first wrapped in
+            :class:`Options`.
+
+    Returns:
+        An ``Options`` instance (or its subclass) with resolvable references
+        replaced.
+    """
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
         options = Options(options)
@@ -70,19 +133,24 @@ def resolve_dataset_refs(options: Any):
 
 
 def prepare_workflow_log(options: Any):
-    """Prepare and normalize workflow_log configuration.
-    
-    This stage ensures the workflow_log config is properly normalized
-    and validated, but doesn't instantiate the logger (that happens
-    at run-time in WorkflowDefinition.run()).
-    
-    The workflow_log config supports:
-        - None or empty dict: Disables logging
-        - String: Treated as log file path with defaults
-        - Dict: Full configuration with file, level, console, format, etc.
-    
-    Note: {now:...} placeholders in 'file' paths are intentionally NOT
-    resolved here - they're resolved at run-time to get accurate timestamps.
+    """Normalize and validate the ``workflow_log`` option without creating a logger.
+
+    A string is replaced by a ``{"file": string}`` mapping. ``None`` and an
+    empty mapping are retained. Mapping keys outside ``file``, ``level``,
+    ``console``, ``format``, ``format_file``, ``format_console``,
+    ``logger_name`` and ``run_state_file`` produce a warning but are retained.
+    This stage does not resolve ``{now}`` placeholders; the full parsing
+    pipeline resolves them in its earlier current-time stage.
+
+    Args:
+        options: Mapping to update. Plain mappings are first wrapped in
+            :class:`Options`.
+
+    Returns:
+        The normalized mapping.
+
+    Raises:
+        TypeError: ``workflow_log`` is not ``None``, a string, or a mapping.
     """
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):
@@ -145,9 +213,19 @@ def collect_workflow_sections(
     downstream code uses ``workflow_sections`` as the single access path.
 
     Args:
-        options: Parsed options mapping.
-        build_workflow_objects: Whether to build runtime objects for sections.
-        strict_workflow_imports: If ``True``, propagate build/import failures.
+        options: An ``Options`` mapping containing workflow definitions. The
+            mapping's extended ``get`` method is used for case-insensitive
+            access.
+        build_workflow_objects: Whether to build runtime objects for sections
+            (default ``True``).
+        strict_workflow_imports: If ``True`` (default ``True``), propagate
+            build/import failures.
+
+    Returns:
+        The same mapping with recognized non-reserved top-level entries
+        collected as ``WorkflowSection`` objects under ``workflow_sections``.
+        Collected entries are removed from the top level. List-valued entries
+        produce numbered sections in list order.
     """
 
     # a default engine and exec_options can be specified at the top-level and will be passed to all sections that don't specify them explicitly
@@ -205,10 +283,25 @@ def parse_options(
     """Run the full parsing pipeline.
 
     Args:
-        options: Workflow options mapping.
+        options: Workflow options mapping. Plain mappings are wrapped in
+            :class:`Options`.
         build_workflow_objects: Whether to build runtime objects for collected
-            workflow sections.
-        strict_workflow_imports: If ``True``, propagate build/import failures.
+            workflow sections (default ``False``).
+        strict_workflow_imports: If ``True`` (default ``False``), propagate
+            build/import failures.
+
+    Returns:
+        Parsed ``Options`` with resolved values, instantiated datasets, and
+        collected workflow sections. Environment, tag and dataset resolution
+        creates updated nested structures; workflow sections replace their
+        original top-level entries.
+
+    Raises:
+        TypeError: The ``env`` option is neither a mapping nor ``None``.
+
+    Side Effects:
+        Values in the ``env`` option are converted to strings and assigned to
+        ``os.environ`` before placeholder resolution.
     """
     if not isinstance(options, Options):
         options = Options(options)

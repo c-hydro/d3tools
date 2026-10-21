@@ -4,10 +4,12 @@ class Options(dict):
     """
     Enhanced mapping with compatibility helpers for config access.
 
-    ``Options`` is a non-runnable configuration container that extends plain dict behavior with:
-    - Recursive wrapping of nested mappings/lists into ``Options`` instances
-    - Attribute-style access for uniquely resolvable nested keys
-    - Compatibility helpers in :meth:`get` (case-insensitive lookup, fallback key lists, optional key return)
+    Nested dictionaries and dictionaries directly contained in lists are wrapped
+    as ``Options`` instances. Attributes resolve matching keys recursively, but
+    raise ``ValueError`` if matching paths contain distinct values.
+
+    :meth:`get` adds case-insensitive lookup and fallback-key compatibility to
+    normal top-level mapping access.
 
     Backward compatibility:
         - Previously, ``Options`` was the runnable workflow container. Now, ``WorkflowDefinition`` is the canonical runnable container.
@@ -18,6 +20,12 @@ class Options(dict):
         - Use ``WorkflowDefinition`` for operational workflow execution.
     """
     def __init__(self, *args, **kwargs):
+        """Initialize the mapping and wrap nested dictionaries as ``Options``.
+
+        Args:
+            *args: Positional arguments accepted by ``dict``.
+            **kwargs: Keyword items accepted by ``dict``.
+        """
         super().__init__(*args, **kwargs)
 
         for k, v in self.items():
@@ -27,6 +35,7 @@ class Options(dict):
                 self[k] = [Options(**i) if isinstance(i, dict) else i for i in v]
 
     def __getattr__(self, item):
+        """Resolve an attribute through uniquely matching nested keys."""
         key_paths = self.find_keys(item, get_all = True)
         values = []
         for key_path in key_paths:
@@ -44,9 +53,11 @@ class Options(dict):
             raise AttributeError(f"'Options' object has no attribute '{item}'")
 
     def __setattr__(self, key, value):
+        """Store an attribute as a top-level mapping item."""
         self[key] = value
 
     def __delattr__(self, item):
+        """Delete a top-level mapping item through attribute syntax."""
         try:
             del self[item]
         except KeyError:
@@ -57,14 +68,13 @@ class Options(dict):
 
         Args:
             key: Target key name to search recursively.
-            get_all: If ``True``, return all matching paths. If ``False``,
-                require a single match and return only that path.
+            get_all: If ``True`` (the default is ``False``), return all matching
+                paths. Otherwise require a single match and return that path.
 
         Returns:
-            Either:
-            - a list of key-paths when ``get_all=True``;
-            - one key-path (list of keys) when ``get_all=False`` and unique;
-            - an empty list when no match is found.
+            A list of key paths when ``get_all=True``; otherwise one key path
+            (a list of keys) when unique. Returns an empty list when no key
+            matches.
 
         Raises:
             ValueError: If ``get_all=False`` and more than one path matches.
@@ -93,11 +103,12 @@ class Options(dict):
         """Get a top-level option by key with optional compatibility helpers.
 
         Args:
-            key: Either a single key name or a list of fallback key names.
-                For a list, keys are tried in order and the first match wins.
-            default: Value returned when no key matches.
-            ignore_case: Whether key matching should be case-insensitive.
-            get_key: If ``True``, return ``(value, matched_key)``.
+            key: A string key or a list of fallback key names tried in order.
+            default: Value returned when no key matches (default ``None``).
+            ignore_case: If ``True`` (default ``False``), match keys without
+                regard to case.
+            get_key: If ``True`` (default ``False``), return the matched key
+                along with the value.
 
         Returns:
             The matched value, or ``default`` if no key matches. If
@@ -106,6 +117,10 @@ class Options(dict):
         Notes:
             This method checks only the current mapping level; recursive lookup
             is handled by :meth:`find_keys` and attribute access.
+
+            When ``key`` is a list, the method consumes that list while trying
+            keys in order. In this compatibility path, false-valued matches
+            such as ``0``, ``False``, ``''`` and ``None`` are treated as misses.
         """
         if isinstance(key, str):
             if ignore_case:
@@ -139,14 +154,21 @@ class Options(dict):
         """
         Deprecated compatibility loader for workflow JSON files.
 
-        This method is kept only for legacy code that still calls ``Options.load(...)``.
-        Emits a deprecation warning and returns a ``WorkflowDefinition`` instance.
+        Forwards all arguments to ``WorkflowDefinition.load`` and emits a
+        ``DeprecationWarning``.
 
         Returns:
             WorkflowDefinition: Parsed workflow definition object.
 
         Deprecated:
             Use ``WorkflowDefinition.load`` instead. This method will be removed in a future release.
+
+        Args:
+            *args: Positional arguments forwarded to ``WorkflowDefinition.load``.
+            **kwargs: Keyword arguments forwarded to ``WorkflowDefinition.load``.
+
+        Returns:
+            The ``WorkflowDefinition`` returned by its ``load`` method.
         """
         import warnings
         warnings.warn(

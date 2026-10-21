@@ -15,6 +15,17 @@ from ..errors import WorkflowEngineImportError
 # Create dataset_factory for nested dataset parsing
 # This allows manager configs to reference other datasets
 def dataset_factory(cfg, template_ds):
+    """Build a nested dataset using a template dataset's creation options.
+
+    Args:
+        cfg: Nested dataset options, or a string interpreted as its
+            ``key_pattern``.
+        template_ds: Dataset whose creation options provide defaults. Its
+            ``name`` is not inherited.
+
+    Returns:
+        The nested ``Dataset`` created from ``cfg`` and the template defaults.
+    """
 
     # use the type from parsed_config as default
     defaults = template_ds._creation_kwargs.copy()
@@ -29,20 +40,21 @@ def dataset_factory(cfg, template_ds):
 
 def dataset_from_config(config: Union['Dataset', str, Dict[str, Any]], defaults: Optional[Dict[str, Any]] = None):
     """
-    Create a Dataset from a configuration dictionary.
+    Create a ``Dataset`` from a dataset configuration.
     
-    This is the centralized parser for dataset configurations. It handles:
-    - Merging with defaults
-    - Parsing manager configurations (thumbnail, log)
-    - Determining the appropriate Dataset subclass
-    - Creating and returning the Dataset instance
+    A string is treated as a ``key_pattern``. For mappings, configuration
+    values override matching defaults. ``thumbnail``, ``log`` and ``fallback``
+    are parsed separately and attached to the created dataset. An existing
+    ``Dataset`` instance is returned unchanged.
     
     Args:
-        config: Configuration dictionary for a dataset
-        defaults: Optional defaults to merge with config
+        config: Existing ``Dataset``, key-pattern string, or dataset options
+            mapping.
+        defaults: Optional mapping of defaults (default ``None``), overridden
+            by ``config``.
         
     Returns:
-        Dataset instance of the appropriate subclass
+        A ``Dataset`` instance of the configured subclass.
         
     Example:
         >>> config = {
@@ -95,17 +107,7 @@ def dataset_from_config(config: Union['Dataset', str, Dict[str, Any]], defaults:
     return ds
 
 def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callable) -> Any:
-    """
-    Parse a manager configuration.
-    
-    Args:
-        config: Manager configuration (dict, string, or already-parsed manager)
-        manager_type: Type of manager ('thumbnail' or 'log')
-        dataset_factory: Function to parse nested dataset configs
-        
-    Returns:
-        Parsed manager object or None
-    """
+    """Parse a thumbnail or log manager configuration, or return ``None``."""
     if config is None:
         return None
     
@@ -129,21 +131,14 @@ def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callab
     return manager_class.from_dict(config, dataset_factory)
 
 def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Parse a complete workflow configuration.
-    
-    This is the entry point for parsing Options/workflow definitions.
-    Currently delegates to Options.parse() but could be extended.
-    
+    """Wrap a workflow configuration and invoke ``Options.parse``.
+
     Args:
-        config: Complete workflow configuration dictionary
-        
-    Returns:
-        Parsed configuration with Dataset objects
-        
-    Note:
-        This function is a placeholder for future workflow parsing logic.
-        For now, use Options.parse() directly.
+        config: Complete workflow configuration mapping.
+
+    Raises:
+        AttributeError: The current :class:`Options` implementation has no
+            ``parse`` method, so this function currently fails at that call.
     """
     from .options import Options
     options = Options(config)
@@ -179,16 +174,22 @@ def workflow_section_from_config(
     Parse a workflow section payload for a specific engine.
     
     Args:
-        engine: Normalized workflow engine keyword ('door', 'dam', 'dryes')
-        section_options: Configuration options for the section
-        build_object: If ``True``, try building runtime objects from options.
-        strict_imports: Controls handling for missing-engine imports.
-            If ``True``, import failures are raised as
-            ``WorkflowEngineImportError``. If ``False``, import failures
-            fallback to returning ``section_options`` unchanged.
+        engine: Engine keyword: ``"door"``, ``"dam"`` or ``"dryes"``.
+        section_options: Configuration options for the section.
+        build_object: If ``True``, build and return the engine's runtime object.
+            Otherwise return ``section_options`` unchanged (default ``False``).
+        strict_imports: When building, whether an ``ImportError`` is wrapped
+            and raised as ``WorkflowEngineImportError``. When ``False``, the
+            original ``section_options`` are returned after an import failure
+            (default ``False``).
         
     Returns:
         Parsed section payload or runtime object depending on ``build_object``.
+
+    Raises:
+        ValueError: ``engine`` is not one of the supported keywords.
+        WorkflowEngineImportError: Building is requested, ``strict_imports``
+            is true, and an engine import fails.
     """
     if engine not in _WORKFLOW_ENGINE_BUILDERS:
         raise ValueError(f"Unknown workflow section engine: {engine}")
@@ -206,17 +207,17 @@ def workflow_section_from_config(
 
 def parse_times_from_run_option(option_value: str|dict) -> tuple['Dataset', Optional[str]]:
     """
-    Parse a times_from_run option value into Dataset and section references.
+    Parse a ``times_from_run`` value into a dataset and optional section name.
     
     Args:
-        option_value: The value of the times_from_run option, which can be either:
-            - A string in the format "section_name@file.json" (section optional)
-            - A dictionary with required key "file" and optional key "section"
-              where "file" can be a str, dict, or pre-built Dataset
+        option_value: A string path optionally prefixed by ``section_name@``,
+            or a mapping with a truthy ``file`` value and optional ``section``.
+            The file value may be a path string, dataset options mapping, or
+            existing ``Dataset``.
     
     Returns:
-        A tuple of (dataset, section_name) where section_name may be None if not provided.
-        The dataset can be a LocalDataset, RemoteDataset, or other Dataset subclass.
+        A tuple containing the parsed ``Dataset`` and section name, which is
+        ``None`` when no section is specified.
     
     Raises:
         ValueError: If the input format is invalid or required keys are missing.
