@@ -1,3 +1,5 @@
+"""Build and save collections of raster thumbnails."""
+
 import tempfile
 import img2pdf
 import io
@@ -10,7 +12,22 @@ from .thumbnail import Thumbnail
 from ..exit import rm_at_exit
 
 class ThumbnailCollection:
+    """Create thumbnails from raster files and combine them into one output."""
+
     def __init__(self, raster_files: list[str], color_definition_files: list[str]|str):
+        """Initialize one ``Thumbnail`` per raster file.
+
+        A single color-definition path is reused for every raster. When a list
+        is supplied, it must have the same length as ``raster_files``.
+
+        Args:
+            raster_files: Raster input paths.
+            color_definition_files: One shared color-definition path or one
+                path per raster.
+
+        Raises:
+            ValueError: If a color-definition path list has the wrong length.
+        """
         self.thumbnails = []
 
         if isinstance(color_definition_files, str):
@@ -22,6 +39,22 @@ class ThumbnailCollection:
             self.thumbnails.append(Thumbnail(raster_file, color_definition_file))
 
     def combine_thumbnail_files(self, file_out:str, grid: Optional[tuple[int, int]] = None):
+        """Combine saved thumbnail files into a PNG grid or a multi-page PDF.
+
+        The output format is selected by the ``.png`` or ``.pdf`` suffix. PNG
+        output uses ``grid`` as ``(columns, rows)``; if omitted, a roughly
+        square grid is selected. If PNG inputs have inconsistent dimensions,
+        output is redirected to a PDF with the same basename. PDF assembly
+        skips missing inputs and existing files whose names do not end in
+        ``.png``. Other suffixes produce no output. The output's parent
+        directory is created; ``file_out`` must include a parent directory
+        component because an empty parent path is not accepted by
+        ``os.makedirs``.
+
+        Args:
+            file_out: Destination path ending in ``.png`` or ``.pdf``.
+            grid (tuple[int, int] | None): Number of columns and rows for PNG output.
+        """
 
         list_of_thumbnails = [thumbnail.thumbnail_file for thumbnail in self.thumbnails]
         os.makedirs(os.path.dirname(file_out), exist_ok=True)
@@ -88,6 +121,17 @@ class ThumbnailCollection:
             new_im.save(file_out)
 
     def save(self, file:str, grid = None, **kwargs):
+        """Save each thumbnail temporarily and combine them at ``file``.
+
+        The ``kwargs`` are passed to each contained ``Thumbnail.save`` call.
+        The combined path is stored as ``thumbnail_file`` on the collection.
+
+        Args:
+            file: Destination PNG or PDF path.
+            grid (tuple[int, int] | None): Optional ``(columns, rows)`` layout
+                for PNG output.
+            **kwargs (Any): Options forwarded to each thumbnail's ``save`` method.
+        """
         self.thumbnail_file = file
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             for i, thumbnail in enumerate(self.thumbnails):
