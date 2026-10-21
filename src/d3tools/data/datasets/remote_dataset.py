@@ -379,10 +379,7 @@ class SFTPDataset(RemoteDataset):
         try:
             if self.password is None:
                 if self.private_key is not None:
-                    if 'rsa' in self.private_key:
-                        private_key = paramiko.RSAKey.from_private_key_file(self.private_key)
-                    elif 'ed25519' in self.private_key:
-                        private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(self.private_key)
+                    private_key = paramiko.PKey.from_path(self.private_key)
                     transport = paramiko.Transport((self.hostname, self.port))
                     transport.connect(username=self.username, pkey=private_key)
                 else:
@@ -392,10 +389,7 @@ class SFTPDataset(RemoteDataset):
                     possible_files = [f'~/.ssh/{key}' for key in keys]
                     for file in possible_files:
                         try:
-                            if 'rsa' in file:
-                                private_key = paramiko.RSAKey.from_private_key_file(os.path.expanduser(file))
-                            elif 'ed25519' in file:
-                                private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(os.path.expanduser(file))
+                            private_key = paramiko.PKey.from_path(file)
                             transport = paramiko.Transport((self.hostname, self.port))
                             transport.connect(username=self.username, pkey=private_key)
                             break
