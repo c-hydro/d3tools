@@ -20,12 +20,10 @@ it belongs in the **Developer Guide** (`docs/developer/`).
 
 ## Topics
 
-Work is split by topic. The full source, tests, tier and page ownership map is
-in `_working_summaries/docs_topic_inventory.md`. These are the exclusive phase-1
-page owners; do not edit another topic's pages in a topic worktree:
+Work is split by topic. Existing pages that serve as source material for each topic:
 
-| Topic | Existing pages owned for phase 1 |
-|-------|----------------------------------|
+| Topic | Existing pages |
+|-------|----------------|
 | configuration | `docs/configuration/overview.md`, `tags.md`, `environment.md` |
 | workflow-sections | `docs/configuration/workflow-sections.md` |
 | datasets | `docs/configuration/datasets.md`, `docs/datasets/*.md` |
@@ -33,17 +31,7 @@ page owners; do not edit another topic's pages in a topic worktree:
 | logging | `docs/logging/*.md` |
 | thumbnails | `docs/thumbnails/overview.md` |
 | notification | none yet (feature is EXPERIMENTAL, email sending known broken) |
-| spatial | none yet; dataset template usage remains owned by datasets |
-| cases | none yet; engine-specific cases remain owned by workflow-sections |
-| parsing | none yet; JSON pipeline remains owned by configuration |
-| utilities | none yet; cleanup and compatibility API only |
 | getting-started | `docs/getting-started.md`, `docs/index.md`, `docs/examples/*.md` |
-
-For topics with no existing page, phase 1 produces a findings report identifying
-public behaviour and missing documentation, but does not invent a full user or
-developer guide. Later phases create the appropriate pages. `getting-started`
-is a cross-topic integration review and should run after the source-topic audits
-are merged; do not audit it concurrently with phase 1 for other topics.
 
 ## Truth and verification
 

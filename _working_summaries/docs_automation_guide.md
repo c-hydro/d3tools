@@ -54,12 +54,10 @@ d3tools/
 │   └── hooks/
 │       └── docs_only_guard.py        blocks the two writers from reading src/, tests/, build/
 ├── scripts/
-│   ├── check_docs.py                 mechanical checks on docs/ (JSON, Python, links)
-│   └── docs_topic_worktree.py        guarded per-topic branch/worktree setup
+│   └── check_docs.py                 mechanical checks on docs/ (JSON, Python, links)
 ├── mkdocs.yml                        site config; builds the API reference from docstrings
 └── _working_summaries/
     ├── docs_automation_guide.md      this file
-  ├── docs_topic_inventory.md       source/test/page ownership for every topic
     └── findings/
         └── approved.md               you list approved phases here
 ```
@@ -102,9 +100,10 @@ For every markdown file it checks:
 If a snippet is *meant* to be partial (with `"..."` placeholders), put
 `<!-- check-docs: skip -->` on the line directly before the ```` ``` ```` fence.
 
-Run the checker on each topic's pages to establish its own baseline; the error
-count changes as topics are audited. A missing page is reported as a gap finding
-rather than passed as an empty checker run.
+On the current docs it reports **32 errors**. Some are real bugs it has already found,
+for example `{DATASETS.base_data, variable=...}` in `tags.md` and `datasets.md` crashes
+because the datasets key is lowercase. That baseline is what phase 1 has to bring to
+zero.
 
 ### The hook (`docs_only_guard.py`)
 
@@ -127,25 +126,14 @@ open question instead.
    If you want them to be permanent, add them to `workspace_env/pyproject.toml` or as a
    `docs` extra in `d3tools/pyproject.toml`.
 
-2. **Commit the automation setup on `docs`** before spawning topic branches.
-  New worktrees start from the committed `docs` tip and need these agent files:
+2. **Work on a branch**, so any agent run can be thrown away cleanly:
 
    ```bash
    cd /home/luca/Documents/CIMA_code/d3tools
-  git status --short --branch
-   git add .github/agents/docs-orchestrator.agent.md .github/agents/docs-auditor.agent.md \
-     .github/instructions/docs.instructions.md .gitignore scripts/docs_topic_worktree.py \
-     tests/test_docs_topic_worktree.py _working_summaries/docs_topic_inventory.md \
-     _working_summaries/docs_automation_guide.md
-  git diff --cached
-  git commit -m "Set up isolated documentation topic audits"
+   git switch -c docs/rewrite
+   git add .github scripts/check_docs.py mkdocs.yml _working_summaries
+   git commit -m "Add documentation automation agents and checks"
    ```
-
-  The primary checkout must be clean and on `docs`. Do not create a new
-  `docs` branch or switch away from the existing integration checkout. The
-  `.gitignore` exception exposes new `findings/phase*.md` files to Git; review
-  any pre-existing untracked findings (including an old phase-1 datasets
-  report) before provisioning. Do not move or delete them automatically.
 
 3. **Check that VS Code sees the agents.** Open the Chat view and click the mode/agent
    dropdown (where it says "Agent", "Ask"...). You should see `docs-orchestrator`,
@@ -176,12 +164,7 @@ flowchart TD
     P5 --> G3{you approve}
 ```
 
-This runs **per topic**. Phase 1 can be run independently for the source topics
-in the [topic inventory](docs_topic_inventory.md); each topic has its own branch
-and worktree. `getting-started` is a cross-topic review and should wait until
-the source-topic phase-1 branches have been merged.
-
-Suggested integration order after independent audits:
+This runs **per topic**. Suggested topic order (each one builds on the previous):
 
 1. `configuration`
 2. `datasets`
@@ -192,14 +175,9 @@ Suggested integration order after independent audits:
 7. `notification` (short; marked experimental)
 8. `getting-started` (last; phases 1, 4, 5 only)
 
-Also cover `spatial`, `cases`, `parsing`, and `utilities`. They have no existing
-pages: their phase-1 output is a findings inventory, not invented documentation.
-Their source and test boundaries are listed in the topic inventory.
-
 You don't have to finish all phases of one topic before starting the next. A good rhythm
-is **phase 1 for every source topic in isolated worktrees**, then review and merge
-each branch into `docs` before phases 2-3, then 4-5. Distinct worktrees prevent
-simultaneous audits from mixing edits, but merges may still conflict and require review.
+is **phase 1 for every topic first** (that fixes the source material everything else
+builds on), then phases 2-3 for all topics, then 4-5.
 
 ### What each phase produces
 
@@ -231,55 +209,26 @@ re-run the audit) or accept the behaviour (and tell the agent to document it).
 
 ## 5. Running it
 
-### Branch and worktree setup
+### Your first run (recommended: by hand, no orchestrator)
 
-First commit the automation rules, inventory and provisioning script on `docs`.
-The script refuses to run while the primary `docs` checkout is dirty. For a
-topic T it uses branch `docs_<T>` and sibling directory `../d3tools-docs-<T>`:
+Do this once to see how an agent behaves before you automate anything.
 
-```bash
-cd /home/luca/Documents/CIMA_code/d3tools
-/home/luca/Documents/CIMA_code/workspace_env/.venv/bin/python scripts/docs_topic_worktree.py configuration timestepping cases
-```
-
-Each new branch starts at the current `docs` commit. The existing
-`docs_datasets` branch is **attached**, not recreated or reset; if it already has
-phase-1 findings, do not run that audit again unless you deliberately request
-another pass. Worktrees are beside the primary checkout, not inside it. The
-script refuses dirty or conflicting existing worktrees. It does not run an
-agent, commit, approve, merge, or delete anything.
-
-You can inspect an individual result with:
-
-```bash
-git -C ../d3tools-docs-timestepping status --short --branch
-git -C ../d3tools-docs-timestepping diff -- docs/timestepping.md
-```
-
-The orchestrator provisions these worktrees before phase 1 and passes each
-auditor its absolute worktree path and owned page list. Use separate VS Code
-windows or sessions for truly concurrent agent runs if the current agent host
-cannot launch subagents simultaneously. A shared checkout does not become
-parallel merely by creating branches. If the agent's editor tools cannot reach
-a sibling worktree, add that folder to the VS Code workspace or open it in its
-own window before delegating; never fall back to editing the primary checkout.
-
-### Review and merge a phase-1 topic
-
-1. Read that worktree's `findings/phase1-<topic>.md` and review only its owned
-  page diff. Resolve `code-bug?` decisions before approval.
-2. Run `scripts/check_docs.py` for that topic from **its worktree** (for topics
-  with no pages, review the gap findings instead). Check `git status --short`
-  for unexpected changes.
-3. Record `phase1-<topic>` in that branch's `findings/approved.md`, stage only
-  reviewed pages and findings, inspect `git diff --cached`, then commit there.
-4. Merge the reviewed topic branch into `docs` yourself. Resolve any conflict
-  there, rerun the checker on affected pages, and keep the other topic branches
-  intact. Approval and merge are human decisions, not orchestrator steps.
-
-If you disagree with a finding, send the auditor back to the same topic
-worktree with the row number and why it needs rechecking. Never use a broad
-`git restore docs/` or `git clean -fd docs/` to discard unreviewed work.
+1. Chat view -> dropdown -> **docs-auditor**.
+2. Type: `phase 1, topic datasets`
+3. Watch it work. It runs the checker, reads the pages and the code, writes
+   `_working_summaries/findings/phase1-datasets.md`, then edits the pages.
+4. When it finishes, review:
+   - open the findings file and skim the `wrong` / `code-bug?` rows;
+   - `git diff docs/` (or the Source Control view) to see the actual edits;
+   - re-run `check_docs.py docs/configuration/datasets.md docs/datasets` yourself.
+5. Then decide:
+   - **Happy:** `git commit -am "docs: phase 1 datasets"` and add `phase1-datasets` to
+     `findings/approved.md`.
+   - **Partly happy:** tell it in the same chat what to change ("row 7 is wrong, the
+     default is applied in `Dataset.__init__`, re-check"), then review again.
+   - **Unhappy:** `git restore docs/ && git clean -fd docs/ _working_summaries/findings/`
+     and adjust `docs-auditor.agent.md` or `docs.instructions.md` before retrying.
+     Changing the job description is usually better than arguing with the agent.
 
 ### Using the orchestrator
 
@@ -287,15 +236,13 @@ Once the individual agents behave, let the orchestrator do the calling:
 
 1. Dropdown -> **docs-orchestrator**.
 2. Examples of what to type:
-  - `phase 1 for configuration, workflow-sections and logging` (isolated topic worktrees)
-  - `status` (checks each topic branch's findings and approval file)
+   - `phase 1 for configuration, workflow-sections and logging`
+   - `status` (prints a topic x phase table from the findings folder)
    - `phase 2 for datasets` (runs 2a, then 2b, then stops)
    - `phase 3 for datasets`
-3. It delegates into the worktree for each topic, runs the checker there, and gives
-  you separate reports. The subagents may execute concurrently when supported;
-  otherwise they execute sequentially, still in isolated worktrees. It **always
-  stops** after one phase and never merges or goes further unless you approved
-  the previous phase (in the chat or in `approved.md`).
+3. It runs the subagent(s) one topic at a time, runs the checker after each, and gives
+   you a report. It **always stops** after one phase and never goes further unless you
+   approved (in the chat or in `approved.md`).
 
 Subagents run in their own context and only hand back their final report. You won't see
 their reasoning in the chat, only the orchestrator's summary. The files they wrote are
@@ -325,8 +272,8 @@ you watching):
 - **Smaller is better.** If a topic is large (datasets has 8 pages), run phase 1 on half
   the pages at a time: `phase 1, topic datasets, only docs/datasets/operations.md and
   formats-and-mixins.md`.
-- **Commit per approved topic and phase, in its topic worktree.** This keeps
-  diffs attributable and leaves `docs` as the reviewed integration branch.
+- **Commit after every approved phase.** Agents occasionally make a sweeping edit you
+  don't want; a commit per phase makes undoing it trivial.
 - **Read the open questions.** They show what the docs don't explain. A question from the
   user-guide writer means a real user would get stuck at the same point.
 - **Check the `src/` diff after phase 2a/3.** It must contain docstring changes only. If
@@ -346,7 +293,7 @@ you watching):
 | Checker reports `workflow-env` warnings | The example uses paths or hosts that don't exist locally. Fine as long as it's an ERROR-free WARN. |
 | Checker ERROR on a snippet that's meant to be partial | Add `<!-- check-docs: skip -->` on the line before the fence. |
 | Orchestrator refuses to start a phase | The previous phase isn't in `findings/approved.md` and you didn't approve it in the chat. |
-| Agent edited files it shouldn't have | Inspect that topic worktree's diff and decide which edits to keep. Never reset or clean another topic's worktree. Tighten the agent's page-owner rule before rerunning. |
+| Agent edited files it shouldn't have | `git restore <path>`; then add an explicit "DO NOT" line to that agent's file. |
 | The hook blocks too much or too little | Edit the `BLOCKED` regex in `.github/hooks/docs_only_guard.py` and test it with `echo '{"tool_input":{"filePath":"..."}}' \| python .github/hooks/docs_only_guard.py` |
 
 ---
