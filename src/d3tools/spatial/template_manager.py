@@ -20,15 +20,18 @@ from ..errors import TemplateValidationError, TemplateMemoryError
 
 class TemplateManager:
     """
-    Manages spatial templates for Dataset instances.
-    
-    Templates store spatial metadata (CRS, dimensions, coordinates) to ensure
-    all files in a dataset have consistent spatial reference and alignment.
-    
+    Store, cache, and apply spatial templates for dataset data.
+
+    Templates record spatial metadata such as CRS, dimension names, coordinate
+    ranges, and fill value so arrays can be reconstructed with consistent spatial
+    geometry and coordinate alignment. The manager can keep templates in memory,
+    persist them to JSON cache files, and rebuild arrays or datasets from them.
+
     Attributes:
-        _templates: Dictionary mapping spatial keys to template dictionaries
-        _cache_dir: Optional directory for disk caching of templates
-        _validate: Whether to validate templates on creation
+        REQUIRED_KEYS: Keys required by template validation.
+        _templates: Mapping from spatial keys to template dictionaries.
+        _cache_dir: Optional directory used for JSON template caching.
+        _validate: Whether ``set`` validates extracted templates.
     """
     
     # Required keys for valid templates
@@ -37,11 +40,14 @@ class TemplateManager:
     
     def __init__(self, cache_dir: Optional[str] = None, validate: bool = True):
         """
-        Initialize a TemplateManager.
+        Initialize an empty template manager.
         
         Args:
-            cache_dir: Optional directory path for disk caching templates
-            validate: Whether to validate templates on creation
+            cache_dir: Optional directory for cached JSON templates. If provided,
+                the directory is created when it does not exist.
+            validate: Whether templates are validated when stored.
+
+        Creating the manager may create ``cache_dir`` on disk.
         """
         self._templates: dict[str, dict] = {}
         self._cache_dir = Path(cache_dir) if cache_dir else None
@@ -52,14 +58,17 @@ class TemplateManager:
     
     def get(self, spatial_key: str = '__tile__', load_from_cache: bool = True) -> Optional[dict]:
         """
-        Get template dictionary for a spatial key.
+        Return the template for a spatial key, checking memory before disk.
         
         Args:
-            spatial_key: Identifier for the spatial unit (tile name or '__tile__')
-            load_from_cache: If True and template not in memory, try loading from cache
+            spatial_key: Identifier for a spatial unit, defaulting to ``'__tile__'``.
+            load_from_cache: If true and the key is absent from memory, attempt to
+                load its JSON cache file when caching is configured.
             
         Returns:
-            Template dictionary if it exists, None otherwise
+            The stored template dictionary, or ``None`` if it is unavailable.
+
+        A successful cache load also stores the template in memory.
         """
         # Check memory first
         if spatial_key in self._templates:
@@ -74,14 +83,20 @@ class TemplateManager:
     
     def set(self, templatearray: xr.DataArray | xr.Dataset, spatial_key: str = '__tile__') -> None:
         """
-        Create and store template from sample data.
+        Extract spatial metadata from sample data and store it under a key.
         
         Args:
-            templatearray: Sample xarray DataArray or Dataset to extract template from
-            spatial_key: Identifier for the spatial unit (tile name or '__tile__')
+            templatearray: Sample ``xarray.DataArray`` or ``xarray.Dataset``. For
+                a Dataset, metadata comes from its first data variable and all
+                variable names are recorded.
+            spatial_key: Identifier for a spatial unit, defaulting to ``'__tile__'``.
             
         Raises:
-            TemplateValidationError: If template validation fails
+            TemplateValidationError: If validation is enabled and extracted
+                metadata fails validation.
+
+        The template is stored in memory and, when configured, written to the
+        manager's JSON cache. A missing CRS is represented using EPSG:4326.
         """
         # Handle xr.Dataset by extracting first variable
         if isinstance(templatearray, xr.Dataset):
@@ -161,13 +176,16 @@ class TemplateManager:
     
     def exists(self, spatial_key: Optional[str] = None) -> bool:
         """
-        Check if template(s) exist.
+        Check whether a template key, or any in-memory template, exists.
         
         Args:
-            spatial_key: Specific spatial key to check, or None to check if any exist
+            spatial_key: Key to check, or ``None`` to check whether the in-memory
+                template mapping is nonempty.
             
         Returns:
-            True if template exists, False otherwise
+            ``True`` when the requested key exists, otherwise ``False``.
+
+        This checks memory only and does not load from disk.
         """
         if spatial_key is None:
             return len(self._templates) > 0
@@ -175,19 +193,22 @@ class TemplateManager:
     
     def get_all(self) -> dict[str, dict]:
         """
-        Get all templates.
+        Return a shallow copy of the in-memory template mapping.
         
         Returns:
-            Dictionary mapping spatial keys to template dictionaries
+            A new dictionary mapping spatial keys to their template dictionaries.
+            The nested template dictionaries are shared with this manager.
         """
         return self._templates.copy()
     
     def clear(self, spatial_key: Optional[str] = None) -> None:
         """
-        Clear template(s).
+        Remove one in-memory template or clear all in-memory templates.
         
         Args:
-            spatial_key: Specific key to clear, or None to clear all
+            spatial_key: Key to remove, or ``None`` to clear every in-memory entry.
+
+        This does not remove corresponding cache files from disk.
         """
         if spatial_key is None:
             self._templates.clear()
@@ -196,13 +217,15 @@ class TemplateManager:
     
     def copy(self, deep: bool = False) -> 'TemplateManager':
         """
-        Create a copy of this TemplateManager.
+        Create another manager with the same cache and validation settings.
         
         Args:
-            deep: If True, deep copy the templates. If False, shallow copy (shared reference)
+            deep: If true, recursively copy stored templates. Otherwise copy only
+                the outer mapping, sharing nested template dictionaries.
             
         Returns:
-            New TemplateManager instance
+            A new manager. Its cache directory is the same path, and initializing
+            it may create that directory if it no longer exists.
         """
         new_manager = TemplateManager(
             cache_dir=str(self._cache_dir) if self._cache_dir else None,
@@ -217,24 +240,15 @@ class TemplateManager:
     
     def iter_spatial_keys(self) -> Iterator[str]:
         """
-        Iterate over all spatial keys.
+        Yield the keys currently stored in memory.
         
         Yields:
-            Spatial key strings
+            Spatial key strings in dictionary insertion order.
         """
         yield from self._templates.keys()
     
     def _validate_template(self, template_dict: dict, spatial_key: str) -> None:
-        """
-        Validate template dictionary has required keys and valid values.
-        
-        Args:
-            template_dict: Template dictionary to validate
-            spatial_key: Spatial key for error messages
-            
-        Raises:
-            TemplateValidationError: If template is invalid
-        """
+        """Validate required template keys and values, raising on invalid metadata."""
         # Check required keys
         missing_keys = self.REQUIRED_KEYS - set(template_dict.keys())
         if missing_keys:
@@ -275,13 +289,7 @@ class TemplateManager:
             )
     
     def _cache_template(self, spatial_key: str, template_dict: dict) -> None:
-        """
-        Save template to disk cache.
-        
-        Args:
-            spatial_key: Spatial key for the template
-            template_dict: Template dictionary to cache
-        """
+        """Write a template as JSON to the configured disk cache."""
         if not self._cache_dir:
             return
         
@@ -300,13 +308,16 @@ class TemplateManager:
     
     def load_from_cache(self, spatial_key: str) -> bool:
         """
-        Load template from disk cache.
+        Load a cached JSON template into memory.
         
         Args:
             spatial_key: Spatial key for the template
             
         Returns:
-            True if template was loaded, False if not found in cache
+            ``True`` if a readable cache file was loaded; otherwise ``False``.
+
+        Invalid JSON, incompatible cache content, and I/O errors are ignored and
+        return ``False``. Tuple-valued dimension metadata is restored from JSON lists.
         """
         if not self._cache_dir:
             return False
@@ -336,7 +347,7 @@ class TemplateManager:
             return False
     
     def clear_cache(self) -> None:
-        """Clear all cached templates from disk."""
+        """Delete matching ``template_*.json`` files from the configured cache directory."""
         if not self._cache_dir or not self._cache_dir.exists():
             return
         
@@ -346,14 +357,22 @@ class TemplateManager:
     @staticmethod
     def build_array(template_dict: dict, data:Optional[np.ndarray]=None) -> xr.DataArray:
         """
-        Build a template xarray.DataArray from a template dictionary.
-        
+        Reconstruct a raster-aware DataArray from a stored spatial template.
+
         Args:
-            template_dict: Template dictionary with spatial metadata
-            data: Optional numpy array or DataArray data to populate. If None, filled with nodata value
-            
+            template_dict: Mapping containing CRS, fill value, dimension names,
+                spatial dimensions, lengths, starts, ends, and steps.
+            data: Optional NumPy array of values. If omitted, the array is filled
+                with the template ``_FillValue``; provided data is reshaped to the
+                template dimensions.
+
         Returns:
-            xarray.DataArray with template spatial structure
+            A ``xarray.DataArray`` with reconstructed coordinates, CRS, spatial
+            dimensions, and ``crs``/``_FillValue`` attributes.
+
+        Note:
+            Numeric dimensions are reconstructed with ``linspace``; datetime-like
+            dimensions are rebuilt from their stored start and step.
         """
         shape = [template_dict['dims_lengths'][dim] for dim in template_dict['dims_names']]
         if data is None:
@@ -384,17 +403,21 @@ class TemplateManager:
     def apply_to_data(data: np.ndarray | xr.DataArray | xr.Dataset,
                       template_dict: dict) -> xr.DataArray | xr.Dataset:
         """
-        Apply template spatial structure to data.
-        
-        This replaces the coordinates and CRS of the input data with those from
-        the template, ensuring spatial consistency.
-        
+        Replace supported input data coordinates and CRS using a template.
+
         Args:
-            data: Input data (numpy array, DataArray, or Dataset)
-            template_dict: Template dictionary with spatial metadata
-            
+            data: NumPy array, DataArray, or Dataset. Dataset variables are taken
+                from the template's ``variables`` entry.
+            template_dict: Template dictionary with spatial metadata.
+
         Returns:
-            Data with template spatial structure applied
+            A DataArray or Dataset rebuilt with template coordinates and CRS and
+            passed through ``data.io_utils.set_type``. Existing attributes are
+            retained for DataArray inputs and their variables.
+
+        Note:
+            NumPy input is converted to a DataArray. For Dataset input, only the
+            variables named by the template are rebuilt into the returned Dataset.
         """
         if isinstance(data, xr.DataArray):
             attrs = data.attrs.copy()
