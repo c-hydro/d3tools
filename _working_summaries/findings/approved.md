@@ -12,3 +12,4 @@ phase1-workflow-sections
 phase1-logging
 phase1-thumbnails
 phase1-notification
+phase1-spatial
