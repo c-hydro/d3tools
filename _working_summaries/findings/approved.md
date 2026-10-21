@@ -16,3 +16,4 @@ phase1-spatial
 phase1-cases
 phase1-parsing
 phase1-utilities
+phase1-getting-started

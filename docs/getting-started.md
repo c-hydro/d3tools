@@ -20,6 +20,14 @@ python -m pip install --upgrade pip
 python -m pip install .
 ```
 
+Install optional dependencies only when the workflow needs them:
+
+```bash
+python -m pip install 'd3tools[more-data]'    # CSV, Parquet, and shapefile support
+python -m pip install 'd3tools[thumbnails]'   # thumbnail generation
+python -m pip install 'd3tools[remote-data]'  # remote data access
+```
+
 The base installation provides the shared d3tools functionality. A workflow
 that builds runtime objects also needs the engine packages used by its sections:
 
@@ -52,6 +60,11 @@ The most commonly used top-level keys are:
 - `workflow_log`: optional file and console logging configuration;
 - `engine`: default engine for sections that do not resolve one otherwise;
 - `exec_options`: default execution-range options for sections.
+
+The public Python entry points exported by d3tools are `WorkflowDefinition`,
+`Options`, `WorkflowSection`, and `WORKFLOW_SECTION_ALIASES`. Use
+`WorkflowDefinition` to load and run workflows; `Options` is the parsed
+configuration mapping rather than the runnable workflow object.
 
 Every other non-reserved top-level key is collected as a workflow section. A
 section can identify its engine through its own `engine` key, through the
@@ -98,8 +111,8 @@ workflow.run(start="2024-01-01", end="2024-01-05")
 ```
 
 The `start` and `end` values may be ISO date strings or `datetime` objects. If
-they are omitted, d3tools attempts to resolve the range from environment
-variables, prior run state, and the section's available data. §§ADD_REF
+they are omitted, d3tools checks `START_DATE` and `END_DATE` and can otherwise
+let each section resolve its own range from data availability.
 
 This workflow will download the daily precipitation from ERA5 for the bounds specified.
 See the specific documentation for the `door` package for details on the downloader definition syntax.
@@ -183,8 +196,7 @@ entire string value:
     "dam_workflow": {
         "input": "{input_data}",
         "output": "{DATASETS.output_data}",
-        "options" : {...},
-        "process_list": [...]
+        "options": {}
     }
 }
 ```
@@ -234,9 +246,9 @@ Logging is optional. Configure a file, console output, or both with
     "door_downloader": {
         "source": "ERA5",
         "destination": "{DATASETS.output_data}",
-        "product" : "",
-        "bounds" : [...],
-        "options" : {...}
+        "product": "reanalysis-era5-single-levels",
+        "bounds": [8, 38.5, 10, 41.5],
+        "options": {}
     }
 }
 ```

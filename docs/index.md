@@ -12,12 +12,9 @@
 
 ## Key Features
 
-- **Workflow Orchestration**: Define multi-stage workflows with download, process, calculate, and publish sections
-- **Flexible Configuration**: JSON-based configuration with tags, environment variables, and dataset references
-- **Smart Timestepping**: Multiple timestepping strategies for temporal workflows
-- **Hierarchical Logging**: Unified logging across d3tools, DOOR, DAM, and DRYES modules
-- **Dataset Management**: Local and remote dataset support (local files, S3, SFTP)
-- **Modular Architecture**: Clean separation between configuration and execution
+- **Workflow orchestration**: Load configuration and execute ordered engine sections.
+- **Configuration parsing**: Resolve environment values, tags, dataset references, and logging options.
+- **Shared data and logging infrastructure**: Use the topic guides for dataset backends and workflow logging.
 
 ## Architecture Overview
 
@@ -31,10 +28,11 @@ d3tools (orchestration layer)
 d3tools provides:
 - **WorkflowDefinition**: Runnable workflow container
 - **Options**: Enhanced configuration mapping
-- **Timestepping**: Temporal iteration strategies
-- **Dataset**: Unified data source abstraction
-- **Logging**: Cross-module logging infrastructure
-- **Parsing Pipeline**: Multi-stage configuration resolution
+- **WorkflowSection**: Engine-resolved section entries
+
+Detailed behavior is owned by the corresponding topic pages: [configuration](configuration/overview.md),
+[datasets](configuration/datasets.md), [timestepping](timestepping.md), and
+[logging](logging/overview.md).
 
 ## Documentation Structure
 
