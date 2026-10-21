@@ -54,8 +54,19 @@ d3tools provides:
 - [Environment Variables](configuration/environment.md)
 - [Workflow Sections](configuration/workflow-sections.md)
 
+### Dataset Reference
+- [Dataset Concepts](datasets/concepts.md)
+- [Dataset Operations](datasets/operations.md)
+- [Dataset Time and Availability](datasets/time-and-availability.md)
+- [Dataset Composition](datasets/composition.md)
+- [Dataset Storage Backends](datasets/storage-backends.md)
+- [Dataset Formats and Mixins](datasets/formats-and-mixins.md)
+- [Dataset Catalogues and Templates](datasets/catalogues-and-templates.md)
+- [Timestepping](timestepping.md)
+
 ### Logging
 - [Logging Overview](logging/overview.md)
+- [Dataset Logging](logging/dataset-logging.md)
 - [WorkflowLogManager](logging/workflow-log-manager.md)
 - [Logging Examples](logging/examples.md)
 
