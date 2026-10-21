@@ -44,7 +44,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
         >>> viirs.start
         datetime.datetime(2024, 1, 1, 0, 0)
         >>> viirs.end
-        datetime.datetime(2024, 1, 8, 23, 59, 59)
+        datetime.datetime(2024, 1, 8, 0, 0)
     """
     def __init__(self, year: int, step: int, start_doys: Iterable[int]):
         """Initialize from a year, 1-based step number, and iterable of period starts."""
@@ -221,7 +221,7 @@ class ViirsModisTimeStep(FixedDOYTimeStep):
         >>> viirs.start
         datetime.datetime(2024, 1, 1, 0, 0)
         >>> viirs.end
-        datetime.datetime(2024, 1, 8, 23, 59, 59)
+        datetime.datetime(2024, 1, 8, 0, 0)
         >>> next_period = viirs + 1
         >>> next_period.start
         datetime.datetime(2024, 1, 9, 0, 0)
@@ -241,4 +241,5 @@ class ViirsModisTimeStep(FixedDOYTimeStep):
 
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
+        """Return the 1-based VIIRS/MODIS period containing ``date``."""
         return FixedDOYTimeStep.get_step_from_date(date, ViirsModisTimeStep.start_doys)

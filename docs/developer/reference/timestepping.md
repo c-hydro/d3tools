@@ -1,10 +1,14 @@
 # Timestepping API
 
+::: d3tools.timestepping
+
 ::: d3tools.timestepping.time_parsing
 
 ::: d3tools.timestepping.time_utils
 
 ::: d3tools.timestepping.timewindow
+
+::: d3tools.timestepping.timeperiods
 
 ::: d3tools.timestepping.timeperiods.timeperiod
 

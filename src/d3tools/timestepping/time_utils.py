@@ -29,12 +29,13 @@ if TYPE_CHECKING:
 from .time_parsing import get_date_from_str
 
 def get_window(time: dt.datetime, size: int, unit: str, start = False) -> 'TimeRange':
-    """Construct a TimeRange window ending or starting at a given time.
+    """Build a time range that ends or starts at a given datetime.
 
-    This function creates a time window (TimeRange) of a specified size and unit,
-    either ending at or starting from a given reference time. This is useful for
-    defining rolling windows, lookback periods, or forward-looking periods in
-    time series analysis.
+    The returned range is inclusive and uses the calendar-aware semantics of the
+    underlying timestep definitions. Day, week, month, and year windows are built
+    with the same convention used elsewhere in the timestepping package; dekad
+    windows are snapped to the containing dekad when the reference time is not on a
+    natural boundary.
 
     Args:
         time (datetime.datetime): The reference time point. By default, the window
@@ -47,7 +48,7 @@ def get_window(time: dt.datetime, size: int, unit: str, start = False) -> 'TimeR
             - 'y' or 'years': years
             - 'w' or 'weeks': weeks
             - 't' or 'dekads': dekads (10-day periods)
-            - 'h' or 'hours': hours
+            Hours and VIIRS/MODIS units are not supported by this function.
         start (bool, optional): If False (default), the window ends at `time`.
             If True, the window starts at `time`. Defaults to False.
 
@@ -60,25 +61,13 @@ def get_window(time: dt.datetime, size: int, unit: str, start = False) -> 'TimeR
             sizes are not yet supported).
 
     Examples:
-        >>> # A 3-month window ending on Feb 20, 2024
-        >>> window = get_window(datetime.datetime(2024, 2, 20), 3, 'm')
-        >>> # window spans from Nov 21, 2023 to Feb 20, 2024
-        
-        >>> # A 2-dekad window starting on Jan 1, 2024
-        >>> window = get_window(datetime.datetime(2024, 1, 1), 2, 't', start=True)
-        >>> # window spans from Jan 1 to Jan 20, 2024
-        
-        >>> # A 7-day window ending on a specific date
-        >>> window = get_window(datetime.datetime(2024, 2, 20), 7, 'd')
-
-    Note:
-        For dekad units ('t'), if the given time doesn't align with dekad boundaries,
-        a warning is issued and the window is adjusted to align with dekad periods.
-
-    Note:
-        - For dekad units, the function ensures the window aligns with natural
-          dekad boundaries (1st-10th, 11th-20th, 21st-end of month).
-        - Month and year calculations account for variable month lengths.
+        >>> window = get_window(dt.datetime(2024, 2, 20), 3, 'm')
+        >>> window.start
+        datetime.datetime(2023, 11, 21, 0, 0)
+        >>> window.end
+        datetime.datetime(2024, 2, 20, 0, 0)
+        >>> get_window(dt.datetime(2024, 1, 1), 2, 't', start=True).start
+        datetime.datetime(2024, 1, 1, 0, 0)
     """
     from .timeperiods import Dekad, TimeRange
 
@@ -164,6 +153,7 @@ def get_md_dates(years: Iterable[int], month: int, day: int) -> list[dt.datetime
     """
     from .timeperiods import Year
     if month == 2 and day in [28, 29]:
+        year = list(years)  # Ensure the iterable can be traversed multiple times
         leaps = [year for year in years if Year(year).is_leap()]
         nonleaps = [year for year in years if not Year(year).is_leap()]
         dates = [dt.datetime(year, 2, 29) for year in leaps] + [dt.datetime(year, 2, 28) for year in nonleaps]
@@ -280,8 +270,10 @@ def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = N
         'm'
         >>> find_unit_of_time(timesteps_per_year=36)
         't'
-        >>> find_unit_of_time('10-days')  # Interpreted as 10 days, not dekad
-        'd'
+        >>> find_unit_of_time('10-days')  # Composite 10-day spellings mean dekads
+        't'
+        >>> find_unit_of_time('10 days')  # Both forms normalize to the same unit
+        't'
         >>> find_unit_of_time('dekads')
         't'
         >>> find_unit_of_time('8d')

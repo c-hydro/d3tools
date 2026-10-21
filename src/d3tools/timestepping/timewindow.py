@@ -60,7 +60,8 @@ class TimeWindow():
         """Parse a TimeWindow from a string representation.
 
         The string can use various formats with or without separators between
-        the size and unit. Common separators include space, dash, and dot.
+        the size and unit. The first space, dash, or dot separates the size from
+        the unit; strings with no separator split the numeric and nonnumeric parts.
 
         Args:
             window (str): String representation like '3days', '3 days', '3-d',
@@ -131,6 +132,11 @@ class TimeWindow():
             VIIRS/MODIS ('v') windows are treated as fixed eight-day durations.
             For dekad ('t') units, a warning is issued when the reference time
             is not the boundary expected for the selected direction.
+            For hour windows, the returned endpoint is exactly ``time`` when
+            ending there, or ``time + size hours`` when starting there. For
+            day, week, month, and year windows, the calendar-day endpoints use
+            inclusive date arithmetic; sub-day reference seconds can affect
+            the calculated start when ending at ``time``.
         """
         
         from .timeperiods import Dekad, TimeRange
@@ -185,7 +191,8 @@ class TimeWindow():
 
         Args:
             limit (str|None, optional): For variable-length units, specify 'max' or 'min'.
-                Required for 'm', 'y', 't' units. Not needed for 'd', 'h', 'v', 'w'. 
+                Required for 'm', 'y', and 't' units. Not needed for 'd', 'h', 'v',
+                or 'w'. Other values return None for variable-length units.
                 Defaults to None.
 
         Returns:

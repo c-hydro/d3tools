@@ -172,6 +172,11 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
 
     @abstractmethod
     def __add__(self, n: int):
+        """Return the timestep ``n`` positions after this one.
+
+        Concrete subclasses implement the calendar or fixed-length stepping
+        rules; negative values move backward.
+        """
         raise NotImplementedError
         
     def __sub__(self, n: int):
