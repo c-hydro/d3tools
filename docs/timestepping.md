@@ -11,7 +11,7 @@ to locate or process data.
   `daily`, `monthly`, or `yearly`;
 - `TimeWindow` represents a relative duration used for aggregation or lookback;
 - `FixedLenTimeStep` creates steps of a fixed length;
-- `FixedNumTimeStep` divides a range into a fixed number of steps;
+- `FixedNTimeStep` divides a range into a fixed number of steps;
 - `FixedDOYTimeStep` represents recurring day-of-year periods.
 
 `TimeStep.from_unit()` accepts canonical codes and aliases. Common aliases are
@@ -28,45 +28,23 @@ period = TimeRange("2024-01-01", "2024-01-31")
 step = TimeStep.from_unit("daily")
 window = TimeWindow.from_str("3 months")
 
-timesteps = period.get_timesteps(step)
+timesteps = period.get_timesteps(step.unit)
 ```
 
-The exact constructor and iteration methods are defined by the classes in
+The public API is defined by these classes and their helpers:
+
+- `TimeRange.get_timesteps()`, `get_timesteps_from_tsnumber()`, and
+  `get_timesteps_from_DOY()` generate step lists for a period;
+- `TimeWindow.from_str()` and `TimeWindow.apply()` parse and apply relative
+  windows; `find_unit_of_time()` normalises aliases such as `annual`, `viirs`,
+  `weekly`, and `8d`;
+- `FixedNTimeStep` is the exported base class for `Month`, `Year`, and `Dekad`.
+
+The exact constructors and iteration methods are defined by the classes in
 `d3tools.timestepping.timeperiods`.
 
-## Dataset Timestepping
+## Related Guides
 
-A Dataset may define:
+Dataset-facing time handling belongs in [Dataset Time and Availability](datasets/time-and-availability.md), including `time_signature`, dataset availability checks, and key discovery.
 
-- `timestep`, such as `daily` or `monthly`;
-- `aggregation`, such as a duration used to extend or aggregate a timestep;
-- `time_signature`, which may be `start`, `end`, or `end+1`.
-
-```json
-{
-    "type": "local",
-    "key_pattern": "/data/%Y/data_%Y%m%d.tif",
-    "timestep": "daily",
-    "time_signature": "end"
-}
-```
-
-The dataset uses these properties when converting a logical datetime or
-`TimeStep` into the timestamp represented by its `key_pattern`. The same
-conversion is used when catalogues discover stored keys, so callers normally
-work in logical workflow time rather than manually shifting dates.
-
-See [Dataset Time and Availability](datasets/time-and-availability.md) for the
-Dataset-facing API and [Workflow Sections](configuration/workflow-sections.md)
-for execution-range resolution.
-
-## Workflow Ranges
-
-`WorkflowDefinition.run()` accepts an explicit `TimeRange`, or `start` and `end`
-values. When no range is supplied, workflow execution can use environment
-variables, prior run state, or section and dataset availability. The workflow
-section decides how its execution range is resolved.
-
-The section execution options `times_from_run`, `all_available`,
-`repeat_window`, and `split` are described in
-[Workflow Sections](configuration/workflow-sections.md).
+Workflow execution-range resolution belongs in [Workflow Sections](configuration/workflow-sections.md), including `times_from_run`, `all_available`, `repeat_window`, and `split`.
