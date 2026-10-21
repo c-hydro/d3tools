@@ -14,16 +14,39 @@ class EmailNotification:
                  email_client: Optional[str] = None,
                  email_login_env: Optional[str] = None,
                  email_pwd_env: Optional[str] = None):
-        
-        email_client = email_client or f'mail.{from_address.split("@")[1]}'
+
+        domain = from_address.split("@")[1]
+
+        candidates = []
+
+        if email_client:
+            candidates.append(email_client)
+
+        env_host = os.getenv("SMTP_HOST")
+        if env_host:
+            candidates.append(env_host)
+
+        candidates.extend([
+            f"mail.{domain}",
+            f"smtp.{domain}",
+        ])
+
+        for candidate in candidates:
+            try:
+                sm = smtplib.SMTP(candidate, 2525, timeout=10)
+                sm.starttls()
+                email_client = candidate
+                break
+            except:
+                continue
+        else:
+            raise ConnectionError(f"Could not connect to any SMTP server for domain {domain}. Tried: {candidates}")
+
         email_login_env = email_login_env or 'EMAIL_LOGIN'
         email_pwd_env = email_pwd_env or 'EMAIL_PASSWORD'
-
         email_login = os.getenv(email_login_env, from_address)
         email_pwd   = os.getenv(email_pwd_env)
 
-        sm = smtplib.SMTP(email_client, 2525)
-        sm.starttls()
         sm.login(email_login, email_pwd)
         self.sm = sm
         
