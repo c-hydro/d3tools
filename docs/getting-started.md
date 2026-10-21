@@ -254,8 +254,8 @@ Logging is optional. Configure a file, console output, or both with
 ```
 
 The `{now:...}` placeholder in `workflow_log.file` is resolved when the workflow
-runs, so the filename reflects the run time. See the [Logging](logging/overview.md)
-guide for levels, formats, and run-state logging.
+is loaded and its logging manager is constructed, not when it runs. See the
+[Logging](logging/overview.md) guide for levels, formats, and run-state logging.
 
 ## Troubleshooting
 

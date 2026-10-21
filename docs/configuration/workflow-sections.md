@@ -12,7 +12,7 @@ Section names are matched case-insensitively. An alias can occur inside a longer
 | `dam_workflow`, `process`, `publish` | `dam` |
 | `dryes_index`, `index`, `calculate` | `dryes` |
 
-A section can specify an `engine` in its definition. Otherwise it uses the workflow-level `engine` default, if provided, then resolves the section key as an alias. The supported engine values are `door`, `dam`, and `dryes`. An unrecognized non-reserved top-level key raises `ValueError` during parsing.
+A section that omits `engine` uses the workflow-level `engine` default, if provided; otherwise its name is matched to an alias. If `engine` is explicitly null or unsupported, d3tools falls back to matching the section name to an alias, not to the workflow default. The supported engine values are `door`, `dam`, and `dryes`. An unrecognized non-reserved top-level key with no selectable engine raises `ValueError` during parsing.
 
 ## Section Order and Lists
 

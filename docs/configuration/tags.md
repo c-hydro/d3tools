@@ -66,8 +66,9 @@ The parsing pipeline applies configuration substitutions in this order:
 
 1. Values in the top-level `env` object are copied to `os.environ`.
 2. `{ENV.VAR}` placeholders are resolved.
-3. `{now}` and `{now:format}` placeholders are resolved, except for the
-   deliberately deferred `workflow_log.file` case.
+3. `{now}` and `{now:format}` placeholders are resolved. A `workflow_log.file`
+   time placeholder is resolved when the workflow is loaded and its logging
+   manager is constructed.
 4. The top-level `tags` mapping is resolved recursively and substituted
    throughout the configuration.
 5. Dataset definitions are built.

@@ -1,0 +1,36 @@
+{
+  "workflow_name": "chirps_aggregate",
+  "tags": {
+    "output_root": "/tmp/d3tools-case-study"
+  },
+  "datasets": {
+    "chirps_raw": {
+      "type": "local",
+      "key_pattern": "{output_root}/input/chirps/%Y/CHIRPS-precip10d_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    },
+    "chirps_aggregated": {
+      "type": "local",
+      "key_pattern": "{output_root}/aggregate/{agg.agg_window}/%Y/CHIRPS-PREC{agg.agg_window}_CASE_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    }
+  },
+  "dam_workflow": {
+    "input": "{datasets.chirps_raw}",
+    "output": "{datasets.chirps_aggregated}",
+    "options": {},
+    "process_list": [
+      {
+        "function": "aggregate_times",
+        "pid": "agg",
+        "agg_step": "dekad",
+        "agg_window": ["1m", "3m"],
+        "agg_func": "sum"
+      }
+    ]
+  }
+}

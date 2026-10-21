@@ -45,7 +45,7 @@ when those engines are used.
 
 ## Timestamped Files
 
-Use `{now:...}` in a local destination when each run needs a distinct file:
+Use `{now:...}` to include the workflow-load time in a local destination:
 
 ```json
 {
@@ -58,7 +58,8 @@ Use `{now:...}` in a local destination when each run needs a distinct file:
 }
 ```
 
-This placeholder is resolved when the workflow runs. For the complete option
+This placeholder is resolved when the workflow is loaded and its logging
+manager is constructed, not when the workflow runs. For the complete option
 table and available formats, see [Logging Overview](../logging/overview.md).
 
 ## See Also

@@ -41,7 +41,7 @@ A mapping without `file` creates no file handler. An omitted or `null` `workflow
 
 For a mapping, `format` defaults to `simple` for both handlers. The direct `WorkflowLogManager` constructor instead defaults to `detailed` for files and `simple` for console. A string destination also uses the constructor defaults.
 
-`{now:...}` in destination strings is formatted with Python datetime directives when the logging configuration is resolved. Local file parent directories are created when the file handler is configured. Rotation is not configured by this manager.
+`{now:...}` in `workflow_log.file` is formatted with Python datetime directives when the workflow is loaded and its logging manager is constructed, not when the workflow runs. Local file parent directories are created when the file handler is configured. Rotation is not configured by this manager.
 
 ## Logged Events
 

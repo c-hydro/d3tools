@@ -52,11 +52,14 @@ how time resolution works.
 ## Workflow Sections and Aliases
 
 Every non-reserved top-level key becomes a `WorkflowSection`. Its engine is resolved
-in the following order of priority:
+using these rules:
 
-1. The section definition's `engine` key, when present.
-2. The workflow-level `engine` default, when configured.
-3. The section name, matched (case/dash/space-insensitively) against the alias table.
+1. If the section omits `engine`, use the workflow-level `engine` default when
+   configured; otherwise match the section name (case/dash/space-insensitively)
+   against the alias table.
+2. If the section explicitly sets a supported `engine`, use it.
+3. If the section explicitly sets `engine` to null or an unsupported value, match
+   the section name against the alias table instead; do not use the workflow default.
 
 If none of these provides a recognised engine, parsing raises `ValueError`.
 The recognised engines are `door`, `dam`, and `dryes`.
@@ -90,9 +93,9 @@ Four kinds of placeholders are resolved while parsing, each covered in its own g
 | `{dataset_key}`, `{dataset_key, tag='value'}` | `resolve_dataset_refs` | [Datasets](datasets.md) |
 
 `{now:...}` renders the current `datetime.datetime.now()` at parse time, with
-`...` used as an `strftime` format. The one exception is `workflow_log.file`: its
-`{now:...}` placeholder is intentionally left unresolved until the workflow actually
-runs, so the log filename reflects the real run time rather than parse time.
+`...` used as an `strftime` format. For `workflow_log.file`, its `{now:...}`
+placeholder is resolved when the workflow is loaded and its logging manager is
+constructed, not when the workflow runs.
 
 Dataset placeholders can be written as `{my_data}` or with the datasets key as a
 prefix, e.g. `{datasets.my_data}`. The prefix must match the top-level key exactly

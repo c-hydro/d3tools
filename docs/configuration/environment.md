@@ -68,24 +68,11 @@ export ERA5_API_KEY="your-api-key"
 export DATA_ROOT="/mnt/data"
 ```
 
-### Python, before loading the workflow
-
-See [Developer Guide — Standalone parsing and Python integration](../developer/configuration.md#standalone-parsing-and-python-integration).
-
 ### `.env` files
 
-d3tools does not load `.env` files itself. If you want that workflow, install
-`python-dotenv` separately and call it before constructing the workflow:
-
-```python
-from dotenv import load_dotenv
-load_dotenv()
-
-from d3tools import WorkflowDefinition
-wf = WorkflowDefinition.load("workflow.json")
-```
-
-Remember to add `.env` to `.gitignore` if you use this pattern.
+d3tools does not load `.env` files itself. For Python-specific environment
+setup, see [Developer Guide — Standalone parsing and Python
+integration](../developer/configuration.md#standalone-parsing-and-python-integration).
 
 ## Resolution Order
 

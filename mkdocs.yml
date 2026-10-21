@@ -3,6 +3,16 @@ repo_url: https://github.com/c-hydro/d3tools
 docs_dir: docs
 
 nav:
+  - User Guide:
+      - Overview: user-guide/index.md
+      - Getting started: user-guide/getting-started.md
+      - Configuration: user-guide/configuration.md
+      - Datasets: user-guide/datasets.md
+      - Workflows: user-guide/workflows.md
+      - Logging: user-guide/logging.md
+      - Case study: user-guide/case-study.md
+      - Examples: user-guide/examples.md
+      - Troubleshooting: user-guide/troubleshooting.md
   - Developer Guide:
       - Overview: developer/index.md
       - Architecture: developer/architecture.md
@@ -43,6 +53,7 @@ plugins:
 markdown_extensions:
   - admonition
   - tables
+  - pymdownx.snippets
   - toc:
       permalink: true
   - pymdownx.superfences:

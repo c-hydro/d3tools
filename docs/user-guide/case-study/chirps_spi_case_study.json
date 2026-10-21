@@ -1,0 +1,94 @@
+{
+  "workflow_name": "chirps_spi_case_study",
+  "tags": {
+    "output_root": "/tmp/d3tools-case-study",
+    "parameter_root": "/path/to/precomputed-spi-parameters",
+    "history_start": "1990-01-01",
+    "history_end": "2020-12-31"
+  },
+  "workflow_log": {
+    "file": "{output_root}/logs/workflow_{now:%Y%m%d_%H%M%S}.log",
+    "run_state_file": "{output_root}/logs/workflow_state.json",
+    "level": "INFO",
+    "console": true,
+    "format_file": "detailed",
+    "format_console": "simple"
+  },
+  "datasets": {
+    "chirps_raw": {
+      "type": "local",
+      "key_pattern": "{output_root}/input/chirps/%Y/CHIRPS-precip10d_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    },
+    "chirps_aggregated": {
+      "type": "local",
+      "key_pattern": "{output_root}/aggregate/{agg.agg_window}/%Y/CHIRPS-PREC{agg.agg_window}_CASE_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    },
+    "spi_parameters": {
+      "type": "local",
+      "key_pattern": "{parameter_root}/{agg_window}m/{par_name}/{par_name}_CHIRPS-PREC{agg_window}m_CASE_%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    },
+    "spi_output": {
+      "type": "local",
+      "key_pattern": "{output_root}/spi/{agg.agg_window}/%Y/CHIRPS-SPI{agg.agg_window}_CASE_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    }
+  },
+  "door_downloader": {
+    "source": "CHIRPS",
+    "product": "CHIRPSp05-dekads",
+    "destination": "{datasets.chirps_raw}",
+    "bounds": [8, 38.5, 10, 41.5],
+    "options": {
+      "get_prelim": true
+    }
+  },
+  "dam_workflow": {
+    "input": "{datasets.chirps_raw}",
+    "output": "{datasets.chirps_aggregated}",
+    "options": {},
+    "process_list": [
+      {
+        "function": "aggregate_times",
+        "pid": "agg",
+        "agg_step": "dekad",
+        "agg_window": ["1m", "3m"],
+        "agg_func": "sum"
+      }
+    ]
+  },
+  "dryes_index": {
+    "index_options": {
+      "index": "SPI",
+      "agg_window": {
+        "1": "1m",
+        "3": "3m"
+      },
+      "min_reference": 10,
+      "zero_threshold": 0.01
+    },
+    "io_options": {
+      "data": "{datasets.chirps_aggregated}",
+      "gamma.a": "{datasets.spi_parameters, par_name='gamma.a'}",
+      "gamma.loc": "{datasets.spi_parameters, par_name='gamma.loc'}",
+      "gamma.scale": "{datasets.spi_parameters, par_name='gamma.scale'}",
+      "prob0": "{datasets.spi_parameters, par_name='prob0'}",
+      "index": "{datasets.spi_output}"
+    },
+    "run_options": {
+      "timesteps_per_year": 36,
+      "history_start": "{history_start:%Y-%m-%d}",
+      "history_end": "{history_end:%Y-%m-%d}"
+    }
+  }
+}
