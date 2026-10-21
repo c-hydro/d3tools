@@ -37,6 +37,7 @@ arguments, `START_DATE`/`END_DATE` environment variables, prior run state, or th
 section's own data availability). See [Workflow Sections](workflow-sections.md) for
 how time resolution works.
 
+<!-- check-docs: skip -->
 ```json
 {
     "workflow_name": "era5_download_workflow",

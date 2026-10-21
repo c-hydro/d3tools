@@ -32,7 +32,8 @@ dataset definitions and workflow sections.
     "datasets": {
         "output_data": {
             "type": "local",
-            "path": "{output_dir}/raw/"
+            "path": "{output_dir}/raw/",
+            "filename": "data_%Y%m%d.tif"
         }
     }
 }
@@ -99,6 +100,8 @@ The general top-level tag forms are `{tag}` and `{tag:format}`:
 - `{tag:format}` applies `strftime` formatting to datetime values and Python
   format specifications to other values;
 - an unknown top-level tag is left unchanged.
+- If a tag value is a list, each string containing that placeholder expands
+    into a list of rendered strings.
 
 Environment placeholders use a related but separate syntax:
 `{ENV.VAR_NAME}` or `{ENV.VAR_NAME, default='value'}`. They are resolved before
@@ -127,75 +130,13 @@ whereas `{paths.input}` is not a nested lookup into that mapping.
 
 ## Dataset Update Tags
 
-Once dataset definitions have been built, a dataset reference may include tag
-assignments. The assignments are passed to `Dataset.update()`, which creates an
-updated dataset copy with those values applied to its name, key pattern, and
-dataset tags.
-
-```json
-{
-    "datasets": {
-        "my_data": {
-            "type": "local",
-            "path": "/data/{member}",
-            "filename": "data_%Y%m%d.tif"
-        }
-    },
-    "door_downloader": {
-        "destination": "{DATASETS.my_data, member='control'}"
-    }
-}
-```
-
-The same dataset definition can therefore be reused with different values:
-
-```json
-{
-    "door_downloader": {
-        "destination": "{DATASETS.my_data, member='control'}"
-    },
-    "dam_workflow": {
-        "input": "{DATASETS.my_data, member='experiment'}"
-    }
-}
-```
-
-Dataset references may use the qualified or unqualified forms supported by the
-dataset resolver, for example `{DATASETS.my_data}`, `{datasets.my_data}`, or
-`{my_data}`. The intended usage is for the complete string value to be the
-dataset reference, including its optional assignments.
-
-These assignments are not entries in the top-level `tags` object. They are local
-values supplied for that particular dataset reference. See
-[Datasets](datasets.md) for dataset definitions and reference syntax.
+Dataset references can carry local update assignments. Their syntax and effects
+are documented in [Datasets](datasets.md).
 
 ## Engine-Specific Cases
 
-After d3tools resolves top-level tags and dataset references, it passes each
-workflow section to the selected engine. DOOR, DAM, and DRYES may then interpret
-their own option structures as multiple cases. The exact syntax belongs to the
-engine, not to this document.
-
-Examples of engine-level behaviour include:
-
-- **DOOR** options that accept a list of variables or products, potentially
-  causing multiple variables to be downloaded;
-- **DAM** process and case structures that use mapping-valued options to create
-  combinations of processing settings;
-- **DRYES** index options that define multiple parameter or input cases.
-
-Top-level tags can be useful for generating these values, but d3tools only
-performs the substitution. Whether the resulting list or mapping creates
-parallel cases, sequential work, or an invalid configuration is decided by the
-engine's own parser and runtime.
-
-Consult the relevant engine documentation for the supported case structures:
-
-- [Workflow Sections](workflow-sections.md) for how d3tools selects and passes
-  sections to DOOR, DAM, and DRYES;
-- the DOOR documentation for downloader variables and products;
-- the DAM documentation for process and case options;
-- the DRYES documentation for index and parameter cases.
+Top-level tags may supply values used by engine options. Section parsing and
+engine-specific options are covered in [Workflow Sections](workflow-sections.md).
 
 ## Common Patterns
 

@@ -57,6 +57,8 @@ runs, so a config can define its own environment values instead of (or in
 addition to) relying on the shell. This also means values set here affect the
 whole process, including code outside of this workflow run.
 
+The `env` value may be `null` or an object; any other type raises `TypeError`.
+
 ## Setting Environment Variables Externally
 
 ### Shell
