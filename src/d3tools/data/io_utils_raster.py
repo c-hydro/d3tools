@@ -188,6 +188,10 @@ def set_type(data: xr.DataArray, nan_value = None, read = True) -> xr.DataArray:
     max_value = finite_data.max(skipna=True)
     min_value = finite_data.min(skipna=True)
 
+    if nan_value is not None:
+        min_value = min(min_value, nan_value)
+        max_value = max(max_value, nan_value)
+
     # check if output contains floats or integers
     if np.issubdtype(data.dtype, np.floating):
         if max_value < 2**31 and min_value > -2**31:
