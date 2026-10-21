@@ -18,7 +18,14 @@ from .string_rendering import substitute_string
 
 @dataclass(frozen=True)
 class ParsedKey:
-    """Parsed key result containing canonical time and extracted tags."""
+    """Result of matching a concrete key against a key pattern.
+
+    Attributes:
+        key: Original concrete key passed to the parser.
+        time: Datetime assembled from the pattern's date directives. Missing
+            components use the defaults applied by :class:`KeyParser`.
+        tags: Extracted tag values keyed by their original placeholder names.
+    """
 
     key : str
     time: dt.datetime
