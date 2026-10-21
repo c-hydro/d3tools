@@ -68,15 +68,15 @@ Add a `thumbnail` object to a dataset definition:
     "thumbnail": {
         "colors": {
             "type": "local",
-            "key_pattern": "/config/colors/fapar_anomaly.txt",
+            "key_pattern": "/config/colors/fapar_anomaly.txt"
         },
         "destination": {
             "type": "local",
-            "key_pattern": "/output/thumbnails/fapar_%Y%m%d.png",
+            "key_pattern": "/output/thumbnails/fapar_%Y%m%d.png"
         },
         "overlay": {
             "type": "local",
-            "key_pattern": "/data/boundaries.geojson",
+            "key_pattern": "/data/boundaries.geojson"
         },
         "annotation": {
             "text": "FAPAR anomaly"
@@ -118,7 +118,7 @@ The parser converts these into `Dataset` objects using the parent dataset defaul
 | `size` | no | number | Existing Matplotlib size scaling option. Advanced use. |
 | `dpi` | no | number | Figure DPI. Defaults are chosen automatically. |
 
-Additional keys are passed to `Thumbnail.save()` as options. Unsupported option types for annotation, legend, or overlay raise clear errors.
+Recognized thumbnail options are passed to `Thumbnail.save()`. Unsupported option types for annotation, legend, or overlay raise clear errors; unrecognized keys are ignored by `Thumbnail.save()`.
 
 ## API Usage
 
@@ -207,6 +207,21 @@ thumbnail = Thumbnail(gdf[["geometry", "risk"]].rename(columns={"risk": "value"}
 `DatasetThumbnailManager` does this rename automatically when `field` is configured.
 
 ## Source Data Rules
+### `ThumbnailCollection`
+
+`ThumbnailCollection` creates thumbnails for a list of raster file paths and can combine the saved files into a PNG grid or a PDF:
+
+```python
+from d3tools.thumbnails import ThumbnailCollection
+
+collection = ThumbnailCollection(
+    ["/data/first.tif", "/data/second.tif"],
+    "/config/colors/fapar_anomaly.txt",
+)
+collection.save("/output/thumbnails/combined.png", grid=(2, 1))
+```
+
+Pass one colour-definition path to reuse it for every raster, or pass one path per raster. The two lists must have the same length. Options supplied to `save()` are passed to each contained `Thumbnail`; `grid` controls the PNG layout and is not used for PDF output.
 
 ### Raster Sources
 
@@ -272,18 +287,18 @@ The saved PNG can be slightly smaller than the internal render shape because thu
 
 ### Annotation Options
 
-Omitted `annotation` means infer an annotation from `source_key` or raster filename when available.
+For direct `Thumbnail` usage, omitted `annotation` infers text from `source_key` or the raster filename when available. Dataset-managed generation may instead set the annotation to the output filename before calling the manager.
 
 Accepted forms:
 
 | Value | Behaviour |
 |-------|----------|
-| omitted | Infer source filename when available. |
+| omitted | Direct `Thumbnail`: infer source filename when available. Dataset-managed generation: may use the output filename. |
 | `false` or `null` | Disable annotation. |
 | `"none"` | Disable annotation, case-insensitive. |
 | `""` or whitespace | Disable annotation. |
 | non-empty string | Render literal annotation text. |
-| object | Copy options and use `text` when provided; otherwise infer text. |
+| object | Copy options and use `text` when provided; otherwise apply the same direct or dataset-managed inference described above. |
 
 JSON examples:
 

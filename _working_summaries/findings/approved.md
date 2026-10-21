@@ -10,3 +10,4 @@ phase1-timestepping
 phase1-configuration
 phase1-workflow-sections
 phase1-logging
+phase1-thumbnails
