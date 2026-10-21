@@ -80,7 +80,45 @@ User Guide journeys (depth limited to what an operator configures):
 - define workflow sections, engines, ordering, and execution options/ranges;
 - configure workflow and dataset logging, and thumbnails where configurable;
 - diagnose common configuration, import, availability, and execution failures;
-- follow complete realistic examples without undocumented engine contracts.
+- follow complete realistic examples without undocumented engine contracts;
+- walk through the runnable CHIRPS-to-SPI case study (see below).
+
+## User Guide case study
+
+The User Guide is anchored on one runnable case study, `docs/user-guide/case-study.md`:
+
+1. DOOR downloads 10-day CHIRPS precipitation (no credentials required).
+2. DAM aggregates it to 1-month and 3-month windows, keeping the 10-day timestep.
+3. DRYES computes SPI1 and SPI3 from **pre-computed parameters** shipped with the docs.
+
+Rules:
+
+- Store each step and the combined workflow as real JSON files under
+  `docs/user-guide/case-study/` and include them in pages with `pymdownx.snippets`
+  (`--8<-- "docs/user-guide/case-study/<file>.json"`). Do not paste a second copy of a
+  case-study file into a page. The User Guide writer may add `pymdownx.snippets` to
+  `markdown_extensions` in `mkdocs.yml`.
+- Other User Guide pages illustrate engine-backed behavior with excerpts of these files
+  (snippet line ranges) instead of inventing engine payloads.
+- The case study does not cover every feature (e.g. fallbacks, versions, tiles, remote
+  storage, thumbnails). For those, use a small focused snippet (no-engine where
+  possible) and list the feature in `documentation_audits/user-guide-open-questions.md`
+  as a candidate for an additional runnable example. Do not create extra runnable
+  example files unless the outline adds them.
+- Explain only the d3tools-facing parts: tags, dataset definitions and references,
+  ranges, ordering, and logging. Present each engine block as engine-owned with a one-line
+  note and a link to that engine. Do not document DOOR/DAM/DRYES options in depth.
+- Do not explain how SPI parameters are calculated; that belongs to DRYES documentation.
+  How the parameters are distributed (repo vs. external host) is an open maintainer
+  decision in the outline. Until it is resolved, use a clearly marked placeholder location
+  and record the gap in `documentation_audits/user-guide-open-questions.md`.
+- Area, grid, and period are fixed by the parameters. Every output path derives from one
+  root tag so readers choose a single writable folder.
+- Source examples: `door/workflow_examples/option_files/chirps_example.json`,
+  `dam/workflow_examples/options_files/era5-wb-aggregation_example.json`,
+  `dryes/workflow_examples/option_files/spi_example.json`. Engine settings not shown in
+  these (for example, keeping a 10-day output timestep in DAM) are open questions
+  until confirmed, not inferred.
 
 ## Sources and evidence
 
@@ -128,6 +166,8 @@ User Guide journeys (depth limited to what an operator configures):
 
 **Never run `mkdocs` (`build`, `serve`, `gh-deploy`) or anything that writes outside
 `docs/`, `mkdocs.yml`, and `documentation_audits/`.** The maintainer builds the site.
+The one exception is running the case study, whose output root must point to
+`/tmp/d3tools-case-study/`.
 Generated-reference/Griffe warnings are out of scope.
 
 Run from the d3tools repository with the shared environment:
@@ -144,6 +184,13 @@ Run from the d3tools repository with the shared environment:
   and dependencies are available, also run the narrowest safe parse/load check that
   exercises that engine configuration; otherwise state that engine-level execution was
   not verified.
+- `scripts/check_docs.py` does not expand snippets: put `<!-- check-docs: skip -->`
+  before each snippet-include fence, and validate every file under
+  `docs/user-guide/case-study/` directly with
+  `WorkflowDefinition.load(path, build_workflow_objects=False)`.
+- Run the case study end to end when network and engines are available, with the output
+  root at `/tmp/d3tools-case-study/`. Report which steps ran and which did not (Step 3
+  cannot run until the SPI parameters exist). Never claim an unrun step was verified.
 - Check local links (they must stay inside `docs/`), headings, and that every
   `mkdocs.yml` nav entry points to an existing page, by reading the file.
 - An audit passes with the outline fully implemented, no high/medium findings, and no

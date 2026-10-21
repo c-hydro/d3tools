@@ -39,8 +39,9 @@ record it in `documentation_audits/user-guide-open-questions.md`; do not infer m
 
 ## Scope and boundaries
 
-- Edit pages under `docs/` outside `docs/developer/`, and the User Guide part of
-  `mkdocs.yml` nav, as the outline specifies.
+- Edit pages under `docs/` outside `docs/developer/` (including the case-study JSON
+  files), the User Guide part of `mkdocs.yml` nav, and the `pymdownx.snippets`
+  extension entry, as the outline specifies.
 - Python is limited to `WorkflowDefinition.load()` / `run()`. Replace any other Python
   with a link to the Developer Guide.
 - Do not edit `docs/developer/`, source, tests, docstrings, hooks, the outline, or audit
