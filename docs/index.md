@@ -1,0 +1,78 @@
+# d3tools Documentation
+
+**d3tools** is a workflow orchestration framework that provides general-purpose tools shared between the DOOR (downloaders), DAM (data processing), and DRYES (drought indices) repositories.
+
+## Quick Links
+
+- [Getting Started](getting-started.md) - Installation and first workflow
+- [Configuration Guide](configuration/overview.md) - JSON configuration format
+- [Logging Guide](logging/overview.md) - Workflow logging setup
+- [Thumbnail Guide](thumbnails/overview.md) - Raster and vector thumbnail generation
+- [Examples](examples/minimal-workflow.md) - Sample workflows
+
+## Key Features
+
+- **Workflow Orchestration**: Define multi-stage workflows with download, process, calculate, and publish sections
+- **Flexible Configuration**: JSON-based configuration with tags, environment variables, and dataset references
+- **Smart Timestepping**: Multiple timestepping strategies for temporal workflows
+- **Hierarchical Logging**: Unified logging across d3tools, DOOR, DAM, and DRYES modules
+- **Dataset Management**: Local and remote dataset support (local files, S3, SFTP)
+- **Modular Architecture**: Clean separation between configuration and execution
+
+## Architecture Overview
+
+```
+d3tools (orchestration layer)
+├── DOOR    - Data downloaders (ERA5, CHIRPS, MODIS, etc.)
+├── DAM     - Data processing workflows
+└── DRYES   - Drought indices calculation
+```
+
+d3tools provides:
+- **WorkflowDefinition**: Runnable workflow container
+- **Options**: Enhanced configuration mapping
+- **Timestepping**: Temporal iteration strategies
+- **Dataset**: Unified data source abstraction
+- **Logging**: Cross-module logging infrastructure
+- **Parsing Pipeline**: Multi-stage configuration resolution
+
+## Documentation Structure
+
+### Getting Started
+- [Installation and Setup](getting-started.md#installation)
+- [Configuration Model](getting-started.md#the-configuration-model)
+- [Your First Workflow](getting-started.md#your-first-workflow)
+- [Command-Line Execution](getting-started.md#running-from-the-command-line)
+- [Tags and Environment Variables](getting-started.md#tags-and-environment-variables)
+- [Dataset References](getting-started.md#dataset-references)
+- [Logging](getting-started.md#logging)
+
+### Configuration
+- [Configuration Overview](configuration/overview.md)
+- [Tags and Variables](configuration/tags.md)
+- [Dataset Definitions](configuration/datasets.md)
+- [Environment Variables](configuration/environment.md)
+- [Workflow Sections](configuration/workflow-sections.md)
+
+### Logging
+- [Logging Overview](logging/overview.md)
+- [WorkflowLogManager](logging/workflow-log-manager.md)
+- [Logging Examples](logging/examples.md)
+
+### Thumbnails
+- [Thumbnail Generation](thumbnails/overview.md)
+- Dataset JSON thumbnail definitions
+- API usage and available save options
+
+### Examples
+- [Minimal Workflow](examples/minimal-workflow.md)
+- [Workflow with Logging](examples/with-logging.md)
+- [Multi-Dataset Workflow](examples/multi-dataset.md)
+
+## Contributing
+
+d3tools is maintained by CIMA Research Foundation. For questions or contributions, please refer to the repository maintainers.
+
+## Licence
+
+See [LICENSE](../LICENSE) file for details.
