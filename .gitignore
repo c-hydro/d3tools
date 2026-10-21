@@ -48,3 +48,4 @@ _working_summaries/*
 !_working_summaries/findings/
 _working_summaries/findings/*
 !_working_summaries/findings/phase*.md
+site
