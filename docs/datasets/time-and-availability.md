@@ -49,8 +49,9 @@ dataset.get_start()
 dataset.check_data(time="2024-01-15")
 ```
 
-`get_first_ts()` and `get_last_ts()` return `TimeStep` objects. The date methods
-return datetimes or lists of datetimes. `get_start()` returns the available start
+`get_first_ts()` and `get_last_ts()` return `TimeStep` objects, or `None` if no
+available date or usable timestep can be found. The date methods return
+datetimes or lists of datetimes. `get_start()` returns the available start
 according to the dataset aggregation setting.
 
 `get_any_date()` finds an available date quickly. `find_times(times)` filters a
@@ -89,9 +90,10 @@ keys = dataset.get_available_keys(
 )
 ```
 
-For datasets with parents or fallbacks, availability and data retrieval may
-include those related datasets according to the catalogue and dataset
-composition rules.
+`get_available_keys()` and `get_available_tags()` enumerate the dataset's own
+storage. `get_times()` also includes times available in every parent and in the
+fallback, when configured. `check_data()` and `get_data()` consult the main
+dataset, parents, and fallback according to the composition rules.
 
 ## Workflow Use
 

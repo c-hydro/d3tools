@@ -33,8 +33,10 @@ filename components.
 ## Memory
 
 `MemoryDataset` stores data in memory and is useful for tests or intermediate
-results. It requires a `key_pattern` and can be configured with
-`keep_after_reading`.
+results. It requires a `key_pattern`. `keep_after_reading` defaults to `false`,
+so reading an item removes it; set it to `true` to retain the item. This
+read-retention behavior is not covered by tests. The workflow configuration
+option is described in [Dataset Configuration](../configuration/datasets.md#in-memory-data).
 
 ```python
 from d3tools.data import MemoryDataset

@@ -93,10 +93,13 @@ Four kinds of placeholders are resolved while parsing, each covered in its own g
 `{now:...}` placeholder is intentionally left unresolved until the workflow actually
 runs, so the log filename reflects the real run time rather than parse time.
 
-Dataset placeholders can be written as `{DATASETS.my_data}`, `{datasets.my_data}`,
-or `{my_data}` for a dataset defined as `datasets.my_data`. The placeholder should
-be the entire length of the string value: do not include additional text before or
-after it.
+Dataset placeholders can be written as `{my_data}` or with the datasets key as a
+prefix, e.g. `{datasets.my_data}`. The prefix must match the top-level key exactly
+as written in the config: `{DATASETS.my_data}` only resolves if the key is literally
+`"DATASETS"`. An unresolved dataset placeholder is silently left as a string (or
+raises `AttributeError` if it carries update tags like `{x, variable='t'}`). The
+placeholder should be the entire length of the string value: do not include
+additional text before or after it.
 
 ## Parsing Pipeline
 

@@ -30,9 +30,9 @@ configuration syntax.
 
 ## Copying
 
-`copy()` creates an independent Dataset copy, preserving temporal and spatial
-state by default. It also shares configured log and thumbnail managers with the
-source copy.
+`copy()` creates a new Dataset instance, preserving temporal and spatial state
+by default. It does not duplicate files or objects in local or remote storage,
+and it shares configured log and thumbnail managers with the source.
 
 ```python
 copy = dataset.copy()

@@ -1,6 +1,6 @@
 # Configuration Datasets
 
-Datasets define data sources and destinations used throughout your workflow. They provide a unified interface for local files, S3 buckets, and SFTP servers.
+Datasets define data sources and destinations used throughout your workflow. They provide a unified interface for local files, in-memory data, S3-compatible buckets, and SFTP servers.
 
 ## Basic Usage
 
@@ -18,13 +18,14 @@ Define datasets in the `datasets` section:
 }
 ```
 
-Reference them using a qualified or unqualified dataset placeholder, such as
-`{DATASETS.my_data}`, `{datasets.my_data}`, or `{my_data}`:
+Reference them using an unqualified dataset placeholder, such as `{my_data}`.
+Qualified forms such as `{datasets.my_data}` are also supported when the prefix
+matches the literal case of the top-level section key (`datasets` or `DATASETS`):
 
 ```json
 {
     "door_downloader": {
-        "destination": "{DATASETS.my_data}"
+        "destination": "{my_data}"
     }
 }
 ```
@@ -97,8 +98,47 @@ If `type` is not specified, the dataset defaults to type local, so this is also 
 - `bucket_name`: S3 bucket name
 - `key_pattern`: Object-key pattern, including any directory prefix and filename
 - `region_name`: AWS region (optional)
+- `profile_name`: AWS credentials profile to use (optional)
+- `tmp_dir`: Local staging directory for downloads and uploads (optional; otherwise a temporary directory is created)
 
 **Authentication**: Uses standard AWS credentials (environment variables, ~/.aws/credentials, IAM role)
+
+### OVH S3
+
+Use `s3-ovh` for an S3-compatible endpoint. It requires the same bucket and key
+settings as S3 plus an `endpoint_url`:
+
+```json
+{
+    "datasets": {
+        "object_store": {
+            "type": "s3-ovh",
+            "bucket_name": "my-bucket",
+            "key_pattern": "data/result_%Y%m%d.tif",
+            "endpoint_url": "https://s3.example.com",
+            "region_name": "eu-west-1"
+        }
+    }
+}
+```
+
+### In-Memory Data
+
+Memory datasets store values in the running process and require a `key_pattern`.
+By default, reading an item removes it; set `keep_after_reading` to `true` to
+retain it. This read-retention behavior is not covered by tests.
+
+```json
+{
+    "datasets": {
+        "intermediate": {
+            "type": "memory",
+            "key_pattern": "result_{tile}.nc",
+            "keep_after_reading": true
+        }
+    }
+}
+```
 
 ### SFTP
 
@@ -124,10 +164,12 @@ If `type` is not specified, the dataset defaults to type local, so this is also 
 - `password`: Optional SFTP password; use an environment variable when provided
 - `private_key`: Optional path to an RSA or Ed25519 private key file
 - `port`: SFTP port (optional, default: 22)
+- `tmp_dir`: Local staging directory for downloads and uploads (optional; otherwise a temporary directory is created)
 
 If `password` is omitted, d3tools uses key authentication. When `private_key` is
 provided, it loads that RSA or Ed25519 key file. Otherwise, it searches `~/.ssh`
 for private key filenames containing `rsa` or `ed25519` and tries those keys.
+This authentication behavior is not covered by tests.
 
 Password authentication:
 
@@ -183,6 +225,28 @@ Use `__defaults__` to set common parameters for all datasets:
 
 Datasets inherit from `__defaults__` and can override specific parameters.
 
+## Time Options
+
+Datasets may also set `timestep`, `aggregation`, and `time_signature`:
+
+- `timestep`: Optional frequency such as `daily` or `monthly`. If omitted,
+  d3tools may infer it when a catalogue operation needs timestep boundaries.
+- `aggregation`: Optional aggregation window attached to the timestep.
+- `time_signature`: `start`, `end`, or `end+1`; defaults to `end`.
+
+```json
+{
+    "datasets": {
+        "daily_data": {
+            "type": "local",
+            "key_pattern": "/data/%Y%m%d.tif",
+            "timestep": "daily",
+            "time_signature": "end"
+        }
+    }
+}
+```
+
 ## Datetime Placeholders in Paths
 
 Use strftime format codes in `filename` or `key_pattern`:
@@ -221,8 +285,8 @@ See [Python strftime documentation](https://docs.python.org/3/library/datetime.h
         "output_data": {"key_pattern": "/data/output/output_%Y%m%d.tif" }
     },
     "dam_workflow": {
-        "input": "{DATASETS.input_data}",
-        "output": "{DATASETS.output_data}"
+        "input": "{datasets.input_data}",
+        "output": "{datasets.output_data}"
     }
 }
 ```
@@ -265,7 +329,7 @@ Apply additional tags to datasets at reference time:
         }
     },
     "door_downloader": {
-        "destination": "{DATASETS.base_data, variable='temperature'}"
+        "destination": "{datasets.base_data, variable='temperature'}"
     }
 }
 ```

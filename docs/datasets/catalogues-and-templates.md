@@ -28,7 +28,8 @@ code should use the Dataset methods.
 - `get_available_tags()` extracts unique tag values;
 - `get_times()` and `get_timesteps()` enumerate available temporal items;
 - `estimate_timestep()` infers a timestep from available data;
-- `check_data()` tests for a specific item;
+- `check_data()` tests for a specific item; without a `tile` argument it checks
+	every configured tile and returns `true` only when all are available;
 - `find_times()` filters requested times by availability;
 - `find_tiles()` discovers tile values.
 
