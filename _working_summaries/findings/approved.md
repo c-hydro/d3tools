@@ -13,3 +13,4 @@ phase1-logging
 phase1-thumbnails
 phase1-notification
 phase1-spatial
+phase1-cases
