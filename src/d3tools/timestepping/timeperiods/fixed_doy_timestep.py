@@ -47,6 +47,7 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
         datetime.datetime(2024, 1, 8, 23, 59, 59)
     """
     def __init__(self, year: int, step: int, start_doys: Iterable[int]):
+        """Initialize from a year, 1-based step number, and iterable of period starts."""
         self.start_doys = tuple(start_doys)
         super().__init__(year, step, len(start_doys))
 
@@ -162,11 +163,11 @@ class FixedDOYTimeStep(FixedNTimeStep, ABC, metaclass=FixedDOYTimeStepStepMeta):
     def get_end(self):
         """Calculate the end datetime of this timestep.
         
-        For all periods except the last, ends one day before the next period starts.
-        The last period extends to December 31.
+        For all periods except the last, returns midnight on the day before the next
+        period starts. The last period returns December 31 at midnight.
         
         Returns:
-            datetime: End of the period at 23:59:59.
+            datetime: The period's end date at 00:00:00.
         """
         if self.step_of_year < len(self.start_doys):
             end_doy = self.start_doys[self.step_of_year] - 1
@@ -235,6 +236,7 @@ class ViirsModisTimeStep(FixedDOYTimeStep):
     unit = 'v'
 
     def __init__(self, year: int, step_of_year: int):
+        """Initialize a VIIRS/MODIS period by year and 1-based period number."""
         super().__init__(year, step_of_year, ViirsModisTimeStep.start_doys)
 
     @staticmethod

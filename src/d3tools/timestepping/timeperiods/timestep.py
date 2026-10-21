@@ -86,11 +86,14 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         has an associated aggregation window for computing rolling statistics.
         
         Args:
-            agg_window (str|tuple|TimeWindow): Aggregation window specification.
-                Can be a string like '7days', a tuple like (7, 'd'), or a TimeWindow.
+            agg_window (str|tuple|None|TimeWindow): Aggregation window specification.
+                Can be a string like '7days', a tuple like (7, 'd'), or a pre-formed TimeWindow.
         
         Returns:
             Type[TimeStep]: Modified TimeStep class with aggregation window.
+
+        Raises:
+            ValueError: If ``agg_window`` is not a string, tuple, or TimeWindow.
         
         Examples:
             >>> MonthWith7Days = Month.with_agg('7days')
@@ -131,12 +134,14 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
 
     @property
     def agg_window(self):
+        """Return the aggregation window, or None when no window is set."""
         if hasattr(self, '_agg_window'):
             return self._agg_window
         return None
 
     @agg_window.setter
     def agg_window(self, value: str|tuple|None|TimeWindow):
+        """Set the aggregation window; None is ignored."""
         if value is None:
             return
 
@@ -151,6 +156,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
 
     @property
     def agg_range(self):
+        """Return the aggregation range, or this timestep's range when no window is set."""
         if not hasattr(self, 'start') or not hasattr(self, 'end'):
             return None
         
@@ -161,6 +167,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
     
     @agg_range.setter
     def agg_range(self, value: str):
+        """Set the aggregation window from the supplied string value."""
         self.agg_window = value
 
     @abstractmethod
@@ -168,6 +175,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
         raise NotImplementedError
         
     def __sub__(self, n: int):
+        """Return the timestep ``n`` positions before this one."""
         return self + (-n)
 
     def set_year(self, year: int):
@@ -215,15 +223,17 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
 def estimate_timestep(sample) -> TimeStep:
         """Estimate the timestep type from a sample of datetime values.
         
-        Analyzes the differences between consecutive dates to determine the most
-        likely timestep frequency (hourly, daily, 8-day, dekadly, monthly, yearly).
+        Sorts ``sample`` in place, then uses the most frequent consecutive difference
+        to infer hourly, daily, 8-day, dekadly, monthly, or yearly frequency. Hourly
+        inference uses whole seconds when the modal day difference is zero.
         
         Args:
-            sample (list[datetime.datetime]): List of at least 2 datetime objects.
+            sample (list[datetime.datetime]): Datetimes to inspect. The list is sorted
+                in place; fewer than two values produce None.
         
         Returns:
-            Type[TimeStep] | None: The estimated TimeStep class, or None if the
-                pattern cannot be determined.
+            Type[TimeStep]|None: An estimated timestep class, or None when the sample
+                is too short or its modal interval is unsupported.
         
         Examples:
             >>> dates = [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)]

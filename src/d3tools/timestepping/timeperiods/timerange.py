@@ -88,6 +88,7 @@ class TimeRange(TimePeriod):
         return self.get_timesteps_from_DOY(range(1, 366, 8))
 
     def extend(self, window: TimeWindow, before = False):
+        """Return this range extended by ``window`` before its start or after its end."""
         extended_period = super().extend(window, before)
         return TimeRange(extended_period.start, extended_period.end)
     
@@ -103,7 +104,7 @@ class TimeRange(TimePeriod):
                          'h'/'hourly', 'v'/'viirs'
                 - Integer: timesteps per year (1, 12, 36, 365, 365*24)
             agg (str|tuple|None, optional): Aggregation window to attach to each
-                timestep. Can be a string like '3d' or tuple like (3, 'd').
+                timestep. In string format like '7d' for 7 days, or as a (value:int,unit:str) tuple.
                 Defaults to None.
 
         Returns:
@@ -111,7 +112,7 @@ class TimeRange(TimePeriod):
 
         Raises:
             ValueError: If frequency is not supported.
-            TypeError: If freq is not int or str.
+            TypeError: If freq is not int or str, or if ``agg`` is unrecognised.
 
         Examples:
             >>> range.get_timesteps('m')  # Monthly timesteps
@@ -141,6 +142,7 @@ class TimeRange(TimePeriod):
         return tss
 
     def get_timesteps_like(self, timestep: 'TimeStep') -> list['TimeStep']:
+        """Generate timesteps using the unit and aggregation window of ``timestep``."""
         return self.get_timesteps(timestep.unit, timestep.agg_window)
 
     def gen_timesteps_from_tsnumber(self,
@@ -184,6 +186,7 @@ class TimeRange(TimePeriod):
             ts = ts + 1
 
     def get_timesteps_from_tsnumber(self, timesteps_per_year: int, agg: str = None) -> list['FixedNTimeStep']:
+        """Return a list of timesteps generated for the supplied annual frequency."""
         return list(self.gen_timesteps_from_tsnumber(timesteps_per_year, agg))
     
     def gen_timesteps_from_DOY(self, doy_list: Iterable[int], agg: str = None) -> Generator['FixedDOYTimeStep', None, None]:
@@ -213,11 +216,22 @@ class TimeRange(TimePeriod):
             ts = ts + 1
 
     def get_timesteps_from_DOY(self, doy_list: list[int], agg: str = None) -> list['FixedLenTimeStep']:
+        """Return a list made from :meth:`gen_timesteps_from_DOY`."""
         return list(self.gen_timesteps_from_DOY(doy_list, agg))
 
     def gen_timesteps_from_issue_hour(self, issue_hours: list[int]) -> Generator['FixedLenTimeStep', None, None]:
-        """
-        This will yield the timesteps to of product issued daily at given hours
+        """Yield hourly timesteps at listed issue hours within this range.
+
+        Issue hours are considered in the order supplied. A timestep is yielded only
+        when its timestamp is between the current cursor and the range end plus
+        23 hours 59 minutes. Values outside the datetime hour range raise from the
+        ``datetime`` constructor.
+
+        Args:
+            issue_hours (list[int]): Hours of day used to construct issue times.
+
+        Yields:
+            FixedLenTimeStep: An hourly timestep for each accepted issue time.
         """
         from .fixed_len_timestep import FixedLenTimeStep
         now = self.start
@@ -231,5 +245,6 @@ class TimeRange(TimePeriod):
             now = datetime.datetime(day_after.year, day_after.month, day_after.day)
 
     def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list['FixedLenTimeStep']:
+        """Return the hourly issue timesteps as a list."""
         return list(self.gen_timesteps_from_issue_hour(issue_hours))
     

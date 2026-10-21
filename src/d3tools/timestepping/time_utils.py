@@ -71,7 +71,7 @@ def get_window(time: dt.datetime, size: int, unit: str, start = False) -> 'TimeR
         >>> # A 7-day window ending on a specific date
         >>> window = get_window(datetime.datetime(2024, 2, 20), 7, 'd')
 
-    Warnings:
+    Note:
         For dekad units ('t'), if the given time doesn't align with dekad boundaries,
         a warning is issued and the window is adjusted to align with dekad periods.
 
@@ -123,8 +123,8 @@ def get_md_dates(years: Iterable[int], month: int, day: int) -> list[dt.datetime
 
     This function is particularly useful for generating dates for climatological means,
     calculating multi-year statistics, or creating reference date lists. It intelligently
-    handles leap years for February 28/29, substituting February 28 in non-leap years
-    when February 29 is requested.
+    handles leap years for February 28/29 by returning February's last day in each
+    year when either February 28 or 29 is requested.
 
     Args:
         years (Iterable[int]): An iterable of year values (e.g., list, range) for which
@@ -159,7 +159,8 @@ def get_md_dates(years: Iterable[int], month: int, day: int) -> list[dt.datetime
     Note:
         - All returned datetime objects have time set to midnight (00:00:00).
         - The returned list is always sorted chronologically.
-        - Special handling only applies to February 28 and 29.
+                - Requests for February 28 or 29 both return February 29 in leap years and
+                    February 28 in other years.
     """
     from .timeperiods import Year
     if month == 2 and day in [28, 29]:
@@ -186,8 +187,8 @@ def unit_is_multiple(unit1: str, unit2: str) -> bool:
 
     This function checks whether one time unit is a clean multiple of another,
     which is useful for determining compatibility in aggregation operations and
-    time period calculations. For example, days are multiples of months (even
-    though the conversion factor varies), but weeks are not multiples of months.
+    time period calculations. The relationship is directional: months and years
+    are considered multiples of days and hours, while the reverse is not true.
 
     Args:
         unit1 (str): The unit to check (will be parsed through find_unit_of_time).
@@ -215,7 +216,8 @@ def unit_is_multiple(unit1: str, unit2: str) -> bool:
         - Units are first normalized using find_unit_of_time().
         - Months and years are considered multiples of days and hours even though
           the conversion factor varies (e.g., months have 28-31 days).
-        - The relationship is directional: unit_is_multiple('d', 'w') != unit_is_multiple('w', 'd').
+                - Other pairs are determined by the integer conversion factors in
+                    ``UNIT_CONVERSIONS``; the relationship is directional.
     """
 
     unit1 = find_unit_of_time(unit1)
@@ -266,8 +268,10 @@ def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = N
             - 'v': VIIRS/MODIS periods (8-day periods)
 
     Raises:
-        ValueError: If neither unit nor timesteps_per_year is provided, or if
-            the unit cannot be recognized.
+        ValueError: If neither argument is provided or if the unit string cannot
+            be recognized.
+        KeyError: If ``unit`` is None and ``timesteps_per_year`` is not one of
+            1, 12, 36, or 365.
 
     Examples:
         >>> find_unit_of_time('daily')

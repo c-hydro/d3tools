@@ -39,7 +39,8 @@ class TimeWindow():
         """Initialize a TimeWindow with size and unit.
 
         Args:
-            size (int): The numeric size of the window (will be cast to int).
+            size (int): The numeric size of the window; converted with ``int()``,
+                so non-integral numeric values are truncated.
             unit (str): The time unit, which will be normalized using find_unit_of_time().
                 Can be 'd', 'days', 'm', 'months', 'y', 't', 'dekads', etc.
         """
@@ -47,9 +48,11 @@ class TimeWindow():
         self.unit = find_unit_of_time(unit)
 
     def __repr__(self):
+        """Return a constructor-like representation of the size and canonical unit."""
         return f'TimeWindow({self.size}, {self.unit})'
     
     def __str__(self):
+        """Return the size followed by its canonical unit code."""
         return f'{self.size}{self.unit}'
 
     @classmethod
@@ -115,7 +118,7 @@ class TimeWindow():
             TimeRange: A TimeRange object spanning the window duration.
 
         Raises:
-            ValueError: If the window unit is not recognized.
+            ValueError: If the window unit is unsupported by this operation.
 
         Examples:
             >>> window = TimeWindow(3, 'd')
@@ -124,9 +127,10 @@ class TimeWindow():
             >>> window.apply(datetime.datetime(2024, 2, 20), start=True)  # starting Feb 20
             TimeRange(...)
 
-        Warnings:
-            For dekad ('t') units, if the time doesn't align with natural dekad
-            boundaries, a warning is issued.
+        Note:
+            VIIRS/MODIS ('v') windows are treated as fixed eight-day durations.
+            For dekad ('t') units, a warning is issued when the reference time
+            is not the boundary expected for the selected direction.
         """
         
         from .timeperiods import Dekad, TimeRange
@@ -153,7 +157,7 @@ class TimeWindow():
             if start:
                 start_dekad:Dekad = time_dekad
                 end_dekad:Dekad = start_dekad + size - 1
-                if start_dekad.start != time:
+                if start_dekad.start.date() != time.date():
                     warnings.warn('The given time does not correspond to the start of a dekad. The window will start at the beginning of the dekad.')
             else:
                 end_dekad:Dekad = time_dekad
@@ -185,10 +189,12 @@ class TimeWindow():
                 Defaults to None.
 
         Returns:
-            int: The number of hours in the time window.
+            int|None: The number of hours in the time window, or None when
+                ``limit`` is not ``'min'`` or ``'max'`` for a variable-length unit.
 
         Raises:
-            ValueError: If limit is not specified for variable-length units.
+            ValueError: If a limit is omitted for a variable-length unit ('m',
+                'y', or 't').
 
         Examples:
             >>> TimeWindow(3, 'd').to_hours()
@@ -270,9 +276,11 @@ class TimeWindow():
         return this_hours > other_hours
 
     def __le__(self, other: 'TimeWindow'):
+        """Return whether this window is shorter under conservative comparison or equal."""
         return self < other or self == other
     
     def __ge__(self, other: 'TimeWindow'):
+        """Return whether this window is longer under conservative comparison or equal."""
         return self > other or self == other
     
     def __add__(self,  other: 'TimeWindow'):

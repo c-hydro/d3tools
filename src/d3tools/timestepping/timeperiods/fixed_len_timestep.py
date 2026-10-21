@@ -41,6 +41,7 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
     """
 
     def __init__(self, year: int, step: int, length: float):
+        """Initialize a timestep by year, sequential step number, and length in days."""
         self.year: int = year
         self.step: int = step       # step is the number of day (DOY) or hour in the year
         self.length: float = length # length of the timestp in days
@@ -151,17 +152,17 @@ class FixedLenTimeStep(TimeStep, ABC, metaclass=FixedLenTimeStepMeta):
     @staticmethod
     @abstractmethod
     def get_step_from_date(date: datetime.datetime):
-        """
-        Returns the step of the year for the given date.
-        """
+        """Return the 1-based step number containing ``date``."""
         raise NotImplementedError
 
     @abstractmethod
     def get_start(self):
+        """Return the start datetime for this timestep."""
         raise NotImplementedError
     
     @abstractmethod
     def get_end(self):
+        """Return the end datetime for this timestep."""
         raise NotImplementedError
 
 class Day(FixedLenTimeStep):
@@ -201,12 +202,15 @@ class Day(FixedLenTimeStep):
 
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
+        """Return the day of year containing ``date``."""
         return date.timetuple().tm_yday
 
     def get_start(self):
+        """Return midnight at the start of this day number in the year."""
         return datetime.datetime(self.year, 1, 1) + datetime.timedelta(days=self.step - 1)
 
     def get_end(self):
+        """Return 23:59:59 on this day number in the year."""
         return datetime.datetime(self.year, 1, 1) + datetime.timedelta(days=self.step, seconds=-1)
     
     @property
@@ -225,6 +229,7 @@ class Day(FixedLenTimeStep):
         return self.start.day
 
     def __repr__(self):
+        """Return the class name and calendar date for this day."""
         return f'{self.__class__.__name__} ({self.start:%Y%m%d})'
     
 class Hour(FixedLenTimeStep):
@@ -253,12 +258,15 @@ class Hour(FixedLenTimeStep):
     
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
+        """Return the 1-based hour number containing ``date``."""
         return (date.timetuple().tm_yday - 1) * 24 + date.hour + 1
 
     def get_start(self):
+        """Return the start datetime of this hour number in the year."""
         return datetime.datetime(self.year, 1, 1) + datetime.timedelta(hours=self.step - 1)
 
     def get_end(self):
+        """Return 59:59 on the hour represented by this step."""
         return datetime.datetime(self.year, 1, 1) + datetime.timedelta(hours=self.step, seconds=-1)
     
     @property
@@ -269,7 +277,8 @@ class Hour(FixedLenTimeStep):
     @property
     def day_of_year(self):
         """Day of year containing this hour."""
-        return round(self.step/24) + 1
+        return (self.step - 1) // 24 + 1
     
     def __repr__(self):
+        """Return the class name and formatted start and end times."""
         return f'{self.__class__.__name__} ({self.start:%Y%m%d %H%M}-{self.end:%H%M})'

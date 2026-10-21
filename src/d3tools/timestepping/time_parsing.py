@@ -10,10 +10,9 @@ def get_date_from_str(str: str, format: None|str = None, end = False) -> dt.date
     """Parse a string into a datetime object, trying multiple common formats.
 
     This function attempts to parse a date string using a variety of common formats.
-    If no specific format is provided, it tries formats like ISO 8601, European
-    date formats, and others. The function also supports end-of-period adjustment,
-    which sets the time to the last second/minute/hour if those components are not
-    specified in the input string.
+    If no specific format is provided, it tries the formats listed below. The
+    function also supports end-of-period adjustment, setting any unspecified
+    hour, minute, or second component to its maximum value.
 
     Args:
         str (str): The date string to parse.
