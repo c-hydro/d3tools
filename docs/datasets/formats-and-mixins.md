@@ -34,21 +34,16 @@ They also provide format-aware validation, metadata handling, and file I/O.
 These hooks are implementation details; application code should use
 `get_data()` and `write_data()`.
 
-## Format Keywords and Mixins
+## Format Mixins
 
-These are the `format` keywords accepted by the Dataset factory and the mixin
-selected for each one:
+The Dataset factory selects a mixin from the configured format. `RasterMixin`
+handles raster and gridded data, `TableMixin` handles tables, `VectorMixin`
+handles vector data, `StructuredTextMixin` handles JSON, `PlainTextMixin`
+handles plain text and log files, and `FileMixin` handles generic files without
+format processing. Accepted format values and extension detection are listed in
+[Dataset Configuration](../configuration/datasets.md#additional-options).
 
-| `format` keyword | Mixin | Data family |
-|---|---|---|
-| `netcdf`, `geotiff` | `RasterMixin` | Raster and gridded data |
-| `csv`, `parquet` | `TableMixin` | Tables and data frames |
-| `shp`, `geojson` | `VectorMixin` | Vector and geometry data |
-| `json` | `StructuredTextMixin` | JSON data |
-| `txt`, `log` | `PlainTextMixin` | Plain text and log files |
-| `file` | `FileMixin` | Generic files without format processing |
-
-The `format` value can be supplied explicitly in a Dataset definition:
+The `format` value can also be supplied explicitly in a Dataset definition:
 
 ```json
 {
@@ -57,12 +52,6 @@ The `format` value can be supplied explicitly in a Dataset definition:
     "key_pattern": "/data/results.parquet"
 }
 ```
-
-When `format` is omitted, d3tools detects it from the key pattern. `.tif` and
-`.tiff` map to `geotiff`, `.nc` maps to `netcdf`, and common image/document
-extensions such as `.png`, `.pdf`, `.jpg`, and `.jpeg` map to `file`. Other
-extensions must match one of the keywords in the table; otherwise format
-detection raises `ValueError`.
 
 ## Raster Templates
 

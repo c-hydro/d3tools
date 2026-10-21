@@ -87,9 +87,10 @@ Explicitly pass `file_version` to read or write a particular version.
 
 ## Tiles
 
-A `{tile}` placeholder marks tiled data. Supply `tile_names` as a list or as a
-file containing one tile name per line. The dataset exposes `tile_names`,
-`ntiles`, `has_tiles`, and `find_tiles()` for tile-aware workflows.
+A `{tile}` placeholder marks tiled data. Configure explicit tile names in
+[Dataset Configuration](../configuration/datasets.md#additional-options). The
+dataset exposes `tile_names`, `ntiles`, `has_tiles`, and `find_tiles()` for
+tile-aware workflows.
 
 ## Relationships and Updates
 

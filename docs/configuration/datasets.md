@@ -169,8 +169,6 @@ retain it. This read-retention behavior is not covered by tests.
 If `password` is omitted, d3tools uses key authentication. When `private_key` is
 provided, it loads that RSA or Ed25519 key file. Otherwise, it searches `~/.ssh`
 for private key filenames containing `rsa` or `ed25519` and tries those keys.
-This authentication behavior is not covered by tests.
-
 Password authentication:
 
 ```json
@@ -199,6 +197,21 @@ Use environment variables for passwords and usernames where appropriate, and
 never hardcode passwords in a shared configuration file. The current
 implementation does not read SSH configuration or authenticate through an SSH
 agent; provide the username and, when needed, the private-key path explicitly.
+
+The tests exercise loading an explicit RSA or Ed25519 private key. Automatic
+key discovery in `~/.ssh` and password-based authentication are not covered by
+those tests.
+
+## Additional Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `format` | string | Inferred from `key_pattern` | Selects the data format. Accepted values are `netcdf`, `geotiff`, `csv`, `parquet`, `shp`, `geojson`, `json`, `txt`, `log`, and `file`. `.tif`/`.tiff` infer `geotiff`, `.nc` infers `netcdf`, and `.png`, `.pdf`, `.jpg`, and `.jpeg` infer `file`. Other extensions must match an accepted value or format detection raises `ValueError`. |
+| `tile_names` | list of strings or text-file path | Discovered from available keys | For patterns containing `{tile}`, supplies the tile names to use. A text file contains one name per line. See [Dataset Concepts](../datasets/concepts.md#tiles-versions-and-names). |
+| `nan_value` | value | `null` | Raster datasets use this value when converting missing values on read and write. |
+
+See [Dataset Formats and Mixins](../datasets/formats-and-mixins.md) for format
+processing details.
 
 ## Defaults
 

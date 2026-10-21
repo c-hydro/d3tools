@@ -68,8 +68,10 @@ how these properties affect dataset queries.
 
 ## Tiles, Versions, and Names
 
-`{tile}` identifies tiled data. `tile_names` may be supplied as a list or as a
-file containing tile names.
+`{tile}` identifies tiled data. Configure explicit tile names as described in
+[Dataset Configuration](../configuration/datasets.md#additional-options).
+At runtime, `tile_names` reports the configured names or discovers them from
+available keys.
 
 `{file_version}` identifies versioned files. When a version is omitted, reads
 and availability checks discover the available version tags and select the
