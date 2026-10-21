@@ -10,8 +10,7 @@ Dataset logging is handled by `DatasetLogManager`.
 
 ## Configuration
 
-Add `log` to a dataset definition. A string is treated as the output path for
-the log dataset:
+Set the Dataset `log` option to a path string or a mapping with a `file` destination. For example, a Dataset definition can include:
 
 ```json
 {
@@ -24,8 +23,6 @@ the log dataset:
     }
 }
 ```
-
-A mapping must contain `file`; additional keys are retained as manager options:
 
 ```json
 {
@@ -41,50 +38,36 @@ A mapping must contain `file`; additional keys are retained as manager options:
 }
 ```
 
-The log path is parsed as a Dataset configuration, so its format is inferred
-from the path. JSON output is useful for structured log entries; a `.txt` path
-produces a delimited text entry. An already-created Dataset or log manager may
-also be supplied through the Python API.
+A mapping must contain `file`; other keys are retained in the manager's `options` dictionary, but their behavior is not specified here. An already-created log manager can also be supplied through the Python API. See [Dataset Configuration](../configuration/datasets.md) for the owning Dataset schema, storage types, and complete configuration syntax.
 
-## When Logging Happens
+The path is parsed as a Dataset destination. For output format `json`, the manager passes a dictionary entry to the output Dataset. For `txt`, it writes `key: value` lines between `---` delimiters. Other Dataset formats receive the dictionary unchanged and must support it. Entries are written with `append=True`.
 
-`Dataset.write_data()` performs the normal validation, formatting, metadata, and
-storage write first. If a dataset log manager is configured, it then creates a
-log entry and writes it to the configured output Dataset with `append=True`.
-Reading data does not create a dataset log entry.
+## When Entries Are Written
 
-Dataset copies preserve the configured log manager. Dataset updates preserve the
-manager while updating the Dataset's runtime tags and key pattern.
+`Dataset.write_data()` first validates, formats, annotates, and writes the output data. If logging is configured, it then creates and writes the log entry. Reading data does not produce an entry. If the configured log output cannot be written, the data write has already occurred.
 
-## Log Contents
+Dataset copies preserve the configured log manager. Updating a Dataset preserves the manager while updating the Dataset's runtime tags and key pattern.
 
-A log entry can include:
+## Entry Fields
 
-- the dataset name;
-- the source key, when available;
-- the output time;
-- the time at which the data was produced;
-- metadata supplied during the write;
-- the thumbnail path, if a thumbnail was generated;
-- quality checks for the written values.
+Entries can contain:
 
-Quality checks include maximum and minimum values, NaN counts and percentages,
-zero counts and percentages, the sum, and the sum of absolute values. For an
-`xarray.Dataset`, checks are recorded for each data variable.
+| Field | Value |
+|---|---|
+| `dataset` | Dataset name. |
+| `source_key` | Output key passed by the Dataset write path, unless replaced by data metadata. |
+| `thumbnail` | Thumbnail path when supplied by the write path. |
+| `time` | Output time when represented by a supported value. |
+| `time_produced` | Existing data metadata value or the current local timestamp. |
+| Additional fields | Supported scalar values from write context and data metadata. |
+| `data_checks` | Quality-check results described below. |
 
-## Output Formats
+Values are retained when they are supported time objects, datetimes, non-empty strings not beginning with `__`, integers, or floats. Integers and floats are serialized as strings; floats are rounded to four decimal places. Unsupported values and `None` are omitted, so optional fields such as `time` and `thumbnail` are not guaranteed to appear.
 
-The manager writes structured entries when the output Dataset format is JSON.
-For text output it writes a block containing `key: value` lines delimited by
-`---`. Other formats receive the log dictionary and must be supported by the
-output Dataset format layer.
+For an `xarray.DataArray`, `data_checks` includes `max`, `min`, `nans`, `nans_pc`, `zeros`, `zeros_pc`, `sum`, and `sum_abs`. NaNs are ignored for extrema and sums. `nans_pc` uses the total number of array elements as its denominator; `zeros_pc` uses the number of non-NaN elements. If all elements are NaN, `zeros_pc` is set to zero. Metrics other than integer counts are rounded to four decimal places and serialized as strings in the entry.
 
-## Dataset Logging versus Workflow Logging
+For an `xarray.Dataset`, checks are calculated for each data variable and flattened into keys such as `temperature_max` and `temperature_nans`.
 
-Use dataset logging when the record belongs to a particular data product and
-should travel with its write operation. Use workflow logging when the record is
-about workflow execution, section timing, or orchestration.
+## Ownership
 
-See [Logging Overview](overview.md) for workflow logging and
-[Dataset Configuration](../configuration/datasets.md) for the complete dataset
-configuration syntax.
+Dataset logging details belong here; Dataset schema, storage options, and complete examples belong to [Dataset Configuration](../configuration/datasets.md).
