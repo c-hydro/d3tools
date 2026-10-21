@@ -1,5 +1,5 @@
 ---
-description: "Use to plan both d3tools guides before writing: reads all existing documentation and real configurations, then writes the full index of the User Guide and Developer Guide with include/keep-out notes and a mapping of every existing section."
+description: "Use to plan both d3tools guides before writing: reads existing documentation, the reference summary, and open questions, then writes the full index of the User Guide and Developer Guide with include/keep-out notes and a mapping of every existing section."
 name: "docs-guide-planner"
 tools: [read, search, edit, todo]
 argument-hint: "plan, or revise the outline from maintainer feedback"
@@ -23,9 +23,11 @@ Developer Guide, or to a short troubleshooting note when it explains a visible f
 1. Every page under `docs/` except `docs/developer/reference/`, and `mkdocs.yml`.
 2. `_working_summaries/documentation_reference.md`.
 3. Existing open-question files in `documentation_audits/`.
-4. Real configurations: JSON under the DOOR, DAM, DRYES `workflow_examples/` directories
-   and `/home/luca/Documents/CIMA_code/workspace_env/prod_workflows/`. Use them to judge
-   which features operators actually configure.
+
+Do not read workflow examples or production configurations during planning. Guide
+writers inspect selected configurations when writing concrete examples. If the existing
+documentation leaves configuration details unclear, record the uncertainty for the
+writers instead of investigating configuration repositories.
 
 Do not read source or tests. Do not edit anything except the outline file. Never run
 `mkdocs`.

@@ -86,8 +86,10 @@ User Guide journeys (depth limited to what an operator configures):
 
 - `documentation_reference.md` contains current open findings and decisions. It is not a
   replacement for verification.
-- The planner reads existing docs, `documentation_reference.md`, open-question files,
-  and real configurations; it does not read source/tests.
+- The planner reads existing docs, `documentation_reference.md` and open-question files;
+  it does not read source/tests, workflow examples, or production
+  configurations. Record unclear configuration details for the writers rather than
+  investigating configuration repositories during planning.
 - Developer writers use existing docs and the docstrings in `src/d3tools/` (read-only;
   `docs/developer/reference/*.md` only contain mkdocstrings directives). They may read
   tests to confirm a recipe.
