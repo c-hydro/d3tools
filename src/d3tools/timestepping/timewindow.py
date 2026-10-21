@@ -158,7 +158,7 @@ class TimeWindow():
             else:
                 end_dekad:Dekad = time_dekad
                 start_dekad:Dekad = end_dekad - size + 1
-                if end_dekad.end != time:
+                if end_dekad.end.date() != time.date():
                     warnings.warn('The given time does not correspond to the end of a dekad. The window will end at the end of the dekad.')
             time_start:datetime.datetime = start_dekad.start
             time_end:datetime.datetime = end_dekad.end
