@@ -90,7 +90,7 @@ def parse_line(line: str) -> tuple:
     if len(parts) < 6:
         raise ValueError(f'Invalid line format {line}. Expected 6 values separated by commas')
 
-    position, color, label = parts[0], parts[1:5], '.'.join(parts[5:])
+    position, color, label = parts[0], parts[1:5], ','.join(parts[5:])
 
     # ensure position is a valid number or 'inf'
     if position != 'inf':

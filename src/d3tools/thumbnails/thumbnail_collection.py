@@ -54,36 +54,47 @@ class ThumbnailCollection:
         Args:
             file_out: Destination path ending in ``.png`` or ``.pdf``.
             grid (tuple[int, int] | None): Number of columns and rows for PNG output.
+
+        Raises:
+            ValueError: If no eligible thumbnail images are available to combine.
         """
 
         list_of_thumbnails = [thumbnail.thumbnail_file for thumbnail in self.thumbnails]
         os.makedirs(os.path.dirname(file_out), exist_ok=True)
 
         if file_out.endswith(".pdf"):
+            pdf_thumbnails = [
+                thumbnail
+                for thumbnail in list_of_thumbnails
+                if os.path.exists(thumbnail) and thumbnail.endswith(".png")
+            ]
+            if not pdf_thumbnails:
+                raise ValueError("No eligible PNG thumbnails are available to combine.")
+
             with open(file_out, "wb") as f:
                 pdf_bytes = []
-                for thumbnail in list_of_thumbnails:
-                    if not os.path.exists(thumbnail):
-                        continue
-                    if thumbnail.endswith(".png"):
-                        # Open the image file and convert it to RGB
-                        img = Image.open(thumbnail).convert("RGB")
-                        # Convert the Image object to bytes
-                        byte_arr = io.BytesIO()
-                        img.save(byte_arr, format='PNG')
-                        byte_arr = byte_arr.getvalue()
-                        pdf_bytes.append(byte_arr)
+                for thumbnail in pdf_thumbnails:
+                    # Open the image file and convert it to RGB
+                    img = Image.open(thumbnail).convert("RGB")
+                    # Convert the Image object to bytes
+                    byte_arr = io.BytesIO()
+                    img.save(byte_arr, format='PNG')
+                    byte_arr = byte_arr.getvalue()
+                    pdf_bytes.append(byte_arr)
                 f.write(img2pdf.convert(pdf_bytes))
 
         elif file_out.endswith(".png"):
+            images = [Image.open(thumbnail).convert("RGB") for thumbnail in list_of_thumbnails if os.path.exists(thumbnail)]
+            if not images:
+                raise ValueError("No thumbnail images are available to combine.")
+
             if grid is None:
-                n = len(list_of_thumbnails)
+                n = len(images)
                 grid = [1,1]
                 grid[0] = int(np.ceil(np.sqrt(n)))
                 grid[1] = int(np.ceil(n / grid[0]))
                 grid = tuple(grid)
 
-            images = [Image.open(thumbnail).convert("RGB") for thumbnail in list_of_thumbnails if os.path.exists(thumbnail)]
             widths, heights = zip(*(i.size for i in images))
 
             # check that all images have the same height and width (within a tolerance)
