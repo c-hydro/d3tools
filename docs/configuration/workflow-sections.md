@@ -58,7 +58,7 @@ When a workflow-level range is supplied, that same range is passed to each secti
 
 ## Explicit workflow_sections
 
-`workflow_sections` is an internal parsed-workflow field, not a user-authored JSON format. Do not define it directly in workflow configuration; the parser collects sections from ordinary top-level section keys such as `download`, `process`, and `calculate`. See [Section Aliases](#section-aliases) for supported names and [Section Order and Lists](#section-order-and-lists) for list behavior.
+See [Developer Guide — Section construction, dispatch, and engine boundary](../developer/workflow-lifecycle.md#section-construction-dispatch-and-engine-boundary).
 
 ## Logging
 

@@ -2,6 +2,28 @@ site_name: d3tools
 repo_url: https://github.com/c-hydro/d3tools
 docs_dir: docs
 
+nav:
+  - Developer Guide:
+      - Overview: developer/index.md
+      - Architecture: developer/architecture.md
+      - Workflow lifecycle: developer/workflow-lifecycle.md
+      - Configuration internals: developer/configuration.md
+      - Datasets: developer/datasets.md
+      - Python APIs: developer/python-apis.md
+      - Extensions and contributions: developer/extensions.md
+      - API reference:
+          - Cases: developer/reference/cases.md
+          - Configuration: developer/reference/config.md
+          - Data: developer/reference/data.md
+          - Errors: developer/reference/errors.md
+          - Exit: developer/reference/exit.md
+          - Logging: developer/reference/logging.md
+          - Notification: developer/reference/notification.md
+          - Parsing: developer/reference/parse.md
+          - Spatial: developer/reference/spatial.md
+          - Thumbnails: developer/reference/thumbnails.md
+          - Timestepping: developer/reference/timestepping.md
+
 theme:
   name: material
 

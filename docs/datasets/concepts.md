@@ -44,16 +44,7 @@ daily = Dataset.from_options({
 
 ## Runtime Tags
 
-Tags passed to methods such as `get_key()`, `get_data()`, and `write_data()`
-are runtime values used to render the key pattern. They are distinct from the
-top-level configuration `tags` mapping and from dataset-reference update tags.
-
-```python
-key = daily.get_key("2024-01-15", variable="temperature")
-```
-
-See [Configuration Tags](../configuration/tags.md) for the three tag mechanisms
-used in workflow configuration.
+See [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering).
 
 ## Time Properties
 
@@ -87,7 +78,4 @@ basename of `key_pattern` after removing its extension and common date fields.
 
 ## Format and Storage
 
-The storage backend determines how keys are reached; the format determines how
-bytes become application data. Format-specific behaviour is added through mixins
-selected from the dataset format. See [Storage Backends](storage-backends.md)
-and [Formats and Mixins](formats-and-mixins.md).
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).

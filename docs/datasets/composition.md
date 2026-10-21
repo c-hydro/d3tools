@@ -3,50 +3,19 @@
 Datasets can be copied, updated, connected to parent datasets, or given a
 fallback. These features let a workflow describe derived data without
 duplicating storage configuration.
+For Python object behavior, see [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering).
 
 ## Updates
 
-`update()` renders placeholders in the dataset `name` and `key_pattern` and
-records the supplied values in the returned dataset's `tags` mapping:
-
-```python
-updated = dataset.update(variable="temperature", region="europe")
-```
-
-The default is non-mutating. Use `in_place=True` to update the existing object;
-that form returns `None`. `preserve_temporal` and `preserve_spatial` control
-whether temporal and format-specific spatial state is carried to the copy.
-
-Dataset-reference assignments use the same mechanism:
-
-```json
-{
-    "destination": "{DATASETS.base_data, variable='temperature'}"
-}
-```
-
-See [Configuration Tags](../configuration/tags.md#dataset-update-tags) for the
-configuration syntax.
+See [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering).
 
 ## Copying
 
-`copy()` creates a new Dataset instance, preserving temporal and spatial state
-by default. It does not duplicate files or objects in local or remote storage,
-and it shares configured log and thumbnail managers with the source.
-
-```python
-copy = dataset.copy()
-```
+See [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering).
 
 ## Parents
 
-A dataset can be composed from parent datasets with `set_parents(parents, fn)`.
-When the requested data is not present in the main dataset, `get_data()` can
-create it from the parents using the supplied function. Parent relationships
-are propagated when a dataset is updated.
-
-The exact parent function depends on the data product and should be documented
-by the workflow or application that creates it.
+See [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering).
 
 ## Fallbacks
 
@@ -66,8 +35,7 @@ option and is also updated when the containing dataset is updated.
 }
 ```
 
-String fallback definitions are interpreted as `key_pattern` values and inherit
-relevant settings from the parent dataset.
+See [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering) for Python fallback construction behavior.
 
 ## Versions
 
@@ -94,7 +62,4 @@ tile-aware workflows.
 
 ## Relationships and Updates
 
-Updates propagate through parents and fallbacks so that a runtime tag such as
-`region="europe"` resolves consistently across a composed dataset tree. Spatial
-state such as raster templates and tile names can be preserved with the default
-`preserve_spatial=True` behaviour.
+See [Developer Guide — Construction, composition, and key rendering](../developer/datasets.md#construction-composition-and-key-rendering) for propagation and preservation behavior.

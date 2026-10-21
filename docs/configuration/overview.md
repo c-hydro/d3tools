@@ -104,26 +104,7 @@ additional text before or after it.
 
 ## Parsing Pipeline
 
-`parse_options()` runs these stages, in this exact order:
-
-1. Any `env` top-level key is applied to `os.environ` directly (before anything else).
-2. `resolve_env` — resolve `{ENV.VAR}` placeholders.
-3. `resolve_now` — resolve `{now:...}` placeholders (except `workflow_log.file`).
-4. `resolve_tags` — resolve tags recursively against themselves, then substitute
-   them everywhere.
-5. `build_datasets` — turn the `datasets` object into `Dataset` instances
-   (applying `__defaults__`).
-6. `resolve_dataset_refs` — substitute dataset placeholders with the built
-   `Dataset` objects.
-7. `prepare_workflow_log` — normalise `workflow_log` (string → `{"file": ...}`,
-   validate known keys).
-8. `collect_workflow_sections` — scan remaining top-level keys, resolve aliases,
-   and build `WorkflowSection` objects (the underlying door/dam/dryes objects
-   are instantiated by default).
-
-This means environment variables can be used inside tags, and both can be used
-inside dataset definitions — but not the other way around (tags cannot reference
-datasets, for example).
+See the [Developer Guide — Configuration contract and parser stages](../developer/configuration.md#configuration-contract-and-parser-stages).
 
 ## Next Steps
 

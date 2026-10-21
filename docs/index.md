@@ -18,21 +18,7 @@
 
 ## Architecture Overview
 
-```
-d3tools (orchestration layer)
-├── DOOR    - Data downloaders (ERA5, CHIRPS, MODIS, etc.)
-├── DAM     - Data processing workflows
-└── DRYES   - Drought indices calculation
-```
-
-d3tools provides:
-- **WorkflowDefinition**: Runnable workflow container
-- **Options**: Enhanced configuration mapping
-- **WorkflowSection**: Engine-resolved section entries
-
-Detailed behavior is owned by the corresponding topic pages: [configuration](configuration/overview.md),
-[datasets](configuration/datasets.md), [timestepping](timestepping.md), and
-[logging](logging/overview.md).
+See the [Developer Guide architecture page](developer/architecture.md).
 
 ## Documentation Structure
 
@@ -80,7 +66,8 @@ Detailed behavior is owned by the corresponding topic pages: [configuration](con
 
 ## Contributing
 
-d3tools is maintained by CIMA Research Foundation. For questions or contributions, please refer to the repository maintainers.
+For extension seams and contributor checks, see
+[Developer Guide — Extensions and contributions](developer/extensions.md).
 
 ## Licence
 

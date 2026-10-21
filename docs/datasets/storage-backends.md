@@ -1,8 +1,6 @@
 # Dataset Storage Backends
 
-The Dataset API separates storage access from data-format processing. The
-storage backend resolves keys and performs reads, writes, discovery, and removal;
-format mixins process the data itself.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).
 
 ## Local
 
@@ -32,63 +30,20 @@ filename components.
 
 ## Memory
 
-`MemoryDataset` stores data in memory and is useful for tests or intermediate
-results. It requires a `key_pattern`. `keep_after_reading` defaults to `false`,
-so reading an item removes it; set it to `true` to retain the item. This
-read-retention behavior is not covered by tests. The workflow configuration
-option is described in [Dataset Configuration](../configuration/datasets.md#in-memory-data).
-
-```python
-from d3tools.data import MemoryDataset
-
-dataset = MemoryDataset(
-    key_pattern="memory_{tile}.txt",
-    keep_after_reading=True,
-)
-```
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle) for backend behavior and the limitation on read-retention coverage; operator options belong to [Dataset Configuration](../configuration/datasets.md).
 
 ## S3
 
-`S3Dataset` requires `key_pattern` and `bucket_name`. `region_name`,
-`profile_name`, and `tmp_dir` are optional. The backend uses boto3 and the
-standard AWS credential chain.
-
-```json
-{
-    "type": "s3",
-    "bucket_name": "my-bucket",
-    "key_pattern": "data/result_%Y%m%d.tif",
-    "region_name": "us-east-1"
-}
-```
-
-`OVHS3Dataset` extends the S3 backend with a required `endpoint_url`.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle) for backend responsibilities; operator options belong to [Dataset Configuration](../configuration/datasets.md).
 
 ## SFTP
 
-`SFTPDataset` requires `key_pattern`, `host`, and `username`. `password` is
-optional. When no password is supplied, the implementation can use an explicit
-RSA or Ed25519 `private_key`, or search `~/.ssh` for matching private-key
-filenames. It does not automatically use SSH configuration or an SSH agent.
-
-See the SFTP section in [Dataset Configuration](../configuration/datasets.md#sftp)
-for authentication examples.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle) for the backend boundary; operator options belong to [Dataset Configuration](../configuration/datasets.md).
 
 ## Remote Caching
 
-Remote datasets download data into a temporary local directory before format
-processing and upload written data back to the remote backend. `tmp_dir` can be
-used to choose the temporary directory. Remote datasets also share cached
-connections and preserve the connection when updated or copied.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).
 
 ## Backend Contract
 
-Each backend implements the storage operations needed by Dataset:
-
-- read and write a concrete key;
-- remove a key;
-- check whether a key or prefix exists;
-- walk a prefix for catalogue discovery.
-
-Application code should normally use the public Dataset methods rather than
-calling backend methods directly.
+See [Developer Guide — Extend supported dataset seams](../developer/extensions.md#extend-supported-dataset-seams).

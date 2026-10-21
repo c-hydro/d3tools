@@ -1,8 +1,6 @@
 # Dataset Formats and Mixins
 
-A Dataset has both a storage type and a data format. The storage type describes
-where data lives; the format describes how it is read, validated, transformed,
-and written.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).
 
 ## Format Detection
 
@@ -18,66 +16,24 @@ format.
 }
 ```
 
-The Dataset class dynamically combines the storage class with the appropriate
-format mixin.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle) for the format-mixin lifecycle.
 
 ## Read and Write Hooks
 
-Format mixins participate in the Dataset lifecycle:
-
-```text
-read storage -> _format_after_read -> application data
-application data -> _format_before_write -> write storage
-```
-
-They also provide format-aware validation, metadata handling, and file I/O.
-These hooks are implementation details; application code should use
-`get_data()` and `write_data()`.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).
 
 ## Format Mixins
 
-The Dataset factory selects a mixin from the configured format. `RasterMixin`
-handles raster and gridded data, `TableMixin` handles tables, `VectorMixin`
-handles vector data, `StructuredTextMixin` handles JSON, `PlainTextMixin`
-handles plain text and log files, and `FileMixin` handles generic files without
-format processing. Accepted format values and extension detection are listed in
-[Dataset Configuration](../configuration/datasets.md#additional-options).
-
-The `format` value can also be supplied explicitly in a Dataset definition:
-
-```json
-{
-    "type": "local",
-    "format": "parquet",
-    "key_pattern": "/data/results.parquet"
-}
-```
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle) for mixin responsibilities; operator format selection belongs to [Dataset Configuration](../configuration/datasets.md).
 
 ## Raster Templates
 
-Raster datasets initialise a `TemplateManager`. Templates preserve or apply
-spatial properties such as dimensions, coordinates, transform, and CRS during
-format processing. Raster update operations preserve the template manager and
-tile names when `preserve_spatial=True`.
-
-The template-related methods are available on raster datasets and are used by
-the raster mixin during reads and writes. See
-[Catalogues and Templates](catalogues-and-templates.md) for the template role in
-key and spatial handling.
+See [Developer Guide — Spatial templates and dataset integration](../developer/datasets.md#spatial-templates-and-dataset-integration).
 
 ## Metadata and Validation
 
-Format mixins can implement:
-
-- `validate_data()` before writing;
-- `get_metadata()` and `set_metadata()`;
-- format-specific data conversion on read and write.
-
-`Dataset.write_data()` combines supplied metadata with metadata produced by the
-format layer before storing the result.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).
 
 ## `as_is`
 
-Passing `as_is=True` to `get_data()` or `write_data()` skips normal format
-conversion where supported. This is an advanced option: use it only when the
-input or output already matches the backend's expected representation.
+See [Developer Guide — Storage backends and format lifecycle](../developer/datasets.md#storage-backends-and-format-lifecycle).

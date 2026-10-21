@@ -53,18 +53,4 @@ After section execution, the workflow writes structured state including its name
 
 ## Python Context Managers
 
-The manager can also track Python code outside `WorkflowDefinition.run()`:
-
-```python
-from d3tools.logging import WorkflowLogManager
-
-manager = WorkflowLogManager(log_file="logs/custom.log", console=False)
-try:
-    with manager.workflow_execution("custom_task"):
-        with manager.section_execution("prepare", engine="custom"):
-            print("Preparing data")
-finally:
-    manager.close()
-```
-
-The context managers log start and completion, or log the exception type and message before re-raising an exception. `close()` removes and closes the manager's handlers; it is also registered for process exit.
+See [Developer Guide — Logging, exceptions, and cleanup lifecycle](../developer/workflow-lifecycle.md#logging-exceptions-and-cleanup-lifecycle).

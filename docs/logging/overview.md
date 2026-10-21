@@ -47,7 +47,7 @@ For a mapping, `format` defaults to `simple` for both handlers. The direct `Work
 
 `WorkflowDefinition.run()` logs a workflow start and either successful completion or failure. Each workflow section logs its start and completion or failure, including elapsed time; a supplied engine name is included in the section start message. Exceptions are logged and re-raised. If section run results are available, the workflow can also write them to `run_state_file`.
 
-The manager attaches its handlers to the `d3tools`, `door`, `dam`, and `dryes` package loggers. These package loggers receive the handlers directly; they do not inherit them as children of `d3tools`. Python loggers below those package names can propagate to their corresponding package logger.
+For manager ownership, logger attachment, and Python execution contexts, see [Developer Guide — Logging, exceptions, and cleanup lifecycle](../developer/workflow-lifecycle.md#logging-exceptions-and-cleanup-lifecycle).
 
 ## Formats
 

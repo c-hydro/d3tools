@@ -70,13 +70,7 @@ export DATA_ROOT="/mnt/data"
 
 ### Python, before loading the workflow
 
-```python
-import os
-os.environ["ERA5_API_KEY"] = "your-api-key"
-
-from d3tools import WorkflowDefinition
-wf = WorkflowDefinition.load("workflow.json")
-```
+See [Developer Guide — Standalone parsing and Python integration](../developer/configuration.md#standalone-parsing-and-python-integration).
 
 ### `.env` files
 

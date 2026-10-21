@@ -44,30 +44,12 @@ The path is parsed as a Dataset destination. For output format `json`, the manag
 
 ## When Entries Are Written
 
-`Dataset.write_data()` first validates, formats, annotates, and writes the output data. If logging is configured, it then creates and writes the log entry. Reading data does not produce an entry. If the configured log output cannot be written, the data write has already occurred.
-
-Dataset copies preserve the configured log manager. Updating a Dataset preserves the manager while updating the Dataset's runtime tags and key pattern.
+See [Developer Guide — Dataset logging and thumbnails](../developer/datasets.md#dataset-logging-and-thumbnails).
 
 ## Entry Fields
 
-Entries can contain:
-
-| Field | Value |
-|---|---|
-| `dataset` | Dataset name. |
-| `source_key` | Output key passed by the Dataset write path, unless replaced by data metadata. |
-| `thumbnail` | Thumbnail path when supplied by the write path. |
-| `time` | Output time when represented by a supported value. |
-| `time_produced` | Existing data metadata value or the current local timestamp. |
-| Additional fields | Supported scalar values from write context and data metadata. |
-| `data_checks` | Quality-check results described below. |
-
-Values are retained when they are supported time objects, datetimes, non-empty strings not beginning with `__`, integers, or floats. Integers and floats are serialized as strings; floats are rounded to four decimal places. Unsupported values and `None` are omitted, so optional fields such as `time` and `thumbnail` are not guaranteed to appear.
-
-For an `xarray.DataArray`, `data_checks` includes `max`, `min`, `nans`, `nans_pc`, `zeros`, `zeros_pc`, `sum`, and `sum_abs`. NaNs are ignored for extrema and sums. `nans_pc` uses the total number of array elements as its denominator; `zeros_pc` uses the number of non-NaN elements. If all elements are NaN, `zeros_pc` is set to zero. Metrics other than integer counts are rounded to four decimal places and serialized as strings in the entry.
-
-For an `xarray.Dataset`, checks are calculated for each data variable and flattened into keys such as `temperature_max` and `temperature_nans`.
+See [Developer Guide — Dataset logging and thumbnails](../developer/datasets.md#dataset-logging-and-thumbnails).
 
 ## Ownership
 
-Dataset logging details belong here; Dataset schema, storage options, and complete examples belong to [Dataset Configuration](../configuration/datasets.md).
+See [Developer Guide — Dataset logging and thumbnails](../developer/datasets.md#dataset-logging-and-thumbnails) for write lifecycle and entry behavior.
