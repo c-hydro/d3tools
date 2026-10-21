@@ -2,6 +2,11 @@
 
 The module maps section-name aliases to engine names and provides the
 ``WorkflowSection`` container used by the configuration parsing pipeline.
+
+``WORKFLOW_SECTION_ALIASES`` maps ``door_downloader``, ``downloader``,
+``download``, and ``ingest`` to ``door``; ``dam_workflow``, ``process``, and
+``publish`` to ``dam``; and ``dryes_index``, ``index``, and ``calculate`` to
+``dryes``.
 """
 
 from dataclasses import dataclass

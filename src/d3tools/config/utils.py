@@ -6,8 +6,15 @@ from .parsers import parse_times_from_run_option
 from ..timestepping import TimeRange
 
 def merge_dicts(*dicts) -> dict:
-    """
-    Merge any number of dictionaries recursively.
+    """Recursively merge dictionaries, with later values overwriting earlier ones.
+
+    Args:
+        *dicts: Dictionaries to merge in order. Nested mapping values are merged
+            recursively; non-mapping values from later dictionaries replace the
+            earlier value at the same key.
+
+    Returns:
+        A new dictionary containing the merged configuration.
     """
     merged_dict = {}
 
@@ -21,8 +28,17 @@ def merge_dicts(*dicts) -> dict:
     return merged_dict
 
 def load_jsons(*json_objects) -> dict:
-    """
-    Merge any number of JSON objects recursively.
+    """Load one or more JSON files and merge them into a single config dict.
+
+    Args:
+        *json_objects: Paths to JSON files. Each file is read in order and
+            merged using :func:`merge_dicts`.
+
+    Returns:
+        A single dictionary containing the merged JSON content.
+
+    Raises:
+        ValueError: If any input path does not end in ``.json``.
     """
     dicts = []
 
@@ -39,24 +55,20 @@ def load_jsons(*json_objects) -> dict:
 def get_timerange_from_run_state(
     times_from_run_option: Any
     ) -> Optional[TimeRange]:
-    
-    """
-    Read a section or workflow time range from a persisted run-state Dataset.
-    
+    """Read a saved workflow or section time range from a run-state dataset.
+
     Args:
-        times_from_run_option: Specification for the run-state file and optional section.
-            Can be either:
-            - A string: "section_name@file.json" or just "file.json"
-            - A dictionary with "file" and optional "section" keys
-            Both formats are parsed via parse_times_from_run_option().
-        
+        times_from_run_option: Either a string such as ``"section@file.json"`` or
+            ``"file.json"``, or a dict containing ``file`` and optional
+            ``section`` keys.
+
     Returns:
-        TimeRange for the specified section (if provided), or the workflow-level
-        timerange (if no section specified). Returns None if times are missing.
-        
-    Example:
-        time_range = get_timerange_from_run_state("download@prior_state.json")
-        time_range = get_timerange_from_run_state({"file": dataset_obj, "section": "download"})
+        The matching ``TimeRange`` from the persisted run state, or ``None``
+        when the state has no usable start/end values.
+
+    Example::
+        get_timerange_from_run_state("download@prior_state.json")
+        get_timerange_from_run_state({"file": dataset_obj, "section": "download"})
     """
     
     file, section_name = parse_times_from_run_option(times_from_run_option)

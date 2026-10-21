@@ -15,16 +15,17 @@ from ..errors import WorkflowEngineImportError
 # Create dataset_factory for nested dataset parsing
 # This allows manager configs to reference other datasets
 def dataset_factory(cfg, template_ds):
-    """Build a nested dataset using a template dataset's creation options.
+    """Build a nested dataset from a template dataset and a config fragment.
 
     Args:
-        cfg: Nested dataset options, or a string interpreted as its
-            ``key_pattern``.
-        template_ds: Dataset whose creation options provide defaults. Its
-            ``name`` is not inherited.
+        cfg: Nested dataset options, or a string interpreted as the
+            dataset ``key_pattern``.
+        template_ds: Template dataset providing default creation arguments.
+            The template's ``name`` is not inherited by the nested dataset.
 
     Returns:
-        The nested ``Dataset`` created from ``cfg`` and the template defaults.
+        A new ``Dataset`` instance configured from ``cfg`` and the template
+        defaults.
     """
 
     # use the type from parsed_config as default
@@ -54,7 +55,10 @@ def dataset_from_config(config: Union['Dataset', str, Dict[str, Any]], defaults:
             by ``config``.
         
     Returns:
-        A ``Dataset`` instance of the configured subclass.
+        The input ``Dataset`` unchanged when ``config`` is already a dataset;
+        otherwise, the constructed instance of the configured ``Dataset``
+        subclass. Parsed thumbnail, log, and fallback managers are attached
+        to newly constructed datasets.
         
     Example:
         >>> config = {
@@ -131,14 +135,17 @@ def _manager_from_config(config: Any, manager_type: str, dataset_factory: Callab
     return manager_class.from_dict(config, dataset_factory)
 
 def workflow_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Wrap a workflow configuration and invoke ``Options.parse``.
+    """Wrap a workflow configuration and delegate to ``Options.parse``.
 
     Args:
         config: Complete workflow configuration mapping.
 
+    Returns:
+        The value returned by the underlying ``parse`` method.
+
     Raises:
-        AttributeError: The current :class:`Options` implementation has no
-            ``parse`` method, so this function currently fails at that call.
+        AttributeError: If the wrapped options object does not provide a
+            ``parse`` method.
     """
     from .options import Options
     options = Options(config)

@@ -156,9 +156,12 @@ class WorkflowDefinition:
         - **dam** engine: calls ``run(time_range)``
         - **dryes** engine: calls ``compute(time_range)``
 
+        Returns:
+            ``None``. Section results are used internally for logging and
+            persisted run state; they are not returned to the caller.
+
         Raises:
-            TypeError: If a section does not have a recognised engine or
-                runnable workflow object.
+            TypeError: If a section has an unrecognised engine when executed.
 
         Side Effects:
             Executes sections in configuration order. If a logger is

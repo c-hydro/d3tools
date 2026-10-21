@@ -59,18 +59,18 @@ def resolve_tags(options: Any):
     return options.__class__(substitute_values(options, tags, rec=True))
 
 def resolve_now(options: Any):
-    """Resolve current-time placeholders recursively throughout options.
+    """Resolve ``{now}`` placeholders using the current wall-clock time.
 
-    A single current ``datetime`` value is used for all ``{now}`` references in
-    this call.
+    A single ``datetime`` value is used for all ``{now}`` references within the
+    supplied configuration in this call.
 
     Args:
         options: Mapping to process. Plain mappings are first wrapped in
             :class:`Options`.
 
     Returns:
-        An ``Options`` instance (or its subclass) with current-time references
-        substituted.
+        An ``Options`` instance (or subclass) with current-time placeholders
+        resolved.
     """
     # convert options to Oprions if it's a plain dict to use case-insensitive get() and ignore_case=True
     if not isinstance(options, Options):

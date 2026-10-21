@@ -1,23 +1,23 @@
 from ..parse import get_unique_values, normalise_string
 
 class Options(dict):
-    """
-    Enhanced mapping with compatibility helpers for config access.
+    """Case-insensitive dictionary wrapper for workflow configuration.
 
-    Nested dictionaries and dictionaries directly contained in lists are wrapped
-    as ``Options`` instances. Attributes resolve matching keys recursively, but
-    raise ``ValueError`` if matching paths contain distinct values.
+    Nested dictionaries and dict entries inside lists are converted into
+    ``Options`` instances recursively, so configuration can be accessed either
+    by key lookup or through attribute access. Attribute lookup searches the
+    nested mapping for a name and returns the unique matching value. If more
+    than one branch contains the same key with different values, a
+    ``ValueError`` is raised.
 
-    :meth:`get` adds case-insensitive lookup and fallback-key compatibility to
-    normal top-level mapping access.
+    ``get`` adds case-insensitive lookup and fallback-key compatibility for
+    top-level dictionary access. For backward compatibility, ``Options.load``
+    forwards to ``WorkflowDefinition.load`` and emits a deprecation warning.
 
-    Backward compatibility:
-        - Previously, ``Options`` was the runnable workflow container. Now, ``WorkflowDefinition`` is the canonical runnable container.
-        - ``Options.load()`` is retained for legacy code and emits a deprecation warning. Use ``WorkflowDefinition.load()`` instead.
-
-    Notes:
-        - This class intentionally does not provide workflow parsing/execution behavior.
-        - Use ``WorkflowDefinition`` for operational workflow execution.
+    Example::
+        options = Options({"dataset": {"path": "/tmp"}})
+        options.dataset.path
+        options.get(["dataset", "source"], default="missing")
     """
     def __init__(self, *args, **kwargs):
         """Initialize the mapping and wrap nested dictionaries as ``Options``.
@@ -35,7 +35,18 @@ class Options(dict):
                 self[k] = [Options(**i) if isinstance(i, dict) else i for i in v]
 
     def __getattr__(self, item):
-        """Resolve an attribute through uniquely matching nested keys."""
+        """Resolve a nested configuration attribute.
+
+        Args:
+            item: Attribute name to look up recursively.
+
+        Returns:
+            The unique matching value for the requested attribute name.
+
+        Raises:
+            AttributeError: If no matching nested key is found.
+            ValueError: If multiple branches resolve to different values.
+        """
         key_paths = self.find_keys(item, get_all = True)
         values = []
         for key_path in key_paths:
@@ -100,27 +111,26 @@ class Options(dict):
             return []
         
     def get(self, key: list[str]|str, default = None, ignore_case = False, get_key = False):
-        """Get a top-level option by key with optional compatibility helpers.
+        """Read a top-level option with case-insensitive and fallback-key support.
 
         Args:
-            key: A string key or a list of fallback key names tried in order.
+            key: A string key or an ordered list of fallback key names to try.
             default: Value returned when no key matches (default ``None``).
-            ignore_case: If ``True`` (default ``False``), match keys without
+            ignore_case: If ``True`` (default ``False``), compare keys without
                 regard to case.
             get_key: If ``True`` (default ``False``), return the matched key
-                along with the value.
+                alongside the value.
 
         Returns:
-            The matched value, or ``default`` if no key matches. If
+            The matched value, or ``default`` if no key matches. When
             ``get_key=True``, returns ``(value, matched_key_or_None)``.
 
         Notes:
-            This method checks only the current mapping level; recursive lookup
-            is handled by :meth:`find_keys` and attribute access.
-
-            When ``key`` is a list, the method consumes that list while trying
-            keys in order. In this compatibility path, false-valued matches
-            such as ``0``, ``False``, ``''`` and ``None`` are treated as misses.
+            This method only checks the current mapping level; recursive lookup
+            is handled by :meth:`find_keys` and attribute access. When ``key``
+            is a list, the list is consumed in order while trying each candidate.
+            Falsey matches such as ``0``, ``False``, ``''`` and ``None`` are
+            treated as misses in the fallback path.
         """
         if isinstance(key, str):
             if ignore_case:
@@ -151,24 +161,18 @@ class Options(dict):
 
     @classmethod
     def load(cls, *args, **kwargs):
-        """
-        Deprecated compatibility loader for workflow JSON files.
+        """Load a workflow definition through the legacy ``Options`` entry point.
 
-        Forwards all arguments to ``WorkflowDefinition.load`` and emits a
+        This compatibility wrapper is retained for older code that still calls
+        ``Options.load``. It forwards to ``WorkflowDefinition.load`` and emits a
         ``DeprecationWarning``.
 
-        Returns:
-            WorkflowDefinition: Parsed workflow definition object.
-
-        Deprecated:
-            Use ``WorkflowDefinition.load`` instead. This method will be removed in a future release.
-
         Args:
-            *args: Positional arguments forwarded to ``WorkflowDefinition.load``.
-            **kwargs: Keyword arguments forwarded to ``WorkflowDefinition.load``.
+            *args: Positional arguments passed to ``WorkflowDefinition.load``.
+            **kwargs: Keyword arguments passed to ``WorkflowDefinition.load``.
 
         Returns:
-            The ``WorkflowDefinition`` returned by its ``load`` method.
+            The parsed ``WorkflowDefinition`` object.
         """
         import warnings
         warnings.warn(
