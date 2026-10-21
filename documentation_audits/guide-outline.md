@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: APPROVED
 
 # User Guide index
 
