@@ -76,7 +76,7 @@ def set_dataset(structure: Any, obj_dict: dict[str, Any]):
         return structure.__class__([set_dataset(value, obj_dict) for value in structure])
     if isinstance(structure, str):
         pattern = r"{([\w#-\.]+)(?:\s*,\s*([\w#-\.]+\s*=\s*\'.*?\')+)?}"
-        match = re.match(pattern, structure)
+        match = re.fullmatch(pattern, structure)
         if match:
             key = match.group(1)
             structure = obj_dict.get(key, structure)
