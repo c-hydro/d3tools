@@ -117,7 +117,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
             pass
 
         if isinstance(agg_window, tuple):
-            AggTimeStep._agg_window = TimeWindow(agg_window)
+            AggTimeStep._agg_window = TimeWindow(*agg_window)
         elif isinstance(agg_window, str):
             AggTimeStep._agg_window = TimeWindow.from_str(agg_window)
         elif isinstance(agg_window, TimeWindow):
@@ -141,7 +141,7 @@ class TimeStep(TimeRange, ABC, metaclass=TimeStepMeta):
             return
 
         if isinstance(value, tuple):
-            self._agg_window = TimeWindow(value)
+            self._agg_window = TimeWindow(*value)
         elif isinstance(value, str):
             self._agg_window = TimeWindow.from_str(value)
         elif isinstance(value, TimeWindow):
