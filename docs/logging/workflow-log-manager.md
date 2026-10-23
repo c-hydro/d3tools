@@ -1,1 +1,0 @@
-[WorkflowLogManager lifecycle and Python contexts have moved to the Developer Guide — Workflow lifecycle](../developer/workflow-lifecycle.md#logging-exceptions-and-cleanup-lifecycle); run-state configuration belongs to the [Logging Overview](overview.md).

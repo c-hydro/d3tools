@@ -1,1 +1,0 @@
-[Dataset catalogue and spatial-template details have moved to the Developer Guide — Datasets](../developer/datasets.md#availability-and-catalogue-contract); [discovery extension guidance is in Developer Guide — Extensions and contributions](../developer/extensions.md#extend-supported-dataset-seams).

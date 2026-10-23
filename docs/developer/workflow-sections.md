@@ -1,1 +1,0 @@
-[Workflow section construction and dispatch have moved to the Developer Guide — Workflow lifecycle; engine extension boundaries are in Extensions and contributions](workflow-lifecycle.md#section-construction-dispatch-and-engine-boundary).
