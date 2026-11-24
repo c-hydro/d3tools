@@ -5,7 +5,7 @@ behind one Python interface. The same methods address local files, in-process
 values, S3 objects, and SFTP paths. Workflow authors configure these objects
 through JSON; this page documents direct Python use.
 
-This first part covers the dataset foundations:
+This page is organized as follows:
 
 1. [Choosing and creating a dataset](#choosing-and-creating-a-dataset)
 2. [Key patterns and `KeyParser`](#key-patterns-and-keyparser)
@@ -13,9 +13,11 @@ This first part covers the dataset foundations:
 4. [Formats and mixins](#formats-and-mixins)
 5. [Storage backends](#storage-backends)
 6. [Time and availability](#time-and-availability)
-
-Composition, spatial templates, dataset logging, thumbnails, and extension
-contracts will be added in the second part.
+7. [Composition, versions, and tiles](#composition-versions-and-tiles)
+8. [Spatial templates](#spatial-templates)
+9. [Dataset logging](#dataset-logging)
+10. [Dataset-driven thumbnails](#dataset-driven-thumbnails)
+11. [Extending datasets](#extending-datasets)
 
 ## Choosing and creating a dataset
 
@@ -89,8 +91,9 @@ or when storage and format are selected dynamically.
 `key_pattern` describes one concrete storage key. It can contain:
 
 - `strftime` directives such as `%Y`, `%m`, `%d`, `%H`, `%M`, `%S`, and `%j`;
-- named runtime tags such as `{variable}` and `{tile}`; and
-- the conventional `{file_version}` tag for versioned datasets.
+- named runtime tags such as `{variable}`; and
+- the conventional tags `{now}`, `{tile}`, and `{file_version}`, which have
+  additional Dataset behaviour.
 
 Runtime tags passed to methods such as `get_key()`, `get_data()`, and
 `write_data()` fill named placeholders. They are distinct from top-level
@@ -101,6 +104,22 @@ least one date directive; `dataset.has_time` reports whether the pattern is
 time-dependent. A pattern can also be tag-dependent without containing time.
 Unresolved named tags remain visible in the rendered string, so callers should
 supply every tag needed for a concrete storage operation.
+
+Three conventional tags are treated specially:
+
+- `{now}` is resolved once, when the Dataset is constructed, using the current
+  local datetime. It is therefore fixed for that Dataset instance rather than
+  supplied to each read or write.
+- `{tile}` marks a tiled dataset. `has_tiles`, `tile_names`, `ntiles`, and
+  `find_tiles()` use it for discovery and availability; checks without an
+  explicit tile can require all configured tiles.
+- `{file_version}` marks a versioned dataset. Reads and availability checks
+  without an explicit version select the greatest available version; writes
+  without one create `01` or increment the last numeric part of the greatest
+  available version.
+
+See [Composition, versions, and tiles](#composition-versions-and-tiles) for the
+complete update and lookup behaviour.
 
 `Dataset.get_key()` uses `KeyParser` internally. Use `KeyParser` directly when
 an application needs to render and parse keys without constructing a Dataset:
@@ -132,10 +151,9 @@ walk. It substitutes supplied tags and any date components that are fixed by
 the query, then removes unresolved pattern components. `get_matching_keys()`
 filters candidate keys with the same matching rules.
 
-Key rendering distinguishes logical time from storage time. When passed a
-`TimeStep`, the Dataset's `time_signature` chooses its `start`, `end`, or the
-start of the next step (`end+1`). Passing a `datetime` uses that datetime
-directly, with precision normalized to the directives present in the pattern.
+When key rendering receives a `TimeStep`, the Dataset's `time_signature`
+chooses its `start` or `end`. Passing a `datetime` uses that datetime directly,
+with precision normalized to the directives present in the pattern.
 
 ## Reading and writing
 
@@ -192,8 +210,9 @@ returns the storage representation instead; memory reads already behave as
 7. Write a configured dataset-log entry.
 
 These side effects are not transactional. For example, a log failure happens
-after the stored output has been written. The second part of this page will
-document composition, thumbnails, and logging in detail.
+after the stored output has been written. See [Dataset logging](#dataset-logging)
+and [Dataset-driven thumbnails](#dataset-driven-thumbnails) for the two
+manager integrations.
 
 ## Formats and mixins
 
@@ -220,7 +239,7 @@ format. Set `format` explicitly when the extension is ambiguous.
 
 Writing a NumPy array to a raster requires an existing spatial template;
 writing an xarray object can establish that template from its coordinates and
-CRS. Raster templates will be covered in the second part.
+CRS. See [Spatial templates](#spatial-templates).
 
 CSV and Parquet support require the `more-data` installation extra; remote
 backends require `remote-data`. Thumbnail rendering uses the separate
@@ -301,7 +320,7 @@ Time configuration has three separate parts:
 - `timestep` describes the logical frequency, such as `daily`, `dekadly`, or
   `monthly`.
 - `time_signature` tells a key whether its timestamp represents the logical
-  `start`, `end`, or `end+1`; the default is `end`.
+  `start` or `end`; the default is `end`.
 - `aggregation` attaches a `TimeWindow` to the timestep.
 
 Set `timestep` explicitly when it is known. Otherwise creation leaves it
@@ -360,8 +379,303 @@ assert rain.get_times(period) == [
 
 Datasets with parents combine parent availability according to the composition
 contract; fallbacks can contribute additional times. Tile-aware point checks
-without an explicit tile require all configured tiles. Those relationships,
-along with versions and update/copy behaviour, belong to the second part.
+without an explicit tile require all configured tiles. See
+[Composition, versions, and tiles](#composition-versions-and-tiles) for those
+relationships and their update behaviour.
+
+## Composition, versions, and tiles
+
+### Updates and copies
+
+`update(**tags)` substitutes values into a Dataset's key pattern and name and
+returns a new Dataset by default. It also records those values in the new
+object's `tags` mapping. The source object is unchanged. With `in_place=True`,
+the source is changed and the method returns `None`.
+
+```python
+from d3tools.data import MemoryDataset
+
+base = MemoryDataset("{variable}.txt", keep_after_reading=True)
+rain = base.update(variable="rain")
+
+assert base.get_key() == "{variable}.txt"
+assert rain.get_key() == "rain.txt"
+assert rain.tags == {"variable": "rain"}
+```
+
+By default, updates preserve configured timestep and aggregation state. Raster
+updates also preserve their template manager and tile names. Set
+`preserve_temporal=False` or `preserve_spatial=False` when a derived Dataset
+must not inherit those properties.
+
+`copy()` is an update without substitutions. It returns a distinct Dataset
+object and does not copy stored files. A `MemoryDataset` copy carries matching
+entries into a separate dictionary; the stored Python values themselves are
+not deep-copied. Dataset log and thumbnail managers are shared with the copy.
+Remote subclasses preserve their connection or relevant cached discovery
+state through their update hooks.
+
+### Parents and derived data
+
+`set_parents()` connects named input Datasets to a Python function. When the
+child has no stored value, `get_data()` reads every parent and calls the
+function with keyword arguments matching the parent mapping. Non-memory
+children write the calculated result back; memory children return it without
+persisting it.
+
+```python
+from d3tools.data import MemoryDataset
+
+left = MemoryDataset("left.txt", keep_after_reading=True)
+right = MemoryDataset("right.txt", keep_after_reading=True)
+combined = MemoryDataset("combined.txt")
+
+left.write_data("rain")
+right.write_data("fall")
+
+def combine_text(left_text, right_text):
+    return left_text + right_text
+
+combined.set_parents(
+    {"left_text": left, "right_text": right},
+    combine_text,
+)
+
+assert combined.get_data() == "rainfall"
+```
+
+Parent availability is the intersection of times available from every parent:
+the derived item is available only when all function inputs exist. Updates
+propagate through parent Datasets and preserve the derivation function.
+
+### Fallbacks
+
+A fallback is consulted after neither the main Dataset nor its parents provide
+the requested item. `Dataset.from_options()` accepts another Dataset, a nested
+configuration mapping, or a key-pattern string through `fallback`. Strings
+inherit relevant construction defaults from the containing Dataset. Fallback
+reads use the receiving Dataset's format-processing path.
+
+Fallback availability contributes additional times to the containing Dataset.
+Updates also update the fallback, so placeholders shared by both patterns can
+be resolved together.
+
+### Versions
+
+`{file_version}` activates version-aware lookup. When a read, availability
+check, or point check omits `file_version`, d3tools extracts available version
+tags, sorts them, and uses the greatest value. Pass `file_version` explicitly
+to select a particular item.
+
+On a write without an explicit version, d3tools uses `01` if none exists.
+Otherwise it increments the last numeric part of the greatest version while
+preserving its width where possible: `v08` becomes `v09`, and `v99` becomes
+`v100`. Version ordering before that increment is lexicographic, so choose a
+consistent zero-padded naming scheme.
+
+### Tiles
+
+`{tile}` activates tile-aware discovery for GeoTIFF and NetCDF Datasets.
+Set `tile_names` to a list/tuple or a
+text-file path containing one tile name per line. If it is omitted, accessing
+`tile_names` discovers values from available keys. `ntiles` reports the count,
+and `find_tiles()` returns available tiles for a time and other tags.
+
+For point availability without an explicit tile, `check_data()` tests every
+configured tile and succeeds only when all are available. Raster templates are
+stored per tile. Pass `tile=...` explicitly when reading, writing, or querying
+one tile.
+
+## Spatial templates
+
+GeoTIFF and NetCDF Datasets attach a `TemplateManager`. A template records the
+grid information needed to rebuild or align raster values: CRS, fill value,
+dimension names, spatial dimensions, coordinate starts/ends/steps and lengths,
+and Dataset variable names where applicable.
+
+On a normal raster read, the Dataset creates a template from the first suitable
+value if one is not already available; later values are aligned to it. On
+write, an xarray object can establish the template. A bare NumPy array needs an
+existing template because it carries no coordinates or CRS.
+
+`TemplateManager` can also be used directly:
+
+```python
+from tempfile import TemporaryDirectory
+
+import numpy as np
+import xarray as xr
+
+from d3tools.data import TemplateManager
+
+sample = xr.DataArray(
+    np.arange(6).reshape(2, 3),
+    dims=("y", "x"),
+    coords={"y": [1.0, 0.0], "x": [10.0, 11.0, 12.0]},
+    attrs={"_FillValue": -9999},
+).rio.write_crs("EPSG:4326")
+
+with TemporaryDirectory() as cache:
+    templates = TemplateManager(cache_dir=cache)
+    templates.set(sample)
+    template = templates.get()
+
+    rebuilt = TemplateManager.build_array(template, np.ones((2, 3)))
+    assert rebuilt.shape == (2, 3)
+
+    templates.clear()
+    assert templates.load_from_cache("__tile__")
+```
+
+The default spatial key is `__tile__`; tiled Datasets use each tile name.
+`get()` checks memory first and can load a JSON cache file. `exists()`,
+`get_all()`, and `iter_spatial_keys()` inspect in-memory state. `clear()`
+removes memory entries but not cache files; `clear_cache()` removes matching
+cache files. `copy(deep=False)` copies only the outer mapping, while a deep
+copy duplicates nested template values.
+
+With validation enabled, malformed extracted templates raise
+`TemplateValidationError`. Treat cached template JSON as internal data:
+loading a file does not establish that it is suitable for a later
+reconstruction.
+
+Dataset helpers `get_template_dict()`, `set_template()`,
+`build_templatearray()`, and `set_data_to_template()` delegate to the manager.
+Raster updates share the existing manager by default; use
+`preserve_spatial=False` when the new Dataset represents another grid.
+
+## Dataset logging
+
+Dataset logging is separate from workflow logging. Attach a
+`DatasetLogManager` to collect metadata and numeric quality checks after each
+successful data write. Configuration created through `Dataset.from_options()`
+accepts `log` as a path or a mapping with a required `file` destination.
+
+Python code can construct the manager directly:
+
+```python
+import numpy as np
+import xarray as xr
+
+from d3tools.data import MemoryDataset
+from d3tools.logging import DatasetLogManager
+
+log_output = MemoryDataset("dataset-log.json", keep_after_reading=True)
+manager = DatasetLogManager(log_output)
+data = xr.DataArray(np.array([0.0, 2.0, np.nan]))
+
+record = manager.get_log(
+    "rain",
+    data,
+    lambda value: value,
+    source_key="rain.tif",
+)
+manager.write_log(record)
+
+assert log_output.get_data()["dataset"] == "rain"
+```
+
+In normal Dataset use, `_make_log()` supplies the resolved dataset name,
+written key, optional thumbnail path, requested time, write context, and data
+attributes. Attributes take precedence when names overlap. Supported scalar
+metadata is normalized; unsupported values, empty strings, and internal values
+beginning with `__` are omitted.
+
+For a `DataArray`, `data_checks` includes maximum, minimum, NaN and zero counts
+and percentages, sum, and absolute sum. For an `xarray.Dataset`, the checks are
+flattened with each variable name as a prefix. Text destinations receive a
+`---`-delimited block; JSON destinations receive the mapping. Log writes use
+append mode, so the destination format must support compatible append
+behaviour.
+
+The log occurs after storage. A logging failure can therefore leave valid data
+already written. Full field and formatting details are also summarized in
+[Workflow orchestration: Logging](../workflow_orchestration/logging.md#configure-dataset-logs).
+
+## Dataset-driven thumbnails
+
+Attach a `DatasetThumbnailManager` when a raster or vector write should also
+produce a preview. The manager requires:
+
+- `colors`: a Dataset resolving a QGIS-style colour-definition file;
+- `destination`: a Dataset whose key resolves the output image; and
+- optionally `overlay`: a Dataset used as a boundary or feature overlay.
+
+Other options are passed to thumbnail saving. `field` chooses the value column
+for a `GeoDataFrame` and defaults to `value`; common renderer options include
+annotation, legend, dimensions, and DPI.
+
+The manager can be constructed and attached from Python:
+
+```python
+from d3tools.data import Dataset
+from d3tools.thumbnails import DatasetThumbnailManager
+
+colors = Dataset.from_options(
+    {"type": "local", "key_pattern": "colors.txt"}
+)
+destination = Dataset.from_options(
+    {"type": "local", "key_pattern": "thumbnail.png"}
+)
+manager = DatasetThumbnailManager(colors, destination, legend=True)
+
+output = Dataset.from_options(
+    {"type": "local", "key_pattern": "output.tif"}
+)
+output.thumbnail = manager
+```
+
+When built from dataset configuration, `thumbnail` is a mapping containing
+`colors`, `destination`, optional `overlay`, and renderer options. String or
+nested mapping values inherit appropriate settings from the containing
+Dataset. If either required key is absent, no manager is created.
+
+During `write_data()`, the manager receives the format-prepared output before
+metadata is attached or storage is written. It resolves contextual tags in the
+colour and destination Datasets, creates a `Thumbnail`, saves it, and returns
+the renderer object. A thumbnail failure prevents the main data write; a later
+storage failure can leave the thumbnail behind.
+
+Colour-file syntax and standalone rendering belong to the forthcoming Tools >
+Thumbnails narrative. Until then, use the
+[Thumbnails API reference](../reference/thumbnails.md) for `Thumbnail`,
+`ThumbnailCollection`, colour helpers, and manager members.
+
+## Extending datasets
+
+d3tools has no runtime plugin registry for arbitrary backends or formats.
+Extensions are coordinated source changes using the existing class and mixin
+registration paths.
+
+To add a storage backend:
+
+1. Subclass `Dataset` and define a unique lower-case class attribute `type`.
+2. Implement the `key_pattern` property and `_read_data()`, `_write_data()`,
+   `_rm_data()`, `_check_data()`, and `_walk()`.
+3. Import the implementation before factory construction so `DatasetMeta`
+   registers the new type in `Dataset.subclasses`.
+4. Keep key matching and logical-time conversion in `KeyParser` and
+   `DataCatalogue`; backend methods should operate on concrete keys.
+5. Test factory construction, round-trip I/O, removal, prefix discovery,
+   availability, and update/copy reconstruction.
+
+To add a format:
+
+1. Implement a `FormatMixin` with initialization, local file read/write, and
+   before-write/after-read conversion hooks.
+2. Override validation and metadata hooks when the format needs them, retaining
+   cooperative update behaviour for format state.
+3. Export the mixin, add its canonical name to `FORMAT_MIXIN_MAP`, update
+   extension detection, and extend `check_data_format()` for accepted Python
+   types.
+4. Test explicit and inferred selection, local round trips, metadata,
+   `as_is`, memory behaviour, and remote staging where applicable.
+
+New backend discovery must keep `_walk()` and `_check_data()` in the same key
+namespace used by `key_pattern`. New write-side integrations should preserve
+the existing ordering: thumbnail before storage, dataset log after storage.
+Templates describe raster geometry; catalogues describe keys and availability;
+keep those responsibilities separate.
 
 For member signatures, see the [Data API reference](../reference/data.md) and
 [Parsing API reference](../reference/parse.md). Workflow JSON options are

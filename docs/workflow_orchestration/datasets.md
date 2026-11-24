@@ -95,7 +95,7 @@ format names include `netcdf`, `geotiff`, `csv`, `parquet`, `shp`, `geojson`,
 during dataset setup.
 
 `timestep` identifies the expected time frequency. `time_signature` can be
-`start`, `end`, or `end+1`; it defaults to `end`. `aggregation` can attach a
+`start` or `end`; it defaults to `end`. `aggregation` can attach a
 window to the timestep. A pattern without time directives or named
 placeholders describes a static key; a time directive makes it time-varying.
 See [time and availability](#understand-time-and-availability) when a dataset
@@ -136,7 +136,8 @@ Tile names are configured with `tile_names` as described in
 [Choose format and describe keys](#choose-format-and-describe-keys). Parents,
 fallbacks, versions, and tiles affect storage lookup; confirm that the
 selected engine uses the dataset as intended. Detailed Dataset composition
-behavior belongs to the [Developer Guide](../developer/datasets.md#construction-composition-and-key-rendering).
+behaviour belongs to
+[Tools — Dataset composition](../tools/datasets.md#composition-versions-and-tiles).
 
 ## Configure thumbnails
 
@@ -165,14 +166,15 @@ and legend are optional:
 
 The color file must use the supported QGIS-style color-definition format.
 Thumbnail generation also needs the thumbnail extra and its rendering
-dependencies. See [Thumbnail Generation](../thumbnails/overview.md#dataset-json-configuration)
+dependencies. See
+[Tools — Dataset-driven thumbnails](../tools/datasets.md#dataset-driven-thumbnails)
 for accepted options, input requirements, and defaults; direct rendering APIs
-are in the [Developer Guide](../developer/python-apis.md#thumbnail-and-collection-apis).
+are in the [Thumbnails API reference](../reference/thumbnails.md).
 
 ## Understand time and availability
 
 `time_signature` tells d3tools whether a stored timestamp represents the start
-or end boundary of a logical timestep (or `end+1`). It defaults to `end`.
+or end boundary of a logical timestep. It defaults to `end`.
 Set `timestep` explicitly when the frequency is known. If omitted, it is not
 inferred when the dataset is created; a later availability query may infer it
 from stored keys. Inference can be slow for large or remote datasets and may

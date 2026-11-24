@@ -131,7 +131,7 @@ when one key pattern contains `{variable}`:
 
 Update tags belong to the dataset reference and are distinct from the
 workflow-level `tags` object. See [datasets](datasets.md) for definitions and
-[the Developer Guide](../developer/datasets.md#construction-composition-and-key-rendering)
+[Tools — Dataset composition](../tools/datasets.md#composition-versions-and-tiles)
 for object-level details.
 
 ## Diagnose configuration errors
