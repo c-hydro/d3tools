@@ -318,16 +318,18 @@ objects directly.
 Time configuration has three separate parts:
 
 - `timestep` describes the logical frequency, such as `daily`, `dekadly`, or
-  `monthly`.
+  `monthly`; see the [unit aliases and their timestep/window support](timestepping.md#units-and-aliases).
 - `time_signature` tells a key whether its timestamp represents the logical
   `start` or `end`; the default is `end`.
-- `aggregation` attaches a `TimeWindow` to the timestep.
+- `aggregation` attaches a
+  [`TimeWindow`](timestepping.md#windows-and-aggregation) to the timestep.
 
 Set `timestep` explicitly when it is known. Otherwise creation leaves it
 unset, and a catalogue query that needs timestep objects may estimate it from
 available dates. The estimate is stored back on the Dataset. Estimation can be
 slow for remote catalogues and can return no result when too few usable dates
-exist.
+exist. See [timestep estimation](timestepping.md#estimation-and-utility-helpers)
+for the inference rules and limitations.
 
 Every Dataset owns a `DataCatalogue`. Dataset convenience methods delegate to
 it, while `dataset.catalogue` exposes the query object directly. Discovery

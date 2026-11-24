@@ -94,9 +94,12 @@ format names include `netcdf`, `geotiff`, `csv`, `parquet`, `shp`, `geojson`,
 `json`, `txt`, `log`, and `file`. Unknown extensions or format names can fail
 during dataset setup.
 
-`timestep` identifies the expected time frequency. `time_signature` can be
+`timestep` identifies the expected time frequency; see the
+[unit aliases and their timestep/window support](../tools/timestepping.md#units-and-aliases).
+`time_signature` can be
 `start` or `end`; it defaults to `end`. `aggregation` can attach a
-window to the timestep. A pattern without time directives or named
+[`TimeWindow`](../tools/timestepping.md#windows-and-aggregation) to the
+timestep. A pattern without time directives or named
 placeholders describes a static key; a time directive makes it time-varying.
 See [time and availability](#understand-time-and-availability) when a dataset
 is used to derive a section's run range.
@@ -178,7 +181,9 @@ or end boundary of a logical timestep. It defaults to `end`.
 Set `timestep` explicitly when the frequency is known. If omitted, it is not
 inferred when the dataset is created; a later availability query may infer it
 from stored keys. Inference can be slow for large or remote datasets and may
-fail or be unavailable when too few matching dates exist.
+fail or be unavailable when too few matching dates exist. The
+[estimation rules and limitations](../tools/timestepping.md#estimation-and-utility-helpers)
+are documented with the standalone tools.
 
 Workflow sections use available and completed data to choose work when no
 workflow-wide date range is supplied. A missing availability result needed

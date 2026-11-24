@@ -1,5 +1,8 @@
 # Timestepping API
 
+See [Timestepping](../tools/timestepping.md) for unit aliases, timestep
+families, ranges, aggregation windows, parsing, and worked examples.
+
 ::: d3tools.timestepping
 
 ::: d3tools.timestepping.time_parsing
