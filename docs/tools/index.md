@@ -14,13 +14,11 @@ for complete signatures and members.
 | [Datasets](datasets.md) | Local, memory, S3, and SFTP datasets; formats, catalogues, and templates. | `d3tools.data` | [Data](../reference/data.md) |
 | [Cases](cases.md) | Layered option combinations and case traversal. | `d3tools.cases` | [Cases](../reference/cases.md) |
 | [Thumbnails](thumbnails.md) | Single and multi-panel dataset previews. | `d3tools.thumbnails` | [Thumbnails](../reference/thumbnails.md) |
-| Exit handling | Deferred callbacks and temporary-path cleanup. | `d3tools.exit` | [Exit](../reference/exit.md) |
-| Notification | Experimental SMTP email notifications. | `d3tools.notification` | [Notification](../reference/notification.md) |
+| [Exit handling](exit-and-notification.md) | Deferred callbacks and temporary-path cleanup. | `d3tools.exit` | [Exit](../reference/exit.md) |
+| [Notification](exit-and-notification.md#experimental-email-notification) | Experimental SMTP email notifications. | `d3tools.notification` | [Notification](../reference/notification.md) |
 
-The narrative pages for each row are being added during the 2.4.0
-documentation refresh. Configuration parsing and workflow logging belong to
-the orchestration section's under-the-hood pages rather than the standalone
-Tools section.
+Configuration parsing and workflow logging belong to the orchestration
+section's under-the-hood pages rather than the standalone Tools section.
 
 ## Installation extras
 

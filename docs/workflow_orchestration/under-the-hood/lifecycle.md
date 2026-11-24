@@ -187,8 +187,9 @@ Repeated successful calls are ignored.
 The manager also registers `close()` through d3tools' `ExitHandler`. Exit
 callbacks registered with `run_at_exit()` run in registration order;
 `run_at_exit_first()` prepends a callback. If a callback raises, later
-callbacks in that queue do not run. For standalone cleanup APIs, see the
-[Exit API reference](../../reference/exit.md).
+callbacks in that queue do not run. For standalone cleanup APIs and safe
+temporary-path removal, see
+[Exit handling and notification](../../tools/exit-and-notification.md).
 
 ## Using the parser from Python
 
