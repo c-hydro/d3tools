@@ -80,9 +80,10 @@ strings. `{now:...}` normally uses the time the workflow is loaded. A
 when its logging manager is constructed, not when the workflow runs.
 
 Without a default, an unset `{ENV.NAME}` raises a `ValueError` during loading.
-For shell variables and secrets, see the
-[environment and tags details](../configuration/environment.md) and
-[tag syntax](../configuration/tags.md).
+Environment defaults must use the form
+`{ENV.NAME, default='fallback'}`; an empty default is treated as missing.
+Together with the tag and formatting rules above, this section is the owning
+reference for workflow environment and tag syntax.
 
 ## Reference and update datasets
 
