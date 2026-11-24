@@ -171,8 +171,9 @@ The color file must use the supported QGIS-style color-definition format.
 Thumbnail generation also needs the thumbnail extra and its rendering
 dependencies. See
 [Tools — Dataset-driven thumbnails](../tools/datasets.md#dataset-driven-thumbnails)
-for accepted options, input requirements, and defaults; direct rendering APIs
-are in the [Thumbnails API reference](../reference/thumbnails.md).
+for attachment and write behavior. Colour syntax, accepted rendering options,
+input requirements, and standalone use are documented in
+[Tools — Thumbnails](../tools/thumbnails.md).
 
 ## Understand time and availability
 

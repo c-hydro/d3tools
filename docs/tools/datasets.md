@@ -638,10 +638,8 @@ colour and destination Datasets, creates a `Thumbnail`, saves it, and returns
 the renderer object. A thumbnail failure prevents the main data write; a later
 storage failure can leave the thumbnail behind.
 
-Colour-file syntax and standalone rendering belong to the forthcoming Tools >
-Thumbnails narrative. Until then, use the
-[Thumbnails API reference](../reference/thumbnails.md) for `Thumbnail`,
-`ThumbnailCollection`, colour helpers, and manager members.
+See [Thumbnails](thumbnails.md) for colour-file syntax, standalone raster and
+vector rendering, overlays, legends, and `ThumbnailCollection`.
 
 ## Extending datasets
 

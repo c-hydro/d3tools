@@ -1,5 +1,8 @@
 # Thumbnails API
 
+See [Thumbnails](../tools/thumbnails.md) for colour definitions, raster and
+vector rendering, collections, Dataset integration, and worked examples.
+
 ::: d3tools.thumbnails
 
 ::: d3tools.thumbnails.colors

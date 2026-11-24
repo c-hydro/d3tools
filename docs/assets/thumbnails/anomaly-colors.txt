@@ -1,0 +1,4 @@
+-1,215,48,39,255,below normal
+0,254,224,144,255,near normal
+1,145,207,96,255,above normal
+inf,26,152,80,255,well above normal
