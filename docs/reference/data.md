@@ -1,8 +1,13 @@
 # Data API
 
+See [Datasets](../tools/datasets.md) for construction, storage, formats,
+availability, composition, templates, logging, and thumbnails.
+
 ::: d3tools.data
 
 ::: d3tools.data.data_catalogue
+
+::: d3tools.spatial.template_manager
 
 ::: d3tools.data.io_utils
 

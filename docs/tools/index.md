@@ -10,8 +10,8 @@ for complete signatures and members.
 | Tool | What it provides | Import path | API reference |
 | --- | --- | --- | --- |
 | Timestepping | Time periods, ranges, steps, windows, parsing, and date utilities. | `d3tools.timestepping` | [Timestepping](../reference/timestepping.md) |
-| Spatial | CRS-aware bounding boxes and raster or xarray cropping helpers. | `d3tools.spatial` | [Spatial](../reference/spatial.md) |
-| Datasets | Local, memory, S3, and SFTP datasets; formats, catalogues, and templates. | `d3tools.data` | [Data](../reference/data.md) |
+| [Spatial](spatial.md) | CRS-aware bounding boxes and raster or xarray cropping helpers. | `d3tools.spatial` | [Spatial](../reference/spatial.md) |
+| [Datasets](datasets.md) | Local, memory, S3, and SFTP datasets; formats, catalogues, and templates. | `d3tools.data` | [Data](../reference/data.md) |
 | Cases | Layered option combinations and case traversal. | `d3tools.cases` | [Cases](../reference/cases.md) |
 | Thumbnails | Single and multi-panel dataset previews. | `d3tools.thumbnails` | [Thumbnails](../reference/thumbnails.md) |
 | Exit handling | Deferred callbacks and temporary-path cleanup. | `d3tools.exit` | [Exit](../reference/exit.md) |
