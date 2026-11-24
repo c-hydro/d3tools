@@ -43,13 +43,13 @@ complete payload contract.
 
 <!-- check-docs: skip -->
 ```json
---8<-- "user-guide/case-study/01_download_chirps.json"
+--8<-- "docs/workflow_orchestration/case-study/01_download_chirps.json"
 ```
 
 Run it from a d3tools checkout:
 
 ```bash
-python scripts/run_workflow.py docs/user-guide/case-study/01_download_chirps.json \
+python scripts/run_workflow.py docs/workflow_orchestration/case-study/01_download_chirps.json \
   --start 2020-10-01 \
   --end 2021-12-31
 ```
@@ -67,13 +67,13 @@ engine-owned; see [DAM](https://github.com/c-hydro/dam) for its full contract.
 
 <!-- check-docs: skip -->
 ```json
---8<-- "user-guide/case-study/02_aggregate.json"
+--8<-- "docs/workflow_orchestration/case-study/02_aggregate.json"
 ```
 
 Run the aggregation over the download period, including the warm-up data:
 
 ```bash
-python scripts/run_workflow.py docs/user-guide/case-study/02_aggregate.json \
+python scripts/run_workflow.py docs/workflow_orchestration/case-study/02_aggregate.json \
   --start 2020-10-01 \
   --end 2021-12-31
 ```
@@ -97,13 +97,13 @@ running both windows; this integration has not been engine-verified.
 
 <!-- check-docs: skip -->
 ```json
---8<-- "user-guide/case-study/03_spi.json"
+--8<-- "docs/workflow_orchestration/case-study/03_spi.json"
 ```
 
 After supplying the parameter bundle location, run the target 2021 period:
 
 ```bash
-python scripts/run_workflow.py docs/user-guide/case-study/03_spi.json \
+python scripts/run_workflow.py docs/workflow_orchestration/case-study/03_spi.json \
   --start 2021-01-01 \
   --end 2021-12-31
 ```
@@ -121,14 +121,14 @@ datasets and logging once. The full file is:
 
 <!-- check-docs: skip -->
 ```json
---8<-- "user-guide/case-study/chirps_spi_case_study.json"
+--8<-- "docs/workflow_orchestration/case-study/chirps_spi_case_study.json"
 ```
 
 After setting `parameter_root` to the required bundle location, run the
 combined workflow with the shared download/warm-up range:
 
 ```bash
-python scripts/run_workflow.py docs/user-guide/case-study/chirps_spi_case_study.json \
+python scripts/run_workflow.py docs/workflow_orchestration/case-study/chirps_spi_case_study.json \
   --start 2020-10-01 \
   --end 2021-12-31
 ```
