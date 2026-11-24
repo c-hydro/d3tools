@@ -22,8 +22,9 @@ The usual workflow has `tags`, `datasets`, optional logging and execution
 settings, and one or more engine sections. Use a section key such as
 `download`, `process`, or `index`; section syntax is covered in
 [Workflows](workflows.md). This is the JSON shape, not a second Python
-configuration API. See the [Developer Guide's configuration internals](../developer/configuration.md)
-for parser behavior.
+configuration API. See [Workflow loading and
+parsing](under-the-hood/lifecycle.md#workflow-loading-and-parsing) for parser
+behaviour.
 
 ## Environment values, tags, and time placeholders
 

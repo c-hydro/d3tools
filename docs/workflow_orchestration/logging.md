@@ -75,4 +75,4 @@ Inspect the human-readable file or console output for workflow and section
 events. If configured, inspect `run_state_file` for structured workflow and
 section state. Do not rely on recovery or cleanup guarantees after a failed
 run. Python manager lifecycle and implementation details are in the
-[Developer Guide — workflow lifecycle](../developer/workflow-lifecycle.md#logging-exceptions-and-cleanup-lifecycle).
+[logging, exceptions, and cleanup](under-the-hood/lifecycle.md#logging-exceptions-and-cleanup).

@@ -24,7 +24,7 @@ d3tools selects the engine and orders sections; the schema and behavior of the
 engine-owned payload are defined by [DOOR](https://github.com/c-hydro/door),
 [DAM](https://github.com/c-hydro/dam), and
 [DRYES](https://github.com/c-hydro/dryes). See also the
-[Developer Guide — workflow lifecycle](../developer/workflow-lifecycle.md#section-construction-dispatch-and-engine-boundary).
+[section construction and engine dispatch](under-the-hood/lifecycle.md#section-construction-and-engine-dispatch).
 
 ## Control section order and lists
 

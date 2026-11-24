@@ -46,5 +46,5 @@ or malformed state can fail rather than skip.
 Workflow logs and optional run-state output are described in
 [Logging](logging.md). Range defaults, skips, and execution-option errors are
 described in [Workflows](workflows.md#set-execution-ranges-and-options).
-Implementation-level diagnostics belong to the
-[Developer Guide](../developer/workflow-lifecycle.md).
+For implementation-level diagnostics, follow the [workflow
+lifecycle](under-the-hood/lifecycle.md).
