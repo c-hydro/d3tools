@@ -62,8 +62,8 @@ configuration or an SSH agent; when using key authentication, provide an
 explicit private-key path. Password and automatic key discovery paths are not
 covered by the same test evidence as explicit key loading; see
 [configuration failures](troubleshooting.md#configuration-and-dataset-failures).
-For remote dependencies and backend details, see the
-[Developer Guide — Datasets](../developer/datasets.md#storage-backends-and-format-lifecycle).
+For remote dependencies and backend details, see
+[Tools — Dataset storage backends](../tools/datasets.md#storage-backends).
 
 ## Choose format and describe keys
 
@@ -185,4 +185,4 @@ skipped. The exact effects depend on execution options and the selected
 engine; see [Workflows](workflows.md#set-execution-ranges-and-options).
 Tile patterns and configured tile names influence which stored keys are
 available. For the detailed availability contract, see
-[Developer Guide — Datasets](../developer/datasets.md#availability-and-catalogue-contract).
+[Tools — Dataset time and availability](../tools/datasets.md#time-and-availability).
