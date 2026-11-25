@@ -34,6 +34,16 @@ to contain the DRYES parameter rasters (including gamma `a`, `loc`, and
 `scale`, and `prob0`) for each dekad and both aggregation windows. This
 distribution and its provenance remain an open maintainer decision.
 
+!!! note "d3tools 2.4.0 release scope"
+
+    Steps 1 and 2 are verified runnable examples. Step 3 is an
+    engine-construction-verified integration template that remains pending
+    until a matching, publishable parameter bundle is supplied and the SPI
+    outputs are checked. The combined workflow is consequently not presented
+    as an executed end-to-end example. This explicit limitation is accepted
+    for the 2.4.0 documentation release; supplying and validating the bundle
+    remains follow-up publication work rather than a claim made by this guide.
+
 ## Step 1: download 10-day CHIRPS precipitation (DOOR)
 
 The full file below is the Step 1 workflow. Its d3tools-facing parts are the
@@ -89,11 +99,14 @@ remain owned by [DAM](https://github.com/c-hydro/dam).
 Step 3 reads the 1-month and 3-month aggregate datasets and the matching
 pre-computed parameter rasters. Parameter references use update tags for the
 parameter name; the parameter key pattern includes an `{agg_window}` slot,
-as in the DRYES example. `timesteps_per_year` is set to 36 for the 10-day
-timestep. The DRYES section is engine-owned; see
+as in the DRYES example. DRYES expands the `agg_window` mapping into two
+cases: case tags `1` and `3` select parameter and output directories `1m` and
+`3m`, while the corresponding option values `1m` and `3m` select the DAM
+aggregate inputs. This binding has been verified by constructing the workflow
+and rendering all three key families with the installed DRYES integration;
+it has not been verified by computing SPI outputs. `timesteps_per_year` is
+set to 36 for the 10-day timestep. The DRYES section is engine-owned; see
 [DRYES](https://github.com/c-hydro/dryes) for its full payload contract.
-Confirm with DRYES how its `agg_window` cases bind that path slot before
-running both windows; this integration has not been engine-verified.
 
 <!-- check-docs: skip -->
 ```json
@@ -111,8 +124,9 @@ python scripts/run_workflow.py docs/workflow_orchestration/case-study/03_spi.jso
 SPI output keys are written beneath `<output_root>/spi/`. Step 3 is not
 currently runnable without the matching parameters. The bundle must match the
 fixed area, grid, aggregation windows, dekadal cycle, and 1990–2020 reference
-period. How to calculate those parameters belongs to DRYES documentation,
-not this guide.
+period. Workflow construction and aggregation-window key rendering have been
+verified, but no SPI result is claimed. How to calculate those parameters
+belongs to DRYES documentation, not this guide.
 
 ## Run the whole chain as one workflow
 
@@ -140,5 +154,4 @@ failure stops later sections. Inspect `<output_root>/input/chirps/`,
 `aggregate/`, `spi/`, and `logs/`; the log includes a separate structured
 run-state file. See [Workflows](workflows.md) for ordering and range rules,
 and [Logging](logging.md) for log behavior. The combined workflow has not
-been executed: Step 3 is blocked by the unavailable parameters, and the
-DRYES parameter-window binding is still an open question.
+been executed because Step 3 is blocked by the unavailable parameters.

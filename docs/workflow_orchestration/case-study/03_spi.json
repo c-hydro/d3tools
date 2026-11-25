@@ -9,7 +9,7 @@
   "datasets": {
     "chirps_aggregated": {
       "type": "local",
-      "key_pattern": "{output_root}/aggregate/{agg.agg_window}/%Y/CHIRPS-PREC{agg.agg_window}_CASE_%Y%m%d.tif",
+      "key_pattern": "{output_root}/aggregate/{agg_window}/%Y/CHIRPS-PREC{agg_window}_CASE_%Y%m%d.tif",
       "format": "geotiff",
       "timestep": "dekadly",
       "time_signature": "end"
@@ -23,7 +23,7 @@
     },
     "spi_output": {
       "type": "local",
-      "key_pattern": "{output_root}/spi/{agg.agg_window}/%Y/CHIRPS-SPI{agg.agg_window}_CASE_%Y%m%d.tif",
+      "key_pattern": "{output_root}/spi/{agg_window}m/%Y/CHIRPS-SPI{agg_window}_CASE_%Y%m%d.tif",
       "format": "geotiff",
       "timestep": "dekadly",
       "time_signature": "end"
