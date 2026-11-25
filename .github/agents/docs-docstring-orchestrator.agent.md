@@ -28,7 +28,7 @@ documentation, or source code yourself; delegate the work and report the results
 	selections.
 2. Start one `docs-docstring-writer` task for each selected module, passing only that
 	module folder name. Writers may run concurrently because each owns a distinct
-	recursive source tree and `docs/developer/reference/<module>.md` page.
+	recursive source tree and `docs/reference/<module>.md` page.
 3. As each writer finishes, start one `docs-docstring-auditor` task for that same module.
 	 Do not audit a module before its writer has finished. Pass the writer's summary,
 	 including uncertain public names, to its auditor. Auditors are read-only. Allow a

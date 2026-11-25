@@ -1,211 +1,82 @@
 ---
-description: "Conventions and quality gates for writing and auditing the complete d3tools Developer Guide and User Guide."
+description: "Conventions and quality gates for d3tools narrative and API documentation."
 applyTo: "docs/**"
 ---
-# d3tools documentation workflow
+# d3tools documentation conventions
 
-## Deliverables and order
+## Documentation structure and ownership
 
-Most content already exists in `docs/`, but pages mix audiences. The work is mainly
-**reorganisation**, driven by one approved plan:
+The documentation has three complementary sections:
 
-1. `docs-guide-planner` writes `documentation_audits/guide-outline.md`: the full index
-   of both guides, what each heading includes and keeps out, and where every existing
-   section goes. The maintainer approves it before any writing starts.
-2. The Developer Guide writer builds the Developer Guide from the outline; one
-   independent audit and at most one revision round follow.
-3. The User Guide writer builds the User Guide from the outline; one independent audit
-   and at most one revision round follow.
+- `docs/workflow_orchestration/` is for operators who write workflow JSON, set
+  environment values, use the CLI, or call the small `WorkflowDefinition.load()` / `run()`
+  surface. It owns shared configuration, datasets as configured in JSON, workflow
+  sections, logging, examples, troubleshooting, and technical orchestration internals.
+- `docs/tools/` is Python-first narrative documentation for the reusable building blocks
+  shared by DOOR, DAM, and DRYES. Examples must work without workflow JSON unless a
+  cross-link explicitly explains the workflow equivalent.
+- `docs/reference/` contains concise mkdocstrings pages. It is module-shaped and links to
+  the owning narrative page; it does not duplicate tutorials or hand-written signatures.
 
-The approved outline is binding: writers do not add, drop, or move pages/headings, and
-they move each existing section where the outline's mapping table says. If the outline
-is wrong, report it instead of deviating.
+Each fact has one owning page. Other pages link to it instead of maintaining a second
+explanation. DOOR, DAM, and DRYES own their full engine payload schemas and processing
+semantics. d3tools pages explain the shared integration boundary and may use a checked,
+sanitized engine example without presenting it as an exhaustive engine contract.
 
-The docstring writer, auditor, and orchestrator have completed their work and are not part
-of this pipeline. Do not invoke or edit them.
+## Evidence and claims
 
-## Intent of the two guides
-
-- **User Guide**: for people who write workflow JSON and run it. It answers "what can I
-  configure, how do I run it, what do I do when it fails". It explains only what an
-  operator needs to write a working configuration. Internal concepts (mixins,
-  catalogues, templates machinery, class hierarchies, parsing internals) do not belong
-  here; when one explains a visible error or limitation, mention it briefly in
-  troubleshooting and link to the Developer Guide. Python is limited to
-  `WorkflowDefinition.load()` / `run()`.
-- **Developer Guide**: for people who extend d3tools or use it from Python in DOOR, DAM,
-  and DRYES. It covers architecture, lifecycle, internal contracts, the Python API, and
-  extension recipes, with real detail rather than summaries and links.
-
-If behavior is something an operator sets in JSON, environment variables, or the CLI, it
-belongs in the **User Guide**. If it requires Python, extension, maintenance, or
-understanding internals, it belongs in the **Developer Guide**.
-
-- Each fact has one owning page; other pages link to it.
-- User pages must stand alone for workflow operators.
-- Developer pages explain relationships, lifecycle, contracts, and extension work; they
-  do not duplicate docstrings.
-- Generated API reference under `docs/developer/reference/` is module/package-shaped.
-  Narrative guides are task- and architecture-shaped.
-- DOOR, DAM, and DRYES own their full engine-specific payload schemas and behavior, but
-  their checked-in `workflow_examples/` are approved evidence for realistic d3tools
-  integration examples.
-
-## Topics to place
-
-The planner must place these in the outline; the approved outline then defines the
-required coverage and depth.
-
-Developer Guide, as a whole:
-
-- architecture, package responsibilities, and external-project boundaries;
-- workflow loading, parsing, resolution, section creation, range determination,
-  sequential execution, logging, and cleanup;
-- configuration and standalone parsing internals;
-- dataset construction, composition, key rendering, availability, storage, formats,
-  templates, logging, thumbnails, and extension contracts;
-- workflow-section/engine integration and execution-range behavior;
-- cases, timestepping, spatial/template, logging, parsing, errors, and cleanup APIs;
-- canonical imports, compatibility aliases, helper/internal boundaries, and experimental
-  APIs;
-- supported extension recipes and contributor testing/documentation expectations;
-- links into the generated API reference without copied signatures.
-
-User Guide journeys (depth limited to what an operator configures):
-
-- install d3tools plus relevant extras and engine dependencies;
-- create and run a minimal workflow through the CLI and `load()` / `run()`;
-- use configuration, tags, environment values, and dataset references;
-- declare datasets in JSON: location, format, time, tiles, composition as configured;
-- define workflow sections, engines, ordering, and execution options/ranges;
-- configure workflow and dataset logging, and thumbnails where configurable;
-- diagnose common configuration, import, availability, and execution failures;
-- follow complete realistic examples without undocumented engine contracts;
-- walk through the runnable CHIRPS-to-SPI case study (see below).
-
-## User Guide case study
-
-The User Guide is anchored on one runnable case study, `docs/user-guide/case-study.md`:
-
-1. DOOR downloads 10-day CHIRPS precipitation (no credentials required).
-2. DAM aggregates it to 1-month and 3-month windows, keeping the 10-day timestep.
-3. DRYES computes SPI1 and SPI3 from **pre-computed parameters** shipped with the docs.
-
-Rules:
-
-- Store each step and the combined workflow as real JSON files under
-  `docs/user-guide/case-study/` and include them in pages with `pymdownx.snippets`
-  (`--8<-- "docs/user-guide/case-study/<file>.json"`). Do not paste a second copy of a
-  case-study file into a page. The User Guide writer may add `pymdownx.snippets` to
-  `markdown_extensions` in `mkdocs.yml`.
-- Other User Guide pages illustrate engine-backed behavior with excerpts of these files
-  (snippet line ranges) instead of inventing engine payloads.
-- The case study does not cover every feature (e.g. fallbacks, versions, tiles, remote
-  storage, thumbnails). For those, use a small focused snippet (no-engine where
-  possible) and list the feature in `documentation_audits/user-guide-open-questions.md`
-  as a candidate for an additional runnable example. Do not create extra runnable
-  example files unless the outline adds them.
-- Explain only the d3tools-facing parts: tags, dataset definitions and references,
-  ranges, ordering, and logging. Present each engine block as engine-owned with a one-line
-  note and a link to that engine. Do not document DOOR/DAM/DRYES options in depth.
-- Do not explain how SPI parameters are calculated; that belongs to DRYES documentation.
-  How the parameters are distributed (repo vs. external host) is an open maintainer
-  decision in the outline. Until it is resolved, use a clearly marked placeholder location
-  and record the gap in `documentation_audits/user-guide-open-questions.md`.
-- Area, grid, and period are fixed by the parameters. Every output path derives from one
-  root tag so readers choose a single writable folder.
-- Source examples: `door/workflow_examples/option_files/chirps_example.json`,
-  `dam/workflow_examples/options_files/era5-wb-aggregation_example.json`,
-  `dryes/workflow_examples/option_files/spi_example.json`. Engine settings not shown in
-  these (for example, keeping a 10-day output timestep in DAM) are open questions
-  until confirmed, not inferred.
-
-## Sources and evidence
-
-- `documentation_reference.md` contains current open findings and decisions. It is not a
-  replacement for verification.
-- The planner reads existing docs, `documentation_reference.md` and open-question files;
-  it does not read source/tests, workflow examples, or production
-  configurations. Record unclear configuration details for the writers rather than
-  investigating configuration repositories during planning.
-- Developer writers use existing docs and the docstrings in `src/d3tools/` (read-only;
-  `docs/developer/reference/*.md` only contain mkdocstrings directives). They may read
-  tests to confirm a recipe.
-- User writers use the Developer Guide, existing pages, and sanitized real
-  configurations; they do not read source/tests.
-- Both guide writers may inspect the JSON files under
-  `/home/luca/Documents/CIMA_code/door/workflow_examples/`,
-  `/home/luca/Documents/CIMA_code/dam/workflow_examples/`, and
-  `/home/luca/Documents/CIMA_code/dryes/workflow_examples/`. These files demonstrate
-  working engine syntax and may be adapted into d3tools integration examples.
-- Auditors use `src/d3tools/` as implementation truth and `tests/` as evidence of tested
-  contracts. They may inspect docstrings and real configurations as appropriate.
-- Never use `build/`; it may be stale.
-- Unresolved behavior is a limitation or open question, never a documented guarantee.
-- Notification remains experimental until its open code/test findings are resolved.
+- Treat `src/d3tools/` as implementation truth and `tests/` as evidence of exercised
+  behavior. Package docstrings describe the public API but must be checked against code.
+- Sanitized examples in the sibling DOOR, DAM, and DRYES repositories are acceptable
+  evidence for engine syntax. One observed key is not proof of a universal rule.
+- Never use `build/` or `_old_docs/` as current truth. Historical material may help locate
+  a topic, but every retained claim must be reverified.
+- State exact defaults, ordering, side effects, failure modes, compatibility aliases, and
+  experimental status where they affect readers.
+- Label unexecuted or unresolved behavior explicitly. Never turn intended behavior into a
+  documented guarantee.
+- Do not copy credentials, private hosts, tokens, internal paths, or identifying
+  production values into examples.
 
 ## Writing rules
 
-- Prefer reader tasks, lifecycle, and extension goals over package-by-package narration.
-- Use precise defaults, ordering, ownership, side effects, edge cases, and failure modes.
-- Use a table when readers must compare several exact options; use diagrams only for
-  genuinely relational flows.
-- Keep examples small, realistic, sanitized, and portable.
-- When adapting an engine workflow example, retain enough of the real configuration to
-  remain executable, name the required engine, record the source example in the writer's
-  completion report, and link to that engine's documentation for the complete contract.
-- An observed key in one workflow is evidence that the example uses it, not evidence that
-  the key is universal, required, or exhaustively understood. Do not infer undocumented
-  engine semantics from examples alone.
-- Never copy credentials, hosts, tokens, internal paths, or identifying production values
-  from real workflow repositories.
-- Do not hand-write API signatures. Link to generated reference pages.
-- Do not describe intended behavior when current behavior is unresolved.
+- Prefer reader tasks and lifecycle relationships over package-by-package narration.
+- Keep examples small, portable, and complete. Use user-writable locations such as
+  `/tmp/` and identify optional dependencies or engines that an example needs.
+- Workflow pages may use Python only for loading, inspecting, and running workflows.
+  Direct use of reusable classes and functions belongs under Tools.
+- Do not hand-write API signatures in narrative pages. Link to `docs/reference/`.
+- Keep API-reference pages limited to a short owning-page link plus mkdocstrings
+  directives for the public modules in that package.
+- Preserve the fixed CHIRPS-to-SPI case-study files under
+  `docs/workflow_orchestration/case-study/`. Include them with `pymdownx.snippets` rather
+  than copying their JSON into the page. Step 3 remains explicitly pending until a
+  matching publishable parameter bundle is available and its output is verified.
 
 ## Verification
 
-**Never run `mkdocs` (`build`, `serve`, `gh-deploy`) or anything that writes outside
-`docs/`, `mkdocs.yml`, and `documentation_audits/`.** The maintainer builds the site.
-The one exception is running the case study, whose output root must point to
-`/tmp/d3tools-case-study/`.
-Generated-reference/Griffe warnings are out of scope.
-
-Run from the d3tools repository with the shared environment:
+Never run `mkdocs build`, `mkdocs serve`, or `mkdocs gh-deploy`; the maintainer performs
+the rendered-site check. From this repository, use the shared environment:
 
 ```sh
 /home/luca/Documents/CIMA_code/workspace_env/.venv/bin/python scripts/check_docs.py <pages>
 ```
 
-- Complete JSON must be valid and parse when the checker treats it as a workflow.
-- Put `<!-- check-docs: skip -->` immediately before deliberately partial JSON.
-- Do not use JavaScript comments or ellipses inside complete JSON.
-- Compile or run complete Python snippets when practical.
-- Validate adapted workflow JSON with `scripts/check_docs.py`. When the relevant engine
-  and dependencies are available, also run the narrowest safe parse/load check that
-  exercises that engine configuration; otherwise state that engine-level execution was
-  not verified.
-- `scripts/check_docs.py` does not expand snippets: put `<!-- check-docs: skip -->`
-  before each snippet-include fence, and validate every file under
-  `docs/user-guide/case-study/` directly with
-  `WorkflowDefinition.load(path, build_workflow_objects=False)`.
-- Run the case study end to end when network and engines are available, with the output
-  root at `/tmp/d3tools-case-study/`. Report which steps ran and which did not (Step 3
-  cannot run until the SPI parameters exist). Never claim an unrun step was verified.
-- Check local links (they must stay inside `docs/`), headings, and that every
-  `mkdocs.yml` nav entry points to an existing page, by reading the file.
-- An audit passes with the outline fully implemented, no high/medium findings, and no
-  checker failures. Items that need a code or maintainer decision are recorded as open
-  questions and do not block the gate.
+- Complete JSON must be valid and workflow-shaped JSON must parse in the checker.
+- Put `<!-- check-docs: skip -->` immediately before deliberately partial JSON or a
+  snippet-include fence, then validate the included JSON file separately.
+- Complete Python examples must compile and their d3tools/engine imports must succeed.
+  Run safe examples when practical; otherwise state the unverified boundary.
+- Check local links and anchors, inspect `mkdocs.yml` to ensure every navigation target
+  exists, and run `git diff --check` before handing work off.
+- Use `/home/luca/Documents/CIMA_code/workspace_env/.venv/bin/python` for all Python and
+  the corresponding executables from that virtual environment.
+- Never claim that an engine-backed workflow ran unless that exact configuration and
+  relevant output were exercised. Configuration construction is not execution proof.
 
-## Audit reports
+## Review and publication
 
-Planning and audit files live in `documentation_audits/`:
-
-- `guide-outline.md` (planner; binding once approved)
-- `developer-guide.md`
-- `user-guide.md`
-- optional writer open-question files beside them
-
-Reports contain current findings only. Do not retain corrected findings, old phase
-history, “no issue” inventory rows, or verbose transcripts. Merge findings with the same
-root cause and cite implementation/tests plus every affected guide location.
+Narrative changes require an independent accuracy review against source/tests and a clean
+documentation-checker result. Publication still requires the maintainer's rendered-site
+check, because `scripts/check_docs.py` does not validate MkDocs rendering, navigation
+presentation, generated-reference warnings, or theme behavior.

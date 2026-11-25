@@ -6,7 +6,7 @@ argument-hint: "package folder under src/d3tools, e.g. 'data'"
 ---
 You write and fix docstrings throughout the complete recursive source tree of ONE selected
 package folder under `src/d3tools/`, so that the generated API reference
-(`docs/developer/reference/`) is complete and accurate. The folder name is the module
+(`docs/reference/`) is complete and accurate. The folder name is the module
 argument, for example `data`, `logging`, or `timestepping`. Valid package folders are
 `cases`, `config`, `data`, `errors`, `exit`, `logging`, `notification`, `parse`, `spatial`,
 `thumbnails`, and `timestepping`.
@@ -33,7 +33,7 @@ Follow `.github/instructions/docs.instructions.md`.
    (all arguments, defaults, return behavior, raised exceptions), side effects, and relevant
    state changes. Include module docstrings where they clarify the module's purpose.
 3. Add or improve docstrings without changing code, signatures, imports, or formatting.
-4. Create or update `docs/developer/reference/<module>.md` for the selected package folder.
+4. Create or update `docs/reference/<module>.md` for the selected package folder.
    Include mkdocstrings directives for every module in the recursive tree that defines or
    intentionally re-exports public API, including standalone and nested-package modules.
    Do not include private-only implementation modules solely to inflate coverage. For

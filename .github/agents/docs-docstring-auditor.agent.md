@@ -10,8 +10,8 @@ argument, for example `data`, `logging`, or `timestepping`.
 
 ## Constraints
 - Audit only; do not edit source, tests, docstrings, or documentation. The sole permitted
-   write is the audit report at `d3tools/_issues/<module>.md`, where `<module>` is the
-   selected package folder name (for example, `data.md`). Create `d3tools/_issues/` if it
+   write is the audit report at `_issues/<module>.md`, where `<module>` is the
+   selected package folder name (for example, `data.md`). Create `_issues/` if it
    does not exist. Do not modify any other report or file.
 - Treat `src/d3tools/` as the implementation source of truth and `tests/` as evidence of
   tested behavior. Do not assume an untested behavior is guaranteed.
@@ -40,7 +40,7 @@ argument, for example `data`, `logging`, or `timestepping`.
    changes or run the full suite unless needed to validate a specific observation.
 
 ## Output Format
-Write the report to `d3tools/_issues/<module>.md`; the final response should briefly
+Write the report to `_issues/<module>.md`; the final response should briefly
 confirm that path. Organize all findings in one Markdown table, with IDs progressive
 from `1` through the final finding and never restarted between categories. Include these
 columns:
