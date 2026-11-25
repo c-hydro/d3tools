@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+/.pytest_cache/
+/.ruff_cache/
 
 # Distribution / packaging
 .Python
@@ -39,6 +41,7 @@ venv.bak/
 
 #old stuff
 _old*
+/tmp/
 
 # workflow logs and summaries
 _working*
