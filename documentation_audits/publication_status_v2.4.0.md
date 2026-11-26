@@ -1,6 +1,6 @@
 # d3tools 2.4.0 documentation publication status
 
-**Audit date:** 2026-11-25  
+**Audit date:** 2026-11-26
 **Branch:** `docs`  
 **Overall status:** documentation content is complete for the agreed 2.4.0 scope, but publication still requires the maintainer-side rendered-site check.
 
@@ -39,7 +39,7 @@ No commit was pushed, and `main` was not changed.
 | Severity | Item | Required action |
 | --- | --- | --- |
 | **Publication blocker** | The rendered MkDocs site has not been checked. Mechanical checks do not validate rendering, generated API pages, displayed navigation, theme behavior, or MkDocs warnings. | The maintainer must run the final rendered-site/API/navigation/warning check before publication. |
-| **Accepted non-blocking limitation for 2.4.0** | No matching, publishable CHIRPS/dekadal SPI parameter bundle is available. Step 3 output and the combined end-to-end workflow therefore remain unexecuted. | Keep the case study's limitation visible. Supply and validate a matching bundle in follow-up work if Step 3 is to become a fully runnable example. |
+| **Verification follow-up** | The matching parameter bundle is published at `10.5281/zenodo.24556246`, but Step 3 and the combined workflow have not yet been rerun with the published archive. | Execute the documented workflow before adding an end-to-end verification claim. |
 
 During validation, Fontconfig reported that its default cache directories were not
 writable. This did not change the documentation-checker result, but a writable cache may

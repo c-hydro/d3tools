@@ -13,7 +13,7 @@ boundaries. It supersedes the abandoned User Guide / Developer Guide split.
 | `datasets.md` | Dataset configuration in workflow JSON and links to Python-owned concepts. |
 | `workflows.md` | Sections, aliases, engine selection, ordering, ranges, and execution options. |
 | `logging.md` | Workflow and dataset log configuration and failure behavior. |
-| `case-study.md` | CHIRPS download and aggregation plus the explicitly pending SPI integration template. |
+| `case-study.md` | CHIRPS download, aggregation, and SPI using the published parameter bundle. |
 | `examples.md` | Runnable minimal, multi-dataset, and logging workflows. |
 | `troubleshooting.md` | Symptom/cause/fix guidance for imports, configuration, datasets, templates, execution, and output. |
 | `under-the-hood/lifecycle.md` | Parsing, construction, dispatch, ranges, logging, cleanup, and Python inspection. |
@@ -53,10 +53,10 @@ point readers to the owning Workflow orchestration or Tools page where needed.
   justify a dedicated Tools page.
 - `TemplateManager` is documented with datasets and referenced from the Data API page.
 - d3tools owns shared orchestration behavior; engine packages own domain payload meaning.
-- The CHIRPS-to-SPI case study may ship with Step 3 explicitly pending. Steps 1 and 2 are
-  runnable and verified; Step 3 has verified construction/window binding but still needs
-  a matching publishable parameter bundle and output validation. The combined workflow
-  is not claimed as executed end to end.
+- The CHIRPS-to-SPI parameters are published under the version-specific DOI
+  `10.5281/zenodo.24556246` and downloaded with a checksum-verifying helper. Steps 1 and
+  2 are runnable and verified; the combined workflow is not claimed as executed end to
+  end until that exact run has been repeated with the published bundle.
 - Historical source material in `_old_docs/` is not publication content or current truth.
 
 ## Quality gates
@@ -71,7 +71,7 @@ point readers to the owning Workflow orchestration or Tools page where needed.
 
 ## Publication follow-up
 
-- Supply and validate a publishable CHIRPS/dekadal SPI parameter bundle if Step 3 is to
-  become a fully runnable example.
+- Execute Step 3 and the combined workflow with the published parameter bundle before
+  adding an end-to-end verification claim.
 - Record code/test failures found during documentation validation in the final release
   status rather than silently changing unrelated implementation.

@@ -50,8 +50,9 @@ sanitized engine example without presenting it as an exhaustive engine contract.
   directives for the public modules in that package.
 - Preserve the fixed CHIRPS-to-SPI case-study files under
   `docs/workflow_orchestration/case-study/`. Include them with `pymdownx.snippets` rather
-  than copying their JSON into the page. Step 3 remains explicitly pending until a
-  matching publishable parameter bundle is available and its output is verified.
+  than copying their JSON into the page. Keep the version-specific Zenodo DOI and the
+  verified downloader checksum synchronized when the parameter bundle is updated. Do not
+  commit the downloaded parameter rasters to this repository.
 
 ## Verification
 

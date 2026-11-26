@@ -2,7 +2,7 @@
   "workflow_name": "chirps_spi_case_study",
   "tags": {
     "output_root": "/tmp/d3tools-case-study",
-    "parameter_root": "/path/to/precomputed-spi-parameters",
+    "parameter_root": "{ENV.SPI_PARAMETER_ROOT, default='/tmp/d3tools-case-study/parameters/chirps-spi-parameters-v1'}",
     "history_start": "1990-01-01",
     "history_end": "2020-12-31"
   },

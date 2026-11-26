@@ -26,23 +26,25 @@ the documented safe test location. Change that one tag in each file to choose
 another writable root. Outputs are organized beneath `input/chirps`,
 `aggregate`, `spi`, and `logs`.
 
-The SPI bundle is not available in this documentation checkout. In
-`03_spi.json` and the combined workflow, `parameter_root` is therefore an
-explicit placeholder. Replace `/path/to/precomputed-spi-parameters` with the
-location of the matching bundle before running Step 3. The bundle is expected
-to contain the DRYES parameter rasters (including gamma `a`, `loc`, and
-`scale`, and `prob0`) for each dekad and both aggregation windows. This
-distribution and its provenance remain an open maintainer decision.
+The matching parameter bundle is published as a versioned dataset under
+[CC BY 4.0 on Zenodo](https://doi.org/10.5281/zenodo.24556246). It contains
+gamma `a`, `loc`, and `scale`, and `prob0` rasters for every dekad and both
+aggregation windows. Download and verify the exact case-study version with:
 
-!!! note "d3tools 2.4.0 release scope"
+```bash
+python scripts/fetch_case_study_parameters.py
+```
 
-    Steps 1 and 2 are verified runnable examples. Step 3 is an
-    engine-construction-verified integration template that remains pending
-    until a matching, publishable parameter bundle is supplied and the SPI
-    outputs are checked. The combined workflow is consequently not presented
-    as an executed end-to-end example. This explicit limitation is accepted
-    for the 2.4.0 documentation release; supplying and validating the bundle
-    remains follow-up publication work rather than a claim made by this guide.
+By default the script extracts the bundle to
+`/tmp/d3tools-case-study/parameters/chirps-spi-parameters-v1`, which is also
+the default `parameter_root` in the Step 3 and combined configurations. To use
+another location, pass `--destination` and set `SPI_PARAMETER_ROOT` to the
+same directory before loading the workflow.
+
+```bash
+python scripts/fetch_case_study_parameters.py --destination /path/to/parameters
+export SPI_PARAMETER_ROOT=/path/to/parameters
+```
 
 ## Step 1: download 10-day CHIRPS precipitation (DOOR)
 
@@ -103,17 +105,17 @@ as in the DRYES example. DRYES expands the `agg_window` mapping into two
 cases: case tags `1` and `3` select parameter and output directories `1m` and
 `3m`, while the corresponding option values `1m` and `3m` select the DAM
 aggregate inputs. This binding has been verified by constructing the workflow
-and rendering all three key families with the installed DRYES integration;
-it has not been verified by computing SPI outputs. `timesteps_per_year` is
-set to 36 for the 10-day timestep. The DRYES section is engine-owned; see
-[DRYES](https://github.com/c-hydro/dryes) for its full payload contract.
+and rendering all three key families with the installed DRYES integration.
+`timesteps_per_year` is set to 36 for the 10-day timestep. The DRYES section
+is engine-owned; see [DRYES](https://github.com/c-hydro/dryes) for its full
+payload contract.
 
 <!-- check-docs: skip -->
 ```json
 --8<-- "docs/workflow_orchestration/case-study/03_spi.json"
 ```
 
-After supplying the parameter bundle location, run the target 2021 period:
+After downloading the parameter bundle, run the target 2021 period:
 
 ```bash
 python scripts/run_workflow.py docs/workflow_orchestration/case-study/03_spi.json \
@@ -121,12 +123,10 @@ python scripts/run_workflow.py docs/workflow_orchestration/case-study/03_spi.jso
   --end 2021-12-31
 ```
 
-SPI output keys are written beneath `<output_root>/spi/`. Step 3 is not
-currently runnable without the matching parameters. The bundle must match the
-fixed area, grid, aggregation windows, dekadal cycle, and 1990–2020 reference
-period. Workflow construction and aggregation-window key rendering have been
-verified, but no SPI result is claimed. How to calculate those parameters
-belongs to DRYES documentation, not this guide.
+SPI output keys are written beneath `<output_root>/spi/`. The published bundle
+matches the fixed area, grid, aggregation windows, dekadal cycle, and 1990–2020
+reference period used here. How to calculate those parameters belongs to
+DRYES documentation, not this guide.
 
 ## Run the whole chain as one workflow
 
@@ -138,8 +138,8 @@ datasets and logging once. The full file is:
 --8<-- "docs/workflow_orchestration/case-study/chirps_spi_case_study.json"
 ```
 
-After setting `parameter_root` to the required bundle location, run the
-combined workflow with the shared download/warm-up range:
+After downloading the parameter bundle, run the combined workflow with the
+shared download/warm-up range:
 
 ```bash
 python scripts/run_workflow.py docs/workflow_orchestration/case-study/chirps_spi_case_study.json \
@@ -154,4 +154,4 @@ failure stops later sections. Inspect `<output_root>/input/chirps/`,
 `aggregate/`, `spi/`, and `logs/`; the log includes a separate structured
 run-state file. See [Workflows](workflows.md) for ordering and range rules,
 and [Logging](logging.md) for log behavior. The combined workflow has not
-been executed because Step 3 is blocked by the unavailable parameters.
+yet been rerun end to end with the published bundle.

@@ -43,6 +43,9 @@ venv.bak/
 _old*
 /tmp/
 
+# Downloaded case-study data
+/chirps-spi-parameters-v1/
+
 # workflow logs and summaries
 _working*
 !_working_summaries/
