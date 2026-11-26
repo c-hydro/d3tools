@@ -1,4 +1,9 @@
-"""Download the SPI parameter bundle used by the documentation case study."""
+"""Download the SPI parameter bundle used by the documentation case study.
+
+When publishing a replacement bundle, update ``DOI``, ``ARCHIVE_URL``,
+``ARCHIVE_SIZE``, and ``ARCHIVE_SHA256`` together, then update the DOI in the case-study
+documentation. Do not commit the downloaded parameter rasters to this repository.
+"""
 
 from __future__ import annotations
 

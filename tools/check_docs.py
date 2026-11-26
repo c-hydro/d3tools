@@ -15,9 +15,9 @@ block (use for intentionally partial or illustrative snippets).
 
 Usage::
 
-    python scripts/check_docs.py                 # all of docs/
-    python scripts/check_docs.py docs/datasets   # a folder
-    python scripts/check_docs.py docs/configuration/tags.md docs/timestepping.md
+    python tools/check_docs.py                 # all of docs/
+    python tools/check_docs.py docs/datasets   # a folder
+    python tools/check_docs.py docs/configuration/tags.md docs/timestepping.md
 
 Exit code is 1 if any ERROR is reported, 0 otherwise.
 """
