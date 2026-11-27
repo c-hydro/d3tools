@@ -48,5 +48,4 @@ the payload schema and domain behaviour inside its section.
 - [Troubleshooting](troubleshooting.md): diagnose installation, configuration,
   execution, and output failures.
 - Under the hood: follow parsing, dispatch, cleanup, architecture, and engine
-  integration. These pages are being prepared as part of the 2.4.0
-  documentation refresh.
+  integration.
