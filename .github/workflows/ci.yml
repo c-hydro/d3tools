@@ -1,0 +1,79 @@
+name: Tests and package
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+env:
+  MPLCONFIGDIR: /tmp/matplotlib
+  XDG_CACHE_HOME: /tmp/.cache
+
+jobs:
+  test:
+    name: Test Python 3.12
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and test dependencies
+        run: >-
+          python -m pip install --editable
+          ".[test,more-data,thumbnails,remote-data]"
+
+      - name: Run tests
+        run: python -m pytest tests -q
+
+  package:
+    name: Build and smoke-test distributions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build tools
+        run: python -m pip install build twine
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Check distribution metadata
+        run: python -m twine check dist/*
+
+      - name: Install wheel in an isolated environment
+        run: |
+          python -m venv /tmp/d3tools-smoke
+          /tmp/d3tools-smoke/bin/python -m pip install dist/*.whl
+
+      - name: Smoke-test the base installation
+        run: |
+          /tmp/d3tools-smoke/bin/python -c "from importlib.metadata import version; from d3tools.data import LocalDataset, MemoryDataset; assert version('d3tools') == '3.0.0'; LocalDataset(key_pattern='/tmp/example.txt'); MemoryDataset(key_pattern='example.txt')"
+          /tmp/d3tools-smoke/bin/d3run --help
+
+      - name: Upload checked distributions
+        uses: actions/upload-artifact@v6
+        with:
+          name: distributions
+          path: dist/*
+          if-no-files-found: error

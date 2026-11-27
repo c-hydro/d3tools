@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+env:
+  MPLCONFIGDIR: /tmp/matplotlib
+  XDG_CACHE_HOME: /tmp/.cache
+
 jobs:
   build:
     name: Validate and build
@@ -30,6 +34,9 @@ jobs:
 
       - name: Install package and documentation dependencies
         run: python -m pip install --editable ".[docs]"
+
+      - name: Check base package imports without remote extras
+        run: python -c "import d3tools; from d3tools.data import LocalDataset"
 
       - name: Check documentation sources
         run: python tools/check_docs.py
