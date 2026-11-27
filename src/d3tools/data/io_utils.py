@@ -1,374 +1,207 @@
+"""Helpers for detecting file formats and delegating read/write operations.
 
-import rioxarray as rxr
+These utility functions centralize the mapping between file extensions and the
+matching format mixin, and they provide thin wrappers used by dataset storage
+classes during data I/O.
+"""
+
 import xarray as xr
 import numpy as np
 import os
-import json
-import datetime as dt
-import rasterio
+import pandas as pd
+import geopandas as gpd
 
-try:
-    import pandas as pd
-    import geopandas as gpd
-except ImportError:
-    pass
+from typing import Any, Optional
 
-from typing import Optional
+# these functions used to be in io_utils, but they are now in io_utils_raster.
+# We import them here for backwards compatibility,
+# but they should be imported from io_utils_raster in the future.
+from .io_utils_raster import (
+    save_raster_in_chunks,
+    optimise_blocksizes,
+    straighten_data,
+    reset_nan,
+    set_nan,
+    change_nan,
+    set_type
+)
+
+from .format_mixins import (
+    RasterMixin,
+    TableMixin,
+    VectorMixin,
+    PlainTextMixin,
+    StructuredTextMixin,
+    FileMixin
+)
+
+# Format → Mixin mapping
+FORMAT_MIXIN_MAP = {
+    'netcdf': RasterMixin,
+    'geotiff': RasterMixin,
+    'csv': TableMixin,
+    'parquet': TableMixin,
+    'shp': VectorMixin,
+    'geojson': VectorMixin,
+    'json': StructuredTextMixin,
+    'txt': PlainTextMixin,
+    'log': PlainTextMixin,
+    'file': FileMixin,  # Generic file, no format processing
+}
+
 
 def check_data_format(data, format: str) -> None:
-    """"
-    Ensures that the data is compatible with the format of the dataset.
+    """Validate that a value can be written to a dataset of the requested format.
+
+    Args:
+        data: Value to persist.
+        format: Canonical format name such as ``netcdf`` or ``csv``.
+
+    Raises:
+        TypeError: If the object type is incompatible with the selected format.
     """
-    # add possibility to write a geopandas dataframe to a geojson or a shapefile
     if isinstance(data, np.ndarray) or isinstance(data, xr.DataArray):
-        if not format in ['geotiff', 'netcdf']:
-            raise ValueError(f'Cannot write matrix data to a {format} file.')
+        if format not in ['geotiff', 'netcdf']:
+            raise TypeError(f'Cannot write matrix data to a {format} file.')
 
     elif isinstance(data, xr.Dataset):
         if format not in ['netcdf']:
-            raise ValueError(f'Cannot write a dataset to a {format} file.')
-        
+            raise TypeError(f'Cannot write a dataset to a {format} file.')
+
     elif isinstance(data, str):
         if format not in ['txt', 'file']:
-            raise ValueError(f'Cannot write a string to a {format} file.')
-        
+            raise TypeError(f'Cannot write a string to a {format} file.')
+
     elif isinstance(data, dict):
         if format not in ['json']:
-            raise ValueError(f'Cannot write a dictionary to a {format} file.')
-        
+            raise TypeError(f'Cannot write a dictionary to a {format} file.')
+
     elif 'gpd' in globals() and isinstance(data, gpd.GeoDataFrame):
-        if format not in ['shp', 'json']:
-            raise ValueError(f'Cannot write a geopandas dataframe to a {format} file.')
-                
+        if format not in ['shp', 'geojson', 'json']:
+            raise TypeError(f'Cannot write a geopandas dataframe to a {format} file.')
+
     elif 'pd' in globals() and isinstance(data, pd.DataFrame):
         if format not in ['csv', 'parquet']:
-            raise ValueError(f'Cannot write a pandas dataframe to a {format} file.')
-    
+            raise TypeError(f'Cannot write a pandas dataframe to a {format} file.')
+
     elif format not in ['file']:
-        raise ValueError(f'Cannot write a {type(data)} to a {format} file.')
+        raise TypeError(f'Cannot write a {type(data)} to a {format} file.')
+
 
 def get_format_from_path(path: str) -> str:
-    # get the file extension
+    """Infer the canonical d3tools format name from a file path.
+
+    Args:
+        path: File path or key to inspect.
+
+    Returns:
+        The format label used by the dataset mixins.
+
+    Raises:
+        ValueError: If the extension is not supported.
+    """
     extension = path.split('.')[-1]
 
-    # check if the file is a csv
-    if extension == 'csv':
-        return 'csv'
-    
-    # check if the file is a parquet
-    if extension == 'parquet':
-        return 'parquet'
-
-    # check if the file is a geotiff
-    elif extension == 'tif' or extension == 'tiff':
-        return 'geotiff'
-
-    # check if the file is a netcdf
-    elif extension == 'nc':
-        return 'netcdf'
-    
-    elif extension in ['json', 'geojson']:
-        return 'json'
-    
-    elif extension == 'txt':
-        return 'txt'
-    
-    elif extension == 'shp':
-        return 'shp'
-    
-    elif extension in ['png', 'pdf', '']:
+    if extension == path or extension in ['png', 'pdf', 'jpg', 'jpeg']:
         return 'file'
 
-    raise ValueError(f'File format not supported: {extension}')
+    if extension == 'tif' or extension == 'tiff':
+        return 'geotiff'
 
-def read_from_file(path, format: Optional[str] = None) -> xr.DataArray|xr.Dataset|pd.DataFrame:
+    if extension == 'nc':
+        return 'netcdf'
 
+    if extension not in FORMAT_MIXIN_MAP:
+        raise ValueError(f'File format not supported: {extension}')
+
+    return extension
+
+
+def get_mixin_class_from_format(format: str):
+    """Return the format mixin class that matches a canonical format label.
+
+    Args:
+        format: Canonical format name.
+
+    Returns:
+        The corresponding format mixin class.
+
+    Raises:
+        ValueError: If the format is not known.
+    """
+    _format_mixin = FORMAT_MIXIN_MAP.get(format, None)
+    if _format_mixin is None:
+        raise ValueError(f'Format {format} not supported.')
+
+    return _format_mixin  # Return the class, not an instance
+
+def get_mixin_from_format(format: str):
+    """Instantiate the mixin for a given format and attach the format name.
+
+    Args:
+        format: Canonical format name.
+
+    Returns:
+        A format mixin instance configured for the requested format.
+    """
+    _format_mixin = get_mixin_class_from_format(format)
+    format_mixin = _format_mixin()
+    format_mixin.format = format
+
+    return format_mixin
+
+
+def ensure_directory_exists(path: str) -> None:
+    """Create the parent directory for a file if it does not already exist.
+
+    Args:
+        path: Destination file path whose parent directory should exist.
+    """
+    directory = os.path.dirname(path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+def read_from_file(path, format: Optional[str] = None, **kwargs) -> Any:
+    """Read a file using the appropriate format mixin.
+
+    Args:
+        path: Source file path.
+        format: Optional explicit format override. If omitted, it is inferred
+            from the filename extension.
+        **kwargs: Format-specific read arguments forwarded to the mixin.
+
+    Returns:
+        The decoded object returned by the matching format mixin.
+    """
     if format is None:
         format = get_format_from_path(path)
 
-    # read the data from a csv
-    if format == 'csv':
-        data = pd.read_csv(path)
+    format_mixin = get_mixin_from_format(format)
+    return format_mixin._read_from_file(path, **kwargs)
 
-    # read the data from a parquet
-    elif format == 'parquet':
-        data = pd.read_parquet(path)
 
-    # read the data from a json
-    elif format == 'json':
-        with open(path, 'r') as f:
-            data = json.load(f)
-            # understand if the data is actually in a geodataframe format
-            if isinstance(data, dict) and 'features' in data.keys():
-                df = gpd.read_file(path)
-                if 'metadata' in data.keys():
-                    df.attrs = data['metadata']
-                data = df
+def write_to_file(data, path, format: Optional[str] = None, append=False) -> None:
+    """Write data to disk using the matching format mixin.
 
-    # read the data from a txt file
-    elif format == 'txt':
-        with open(path, 'r') as f:
-            data = f.readlines()
-
-    # read the data from a shapefile
-    elif format == 'shp':
-        data:gpd.GeoDataFrame = gpd.read_file(path)
-
-    # read the data from a geotiff
-    elif format == 'geotiff':
-        data = rxr.open_rasterio(path)
-
-    # read the data from a netcdf
-    elif format == 'netcdf':
-        data = xr.open_dataset(path)
-        # check if there is a single variable in the dataset
-        if len(data.data_vars) == 1:
-            data = data[list(data.data_vars)[0]]
-
-    # read the data from a png or pdf
-    elif format == 'file':
-        data = path
-
-    return data
-
-def write_to_file(data, path, format: Optional[str] = None, append = False) -> None:
-
+    Args:
+        data: Data object to serialize.
+        path: Destination file path.
+        format: Optional explicit format override. If omitted, it is inferred
+            from the filename extension.
+        append: Whether the format backend supports appending to an existing file.
+    """
     if format is None:
         format = get_format_from_path(path)
 
-    dir = os.path.dirname(path)
-    if len(dir) > 0:
-        os.makedirs(os.path.dirname(path), exist_ok = True)
-    if not os.path.exists(path):
-        append = False
+    format_mixin = get_mixin_from_format(format)
+    format_mixin._write_to_file(data, path, append=append)
 
-    # write the data to a csv
-    if format == 'csv':
-        if append:
-            data.to_csv(path, mode = 'a', header = False, index=False)
-        else:
-            data.to_csv(path, index=False)
-
-    # write the data to a parquet
-    elif format == 'parquet':
-        if append:
-            data.to_parquet(path, mode = 'a', header = False, index=False, compression='snappy')
-        else:
-            data.to_parquet(path, index=False, compression='snappy')
-
-    # write the data to a json
-    elif format == 'json':
-
-        if isinstance(data, gpd.GeoDataFrame):
-            # ensure time columns are converted to strings
-            for col in data.columns:
-                if isinstance(data[col].iloc[0], np.datetime64):
-                    data[col] = data[col].apply(lambda x: x.astype('O'))
-                if isinstance(data[col].iloc[0], (dt.datetime, dt.date)):
-                    data[col] = data[col].apply(lambda x: x.isoformat())
-            dict_data = json.loads(data.to_json())
-            if data.attrs:
-                dict_data['metadata'] = data.attrs
-            data = dict_data
-
-        for key in data.keys():
-            if isinstance(data[key], np.ndarray):
-                data[key] = data[key].tolist
-            elif isinstance(data[key], dt.datetime):
-                data[key] = data[key].isoformat()
-        if append:
-            with open(path, 'r') as f:
-                old_data = json.load(f)
-            old_data = [old_data] if not isinstance(old_data, list) else old_data
-            old_data.append(data)
-            data = old_data
-        with open(path, 'w') as f:
-            json.dump(data, f, indent = 4)
-
-    # write a geodataframe to a shapefile
-    elif format == 'shp':
-        data.to_file(path)
-
-    elif format == 'txt':
-        if append:
-            with open(path, 'a') as f:
-                f.writelines(data)
-        else:
-            with open(path, 'w') as f:
-                f.writelines(data)
-
-    # write the data to a geotiff
-    elif format == 'geotiff':
-        # If data is chunked, use chunk size as block size
-        
-        if data.chunks is not None:
-            profile = {
-                "driver": "GTiff",
-                "height": data.sizes[data.rio.y_dim],
-                "width": data.sizes[data.rio.x_dim],
-                "count": data.shape[0] if "band" in data.dims or "bands" in data.dims else 1,
-                "dtype": str(data.dtype),
-                "crs": data.rio.crs,
-                "transform": data.rio.transform(),
-                "compress": "LZW"
-            }
-            # Assume 2D spatial chunks (y, x) are last two dims
-            chunk_map = dict(zip(data.dims, data.chunks))
-            y_chunk = chunk_map.get('y', [None])[0]
-            x_chunk = chunk_map.get('x', [None])[0]
-            if y_chunk and x_chunk:
-                profile.update(blockxsize=max(16, (x_chunk//16) * 16),
-                               blockysize=max(16, (y_chunk//16) * 16))
-
-            with rasterio.open(path, 'w', **profile) as dst:
-                for ji, window in dst.block_windows(1):
-                    arr = data.isel(
-                        x=slice(window.col_off, window.col_off + window.width),
-                        y=slice(window.row_off, window.row_off + window.height)
-                    ).values
-                    dst.write(arr, window=window)
-                    print(f'Wrote window {window}')
-                if hasattr(data, "attrs") and data.attrs:
-                    # Convert all attrs to strings for GeoTIFF tags
-                    tags = {k: str(v) for k, v in data.attrs.items()}
-                    dst.update_tags(**tags)
-
-                # Set nodata value if available
-                dst.nodata = data.attrs.get('_FillValue', data.rio.nodata)
-        else:
-            # If not chunked, write directly
-            data.rio.to_raster(path, compress='LZW', windowed=np.prod(data.shape) > 1e8)
-
-    # write the data to a netcdf
-    elif format == 'netcdf':
-        data.to_netcdf(path)
-
-    # write the data to a png or pdf (i.e. move the file)
-    elif format == 'file':
-        os.rename(data, path)
 
 def rm_file(path) -> None:
+    """Delete a file from the local filesystem.
+
+    Args:
+        path: File path to remove.
+    """
     os.remove(path)
-
-# DECORATOR TO MAKE THE FUNCTION BELOW WORK WITH XR.DATASET
-def withxrds(func):
-    def wrapper(*args, **kwargs):
-        if isinstance(args[0], xr.Dataset):
-            return xr.Dataset({var: func(args[0][var], **kwargs) for var in args[0]})
-        else:
-            return func(*args, **kwargs)
-    return wrapper
-
-## FUNCTIONS TO CLEAN DATA
-@withxrds
-def straighten_data(data: xr.DataArray) -> xr.DataArray:
-    """
-    Ensure that the data has descending latitudes.
-    """
-    
-    try:
-        y_dim = data.rio.y_dim
-    except rxr.exceptions.MissingSpatialDimensionError:
-        y_dim = None
-
-    if y_dim is None:
-        for dim in data.dims:
-            if 'lat' in dim.lower() or 'y' in dim.lower():
-                y_dim = dim
-                break
-    if data[y_dim].data[0] < data[y_dim].data[-1]:
-        data = data.sortby(y_dim, ascending = False)
-
-    return data
-
-@withxrds
-def reset_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
-    """
-    Make sure that the nodata value is set to np.nan for floats and to the maximum integer for integers.
-    """
-
-    fill_value = nan_value or data.attrs.get('_FillValue', None)
-    data_type = data.dtype
-
-    if np.issubdtype(data_type, np.floating):
-        new_fill_value = np.nan
-    elif np.issubdtype(data_type, np.unsignedinteger):
-        new_fill_value = np.iinfo(data_type).max
-    elif np.issubdtype(data_type, np.integer):
-        new_fill_value = np.iinfo(data_type).min
-
-    data = change_nan(data, new_fill_value, fill_value)
-
-    return data.astype(data_type)
-
-@withxrds
-def set_nan(data: xr.DataArray, nan_value = None) -> xr.DataArray:
-    """
-    Makes sure the nodata value is set to the nan_value provided (if available).
-    """
-
-    fill_value = data.attrs.get('_FillValue') # this should never be None based on how the rest of the code is written
-    data_type = data.dtype
-    new_fill_value = nan_value or fill_value
-
-    # check that the fill value is compatible with the data type
-    if np.issubdtype(data_type, np.integer) and np.isnan(new_fill_value):
-        return reset_nan(data)
-
-    data = change_nan(data, new_fill_value, fill_value)
-    return data.astype(data_type)
-
-@withxrds
-def change_nan(data: xr.DataArray, new_nan, current_nan = None) -> xr.DataArray:
-    if current_nan is not None and not np.isclose(current_nan, new_nan, equal_nan = True):
-        data = data.where(~np.isclose(data, current_nan, equal_nan = True), new_nan)
-
-    data.attrs['_FillValue'] = new_nan
-    return data
-
-@withxrds
-def set_type(data: xr.DataArray, nan_value = None, read = True) -> xr.DataArray:
-    """
-    Make sure that the data is the smallest possible.
-    """
-
-    max_value = data.max()
-    min_value = data.min()
-
-    # check if output contains floats or integers
-    if np.issubdtype(data.dtype, np.floating):
-        if max_value < 2**31 and min_value > -2**31:
-            data = data.astype(np.float32)
-        else:
-            data = data.astype(np.float64)
-    elif np.issubdtype(data.dtype, np.integer):
-        
-        if min_value >= 0:
-            if max_value <= 255:
-                data = data.astype(np.uint8)
-            elif max_value <= 65535:
-                data = data.astype(np.uint16)
-            elif max_value <= (2**32)-1:
-                data = data.astype(np.uint32)
-            else:
-                data = data.astype(np.uint64)
-                
-            if nan_value is not None and not np.issubdtype(data.dtype, np.unsignedinteger):
-                nan_value = None
-        else:
-            if max_value <= 127 and min_value >= -128:
-                data = data.astype(np.int8)
-            elif max_value <= 32767 and min_value >= -32768:
-                data = data.astype(np.int16)
-            elif max_value <= 2**31-1 and min_value >= -2**31:
-                data = data.astype(np.int32)
-            else:
-                data = data.astype(np.int64)
-
-            if nan_value is not None and not np.issubdtype(data.dtype, np.integer):
-                nan_value = None
-    
-    if read:
-        return reset_nan(data, nan_value)
-    else:
-        return set_nan(data, nan_value)

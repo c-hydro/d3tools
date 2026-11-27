@@ -1,140 +1,137 @@
+"""Legacy compatibility parsing utilities.
+
+This module keeps stable public function names that are still widely imported
+across the codebase. New implementations live in focused modules
+(``string_rendering``, ``config_resolution``, ``key_parser``), while these
+helpers either delegate to those modules or provide generic utility routines.
+"""
+
 import datetime as dt
-import re
-import os
+from typing import Any, Optional
 
-from ..timestepping.time_utils import get_date_from_str
+from .config_resolution import set_env as _set_env_impl
+from .config_resolution import set_dataset as _set_dataset_impl
+from .string_rendering import substitute_values as _substitute_values_impl
+from .string_rendering import substitute_string as _substitute_string_impl
 
-def substitute_values(structure, tag_dict, **kwargs):
+def extract_date_and_tags(string: str, string_pattern: str):
+    """Parse a key string into datetime and tags using ``KeyParser``.
+
+    Args:
+        string: Concrete key or path value to parse.
+        string_pattern: Pattern template containing datetime directives and/or
+            tag placeholders.
+
+    Returns:
+        A tuple containing the parsed ``datetime`` and a dictionary of tag
+        values.
+
+    Raises:
+        ValueError: If the key does not match the pattern or repeated tag
+            placeholders contain conflicting values.
     """
-    replace the {tags} in the structure with the values in the tag_dict
-    """
+    # Local import avoids circular dependency:
+    # key_parser -> string_rendering -> parse_utils.
+    from .key_parser import KeyParser
 
-    if isinstance(structure, dict):
-        return {substitute_values(key, tag_dict, **kwargs): substitute_values(value, tag_dict, **kwargs) for key, value in structure.items()}
-    elif isinstance(structure, list):
-        return [substitute_values(value, tag_dict, **kwargs) for value in structure]
-    elif isinstance(structure, str):
-        return substitute_string(structure, tag_dict, **kwargs)
-    else:
-        return structure
-
-def substitute_string(string, tag_dict, rec=False):
-    """
-    Replace the {tags} in the string with the values in the tag_dict.
-    Handles datetime objects with format specifiers.
-    """
-
-    if not isinstance(string, str):
-        return string
-
-    pattern = r'{([\w#-\.]+)(?::(.*?))?}'
-
-    def replace_match(match, tag_dict):
-        key = match.group(1)
-        fmt = match.group(2)
-        value = tag_dict.get(key)
-
-        if value is None:
-            return match.group(0)  # Return the original match if the key is not found
-
-        raw_value = value
-        if isinstance(value, str):
-            try:
-                value = get_date_from_str(value)
-            except ValueError:
-                value = value
-
-        if isinstance(value, dt.datetime) and fmt:
-            return value.strftime(fmt)
-        elif fmt:
-            return format(value, fmt)
-        elif isinstance(raw_value, str):
-            return raw_value
-        else:
-            return str(value)
-
-    def generate_strings(string, tag_dict):
-        matches = re.findall(pattern, string)
-        if not matches:
-            return string
-
-        key = matches[0][0]
-        fmt = matches[0][1]
-        value = tag_dict.get(key)
-
-        if isinstance(value, list):
-            results = []
-            for val in value:
-                temp_dict = tag_dict.copy()
-                temp_dict[key] = val
-                this_replace = lambda m: replace_match(m, temp_dict)
-                this_replacement = re.sub(pattern, this_replace, string, count=1)
-                results.append(generate_strings(this_replacement, temp_dict))
-            return results
-        else:
-            return re.sub(pattern, lambda m: replace_match(m, tag_dict), string)
-
-    return generate_strings(string, tag_dict)
+    parsed = KeyParser(string_pattern).match(string)
+    return parsed.time, parsed.tags
 
 def set_env(structure):
-    """
-    Replace the {ENV.var, default = 'value'} in the structure with the corresponding environment variable.
-    the default = 'value' is used to provide a default value if the environment variable is not set.
-    """
-    if isinstance(structure, dict):
-        return {set_env(key): set_env(value) for key, value in structure.items()}
-    elif isinstance(structure, list):
-        return [set_env(value) for value in structure]
-    elif isinstance(structure, str):
-        pattern = r'(\{ENV\.([\w#\-\.]+)(?:\s*,\s*(?:default\s*=\s*)?\'(.*?)\'\s*)?\})'
-        matches = re.findall(pattern, structure)
-        if matches:
-            for match in matches:
-                var = match[1]
-                default = match[2] if len(match[2]) > 0 else None
-                value = os.getenv(var, default)
+    """Compatibility wrapper for :func:`d3tools.parse.config_resolution.set_env`.
 
-                if value is None:
-                    raise ValueError(f"Environment variable {var} is not set and no default value provided")
-            
-                structure = structure.replace(match[0], value)
-    
-    return structure
+    Recursively resolves environment placeholders in strings, dictionary keys
+    and values, and lists. This wrapper is retained for backward compatibility.
+
+    Args:
+        structure: Value or nested structure to resolve.
+
+    Returns:
+        The resolved value or structure.
+
+    Raises:
+        ValueError: If a referenced environment variable is unset and has no
+            non-empty default.
+    """
+    return _set_env_impl(structure)
 
 def set_dataset(structure, obj_dict):
+    """Compatibility wrapper for :func:`d3tools.parse.config_resolution.set_dataset`.
+
+    Recursively resolves dataset placeholders. This wrapper is retained for
+    backward compatibility.
+
+    Args:
+        structure: Value or nested structure to resolve.
+        obj_dict: Mapping of dataset keys to dataset-like objects.
+
+    Returns:
+        The resolved value or structure. A placeholder with tag assignments
+        calls ``update(**tags)`` on its resolved object.
+
+    Note:
+        Placeholder matching starts at the beginning of a string; any suffix
+        after the matched placeholder is not retained when it resolves.
     """
-    Replace the {obj, tag = 'value'} in the structure with the corresponding dataset in the obj_dict.
-    the tag = 'value' is used to update the tags of the dataset.
+    return _set_dataset_impl(structure, obj_dict)
+
+def substitute_values(structure, tag_dict, **kwargs):
+    """Compatibility wrapper for :func:`d3tools.parse.string_rendering.substitute_values`.
+
+    Recursively substitutes placeholders in nested structures. This wrapper
+    is retained for backward compatibility.
+
+    Args:
+        structure: Value or nested structure to render.
+        tag_dict: Mapping of placeholder names to values.
+        **kwargs: Forwarded to :func:`d3tools.parse.string_rendering.substitute_values`.
+
+    Returns:
+        A rebuilt structure with substituted string leaves and dictionary
+        keys. List-valued placeholders can expand a string leaf into a nested
+        list.
     """
-    if isinstance(structure, dict):
-        return {set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()}
-    elif isinstance(structure, list):
-        return [set_dataset(value, obj_dict) for value in structure]
-    elif isinstance(structure, str):
-        pattern = r'{([\w#-\.]+)(?:\s*,\s*([\w#-\.]+\s*=\s*\'.*?\')+)?}'
-        match = re.match(pattern, structure)
-        if match:
-            key= match.group(1)
-            structure = obj_dict.get(key, structure)
+    return _substitute_values_impl(structure, tag_dict, **kwargs)
 
-            if len(match.groups()) > 1:
-                tag_values = match.group(2)
-                if tag_values:
-                    tags = {}
-                    tag_values_pattern = r'([\w#-\.]+)\s*=\s*\'(.*?)\''
-                    for tag_values_match in re.finditer(tag_values_pattern, tag_values):
-                        tags[tag_values_match.group(1)] = tag_values_match.group(2)
+def substitute_string(string, tag_dict, rec=False):
+    """Compatibility wrapper for :func:`d3tools.parse.string_rendering.substitute_string`.
 
-                    structure = structure.update(**tags)
+    Renders placeholders in a string. List-valued tags expand into lists of
+    rendered strings; the ``rec`` argument is retained for compatibility and
+    does not disable recursive expansion.
 
-    return structure
+    Args:
+        string: Template string or value to render.
+        tag_dict: Mapping of placeholder names to values.
+        rec: Compatibility flag; list expansion remains recursive regardless
+            of this value.
+
+    Returns:
+        The rendered value, possibly a nested list when list-valued tags are
+        expanded.
+    """
+    return _substitute_string_impl(string, tag_dict, rec=rec)
 
 def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
-    """
-    Flatten a nested dictionary into a single level dictionary.
-    for each nested key, it creates as many key:value pairs to ensure all combinations of the parent keys are present.
-    parent keys are separated by '.' in the new key.
-    e.g. {'a': {'b': 1, 'c': 2}} -> {'a.b': 1, 'b': 1, 'a.c': 2, 'c': 2}
+    """Flatten nested dictionaries into a single-level dictionary.
+
+    For nested entries, the result includes keys both with and without their
+    ancestor prefixes. If different values produce the same flattened key,
+    those values are accumulated in a list.
+
+    Args:
+        nested_dict: Dictionary to flatten.
+        sep: Separator between nested key components. Defaults to ``'.'``.
+        parent_key: Prefix used during recursive flattening; normally left
+            empty by callers.
+
+    Returns:
+        A new dictionary containing flattened keys and their values. The input
+        dictionary is not modified.
+
+    Example:
+        >>> flatten_dict({'a': {'b': 1, 'c': 2}})
+        {'a.b': 1, 'b': 1, 'a.c': 2, 'c': 2}
     """
     items = []
     for k, v in nested_dict.items():
@@ -151,7 +148,7 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
         if key in flat_dict:
             if flat_dict[key] != value:
                 if not isinstance(flat_dict[key], list):
-                    flat_dict[key] = [flat_dict[key]].append(value)
+                    flat_dict[key] = [flat_dict[key], value]
                 else:
                     flat_dict[key].append(value)
         else:
@@ -159,111 +156,105 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
         
     return flat_dict
 
-def make_hashable(obj):
-    """
-    Convert a nested dictionary to a hashable object.
+def make_hashable(obj: dict|list|Any) -> tuple|Any:
+    """Encode dictionaries and lists as tuples for use in hash-based collections.
+
+    Dictionary and list subclasses are recorded in the encoding so
+    :func:`transform_back` can reconstruct their types. Other values, including
+    tuples, are returned unchanged.
+
+    Args:
+        obj: Value to encode. Dictionaries and lists are traversed recursively.
+
+    Returns:
+        A tuple encoding for a dictionary or list, or the original value for
+        other input types. The result is hashable only when its unchanged
+        values are themselves hashable.
+
+    Example:
+        >>> make_hashable({'a': [1, 2]})
+        (<class 'dict'>, ('a', (<class 'list'>, 1, 2)))
+        >>> make_hashable(Options({'a': [1, 2]}))
+        (<class 'Options'>, ('a', (<class 'list'>, 1, 2)))
     """
     if isinstance(obj, dict):
-        return ('dict',) + tuple((k, make_hashable(v)) for k, v in obj.items())
+        return (obj.__class__,) + tuple((k, make_hashable(v)) for k, v in obj.items())
     elif isinstance(obj, list):
-        return ('list',) +  tuple(make_hashable(v) for v in obj)
+        return (obj.__class__,) +  tuple(make_hashable(v) for v in obj)
     else:
         return obj
 
-def transform_back(obj):
-    """
-    Transform the hashable object back to its original form (list or dict).
-    """
-    if obj[0] == 'dict':
-        return {k: transform_back(v) if isinstance(v, tuple) else v for k, v in obj[1:]}
-    elif obj[0] == 'list':
-        return [transform_back(v) if isinstance(v, tuple) else v for v in obj[1:]]
-    else:
-        return obj
+def transform_back(obj: tuple) -> dict|list|Any:
+    """Reconstruct a dictionary or list encoded by :func:`make_hashable`.
 
-def get_unique_values(values):
+    The encoded container type is preserved, including custom dictionary and
+    list subclasses. Values that are not recognized container encodings are
+    returned unchanged.
+
+    Args:
+        obj: Tuple encoding to reconstruct.
+
+    Returns:
+        Reconstructed dictionary or list, or the input tuple unchanged when it
+        does not encode one of those container types.
+
+    Example:
+        >>> transform_back((dict, ('a', (list, 1, 2))))
+        {'a': [1, 2]}
+        >>> transform_back((Options, ('a', (list, 1, 2))))
+        Options({'a': [1, 2]})
+    """
+    if type(obj[0]) == type:
+        if issubclass(obj[0], dict):
+            return obj[0]({k: transform_back(v) if isinstance(v, tuple) else v for k, v in obj[1:]})
+        elif issubclass(obj[0], list):
+            return obj[0]([transform_back(v) if isinstance(v, tuple) else v for v in obj[1:]])
+    return obj
+
+def get_unique_values(values: list) -> list:
+    """Return unique values, supporting nested dictionaries and lists.
+
+    Values are deduplicated through :func:`make_hashable`. Result ordering is
+    not guaranteed because the encoded values are collected in a set.
+
+    Args:
+        values: Values to deduplicate; nested dictionaries and lists are
+            supported.
+
+    Returns:
+        A list of unique values, reconstructing dictionary and list encodings.
+
+    Raises:
+        TypeError: If an encoded value is still unhashable, such as a set.
+
+    Example:
+        >>> get_unique_values([{'a': 1}, {'a': 1}, {'a': 2}])
+        [{'a': 1}, {'a': 2}]
+    """
     unique_values = set()
     for value in values:
         unique_values.add(make_hashable(value))
     return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
 
-def extract_date_and_tags(string: str, string_pattern: str):
-    import copy
+def format_dict(dict: dict) -> str:
+    """Format dictionary entries as a comma-separated string.
 
-    pattern = string_pattern
-    pattern = re.sub(r'\{([\w#-\.]+)\}', r'(?P<\1>[^/]+)', pattern)
-    pattern = pattern.replace('%Y', '(?P<year>\\d{4})')
-    pattern = pattern.replace('%m', '(?P<month>\\d{2})')
-    pattern = pattern.replace('%d', '(?P<day>\\d{2})')
-    pattern = pattern.replace('%H', '(?P<hour>\\d{2})')
-    pattern = pattern.replace('%M', '(?P<minute>\\d{2})')
-    pattern = pattern.replace('%S', '(?P<second>\\d{2})')
-    pattern = pattern.replace('%j', '(?P<doy>\\d{3})')
+    Values whose exact type is ``float`` are formatted to two decimal places;
+    values whose exact type is ``datetime.datetime`` use ``YYYY-MM-DD``. Other
+    values use their standard string representation. Entry order follows the
+    dictionary's iteration order.
 
-    # get all the substituted names (i.e. the parts of the pattern that are between < and >)
-    substituted_names = re.findall(r'(?<=<)[\w#-\.]+(?=>)', pattern)
-    if "file_version" in substituted_names:
-        pattern = pattern.replace('(?P<file_version>[^/]+', '(?P<file_version>.+')
-    names_map = {}
+    Args:
+        dict: Dictionary to format.
 
-    for name in set(substituted_names):
-        if '{'+name+'}' in string:
-            new_name = name.replace('.', '').replace('-', '').replace('#', '').replace('_', '')
-            string = string.replace('{'+name+'}', new_name)
+    Returns:
+        A comma-separated string of ``key=value`` entries, or an empty string
+        for an empty dictionary.
 
-    # if there are duplicate names or there are symbols in the names, change them to avoid conflicts
-    for name in set(substituted_names):
-        if any(s in name for s in ['.', '-', '#']):
-            new_name = copy.deepcopy(name).replace('.', '_p_').replace('-', '_d_').replace('#', '_h_')
-            pattern = pattern.replace(f'(?P<{name}>', f'(?P<{new_name}>')
-            names_map[new_name] = name
-        else:
-            names_map[name] = name
-    
-    substituted_names_2 = re.findall(r'(?<=<)[\w]+(?=>)', pattern)
-    for name in set(substituted_names_2):
-        count = substituted_names_2.count(name)
-        
-        if count > 1:
-            for i in range(count - 1):
-                pattern = pattern.replace(f'(?P<{name}>', f'(?P<{name}{i}>', 1)
-                names_map[f'{name}{i}'] = name if name not in names_map else names_map[name]
-    
-    # Match the string with the pattern
-    match = re.match(pattern, string)
-    
-    if not match:
-        raise ValueError("The string does not match the pattern")
-
-    all_tags = match.groupdict()
-    # Extract the date components
-    if 'doy' in all_tags:
-        year = int(all_tags.pop('year', 1900))
-        doy = int(all_tags.pop('doy'))
-        date = dt.datetime(year, 1, 1) + dt.timedelta(days=doy - 1)
-    else:
-        year   = int(all_tags.pop('year',   1900))
-        month  = int(all_tags.pop('month',  1))
-        day    = int(all_tags.pop('day',    1))
-        hour   = int(all_tags.pop('hour',   0))
-        minute = int(all_tags.pop('minute', 0))
-        second = int(all_tags.pop('second', 0))
-        date   = dt.datetime(year, month, day, hour, minute, second)
-
-    # Extract the other key-value pairs
-    tags = {}
-    for key, value in names_map.items():
-        if value in ['year', 'month', 'day', 'hour', 'minute', 'second', 'doy']:
-            continue
-        if value not in tags:
-            tags[value] = all_tags[key]
-        elif tags[value] != all_tags[key]:
-            breakpoint()
-            raise ValueError(f"Duplicate values for tag {value} in the string")
-
-    return date, tags
-
-def format_dict(dict):
+    Example:
+        >>> format_dict({'a': 1.234, 'b': datetime.datetime(2024,2,20)})
+        'a=1.23, b=2024-02-20'
+    """
     str_list = []
     for key, value in dict.items():
         if type(value) == float:

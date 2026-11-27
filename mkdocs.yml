@@ -1,0 +1,96 @@
+site_name: D3tools
+site_description: Reusable Python tools and workflows for operational drought monitoring
+site_url: https://c-hydro.github.io/d3tools/
+repo_url: https://github.com/c-hydro/d3tools
+repo_name: c-hydro/d3tools
+docs_dir: docs
+
+nav:
+  - Home: index.md
+  - Workflow orchestration:
+      - Overview: workflow_orchestration/index.md
+      - Getting started: workflow_orchestration/getting-started.md
+      - Configuration: workflow_orchestration/configuration.md
+      - Datasets: workflow_orchestration/datasets.md
+      - Workflows: workflow_orchestration/workflows.md
+      - Logging: workflow_orchestration/logging.md
+      - Case study: workflow_orchestration/case-study.md
+      - Examples: workflow_orchestration/examples.md
+      - Troubleshooting: workflow_orchestration/troubleshooting.md
+      - Under the hood:
+          - Workflow lifecycle: workflow_orchestration/under-the-hood/lifecycle.md
+          - Architecture and engine integration: workflow_orchestration/under-the-hood/architecture.md
+  - Tools:
+      - Overview: tools/index.md
+      - Timestepping: tools/timestepping.md
+      - Spatial: tools/spatial.md
+      - Datasets: tools/datasets.md
+      - Cases: tools/cases.md
+      - Thumbnails: tools/thumbnails.md
+      - Exit handling and notification: tools/exit-and-notification.md
+  - API reference:
+      - Cases: reference/cases.md
+      - Configuration: reference/config.md
+      - Data: reference/data.md
+      - Errors: reference/errors.md
+      - Exit: reference/exit.md
+      - Logging: reference/logging.md
+      - Notification: reference/notification.md
+      - Parsing: reference/parse.md
+      - Spatial: reference/spatial.md
+      - Thumbnails: reference/thumbnails.md
+      - Timestepping: reference/timestepping.md
+  - Contributing: CONTRIBUTING.md
+
+theme:
+  name: material
+  # Preserve the existing Material layout when building the site with Zensical.
+  variant: classic
+  logo: assets/branding/d3tools.svg
+  favicon: assets/branding/d3tools.svg
+  palette:
+    scheme: default
+    primary: custom
+    accent: custom
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            docstring_options:
+              # Much of the legacy public API is intentionally unannotated. Keep
+              # structural parser warnings enabled, but do not treat the absence of
+              # source-level type annotations as a documentation-build warning.
+              warn_missing_types: false
+            show_source: false
+            show_root_heading: true
+            members_order: source
+            filters: ["!^_"]
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra_css:
+  - stylesheets/branding.css

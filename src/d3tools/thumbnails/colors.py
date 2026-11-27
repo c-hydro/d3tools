@@ -1,3 +1,10 @@
+"""Helpers for parsing and validating class-break color definitions.
+
+The functions in this module read textual color maps in the QGIS-style format
+used by the thumbnail renderer and convert them into the ordered breakpoints and
+RGBA tuples expected by Matplotlib.
+"""
+
 import numpy as np
 from matplotlib.colors import ListedColormap
 
@@ -6,29 +13,30 @@ from copy import deepcopy
 from ..data import Dataset
 
 def parse_colors(colors_definition: str|Dataset) -> tuple:
-    '''
-    Parse the color values from a text file.
-    To create a text file, use the following format:
-    -----------
-    x1,r1,g1,b1,a1,label1
-    x2,r2,g2,b2,a2,label2
-    x3,r3,g3,b3,a3,label3
-    x4,r4,g4,b4,a4,label4
-    -------
-    where:
-    color r1,g1,b1,a1 is used for values below x1 (incl.);
-    color r2,g2,b2,a2 is used for values between x1 (excl.) and x2 (incl.);
-    ...and so on.
-    x4 can be 'inf' to represent all values greater than x3.
-    Any line that is not in this format will be ignored.
+    """Parse a color-definition file or dataset into breakpoint, color, and label values.
 
-    labels are currently ignored.
-    (this can be retrieved from QGIS by using the 'Export color map to text file' option in the layer styling panel.)
+    The accepted text format is one row per class break:
 
-    It will return a tuple with two lists:
-    - the first list contains the positions (i.e. [x1,x2,x3,x4])
-    - and the second list contains the colors. (i.e. [(r1,g1,b1,a1),(r2,g2,b2,a2),(r3,g3,b3,a3),(r4,g4,b4,a4)])
-    '''
+        x1,r1,g1,b1,a1,label1
+        x2,r2,g2,b2,a2,label2
+        ...
+
+    Each row defines a numeric threshold and an RGBA tuple. The final row may
+    use ``inf`` to represent all values above the previous breakpoint. Lines that
+    do not match the expected format are ignored. Labels are retained for legend
+    output but are not otherwise used by the renderer.
+
+    Args:
+        colors_definition: A path to the color map text file or a ``Dataset``
+            whose ``get_data()`` output yields the same text lines.
+
+    Returns:
+        tuple: A three-item tuple containing the sorted break positions, the
+        corresponding RGBA color tuples, and the associated labels.
+
+    Raises:
+        ValueError: If no valid color definitions are found in the input.
+    """
 
     if isinstance(colors_definition, str):
         txt_file = colors_definition
@@ -49,6 +57,9 @@ def parse_colors(colors_definition: str|Dataset) -> tuple:
         except ValueError:
             pass
 
+    if not color_values:
+        raise ValueError("No valid color definitions were found.")
+
     # Sort the color values by key
     sorted_colors = sorted(color_values.items(), key=lambda x: np.inf if x[0] == 'inf' else float(x[0]))
 
@@ -58,18 +69,28 @@ def parse_colors(colors_definition: str|Dataset) -> tuple:
     return positions, colors, labels
 
 def parse_line(line: str) -> tuple:
-    '''
-    Parse a single line from the text file.
-    It will return a tuple with three values:
-    - the position (x)
-    - the color (r,g,b,a)
-    - and the label
-    '''
+    """Parse one row from a QGIS-style color map.
+
+    Args:
+        line: A comma-separated row with the format
+            ``position,r,g,b,a,label``. The label may itself contain commas and
+            is reconstructed from the remaining text after the first five color
+            fields.
+
+    Returns:
+        tuple: ``(position, color_values, label)`` where ``position`` is the
+        numeric breakpoint or ``"inf"`` and ``color_values`` is a list of four
+        integers in the range 0-255.
+
+    Raises:
+        ValueError: If the row is malformed or the numeric breakpoint or RGBA
+            values are invalid.
+    """
     parts = line.strip().split(',')
     if len(parts) < 6:
         raise ValueError(f'Invalid line format {line}. Expected 6 values separated by commas')
 
-    position, color, label = parts[0], parts[1:5], '.'.join(parts[5:])
+    position, color, label = parts[0], parts[1:5], ','.join(parts[5:])
 
     # ensure position is a valid number or 'inf'
     if position != 'inf':
@@ -90,6 +111,18 @@ def parse_line(line: str) -> tuple:
     return position, color, label
 
 def create_colormap(sorted_colors, nan_color: list[float] = [0.5, 0.5, 0.5, 1.0], include_nan = True) -> ListedColormap:
+    """Build a Matplotlib colormap from normalized RGBA values.
+
+    Args:
+        sorted_colors: RGBA tuples in 0-255 channel space.
+        nan_color: RGBA values used for missing-data entries when ``include_nan``
+            is true.
+        include_nan: If true, append ``nan_color`` as the final colormap entry.
+
+    Returns:
+        matplotlib.colors.ListedColormap: A colormap with 8-bit color channels
+        normalized to the 0-1 range expected by Matplotlib.
+    """
 
     # Normalize the colors to the range [0, 1]
     sorted_colors = np.array(sorted_colors, dtype=float) / 255
@@ -104,10 +137,19 @@ def create_colormap(sorted_colors, nan_color: list[float] = [0.5, 0.5, 0.5, 1.0]
     return cmap
 
 def keep_used_colors(unique_values:list[float], colors: list[tuple]) -> list[tuple]:
-    '''
-    Keep only the colors that are used in the list of unique values.
-    We actually need to keep all the colors in the range of unique values
-    '''
+    """Return the subset of colors spanning the observed value range.
+
+    The function does not drop colors by exact value lookup; instead it keeps the
+    contiguous slice of the palette from the minimum unique value to the maximum
+    unique value, inclusive.
+
+    Args:
+        unique_values: Numeric class indices that appear in the rendered data.
+        colors: Ordered palette entries corresponding to the full class range.
+
+    Returns:
+        list[tuple]: The palette slice needed for the observed value range.
+    """
 
     #col_list = list(deepcopy(colors))
     # to_remove = []

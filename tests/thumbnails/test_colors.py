@@ -1,126 +1,113 @@
 import pytest
-from matplotlib.colors import ListedColormap
-import numpy as np
 
-from thumbnails import colors as col
+from d3tools.thumbnails.colors import keep_used_colors, parse_colors, parse_line
 
-def test_parse_line_valid_input():
-    line = "10,255,0,0,255,label1"
-    expected = ('10', ['255', '0', '0', '255'], 'label1')
-    assert col.parse_line(line) == expected
 
-def test_parse_line_empty():
-    line = ""
-    with pytest.raises(ValueError) as excinfo:
-        col.parse_line(line)
-    assert "Invalid line format" in str(excinfo.value)
+def write_colors(tmp_path, content):
+    color_file = tmp_path / "colors.txt"
+    color_file.write_text(content)
+    return str(color_file)
 
-def test_parse_line_invalid_format():
-    line = "10,255,0,0,label1"  # Missing one color value
-    with pytest.raises(ValueError) as excinfo:
-        col.parse_line(line)
-    assert "Invalid line format" in str(excinfo.value)
 
-def test_parse_line_invalid_position():
-    line = "pos,255,0,0,255,label1"
-    with pytest.raises(ValueError) as excinfo:
-        col.parse_line(line)
-    assert "Invalid position value" in str(excinfo.value)
+def test_parse_line_accepts_valid_qgis_color_line():
+    position, color, label = parse_line("1,0,128,255,200,high risk")
 
-def test_parse_line_invalid_color_value():
-    line = "10,255,-1,300,255,label1"
-    with pytest.raises(ValueError) as excinfo:
-        col.parse_line(line)
-    assert "Invalid color value" in str(excinfo.value)
+    assert position == "1"
+    assert color == ["0", "128", "255", "200"]
+    assert label == "high risk"
 
-def create_test_file(tmp_path, content):
-    file_path = tmp_path / "test_file.txt"
-    file_path.write_text(content)
-    return file_path
 
-@pytest.fixture
-def basic_file_content():
-    return """
-    # line 1
-    # line 2
-    0,255,0,0,255,label1
-    10,0,255,0,255,label2
-    20,0,0,255,255,label3
-    inf,255,255,255,255,label4
-    """
+def test_parse_line_preserves_commas_in_label():
+    position, color, label = parse_line("1,0,128,255,200,high,risk")
 
-def test_parse_txt_basic(tmp_path, basic_file_content):
-    file_path = create_test_file(tmp_path, basic_file_content)
-    positions, colors = col.parse_txt(file_path)
-    assert positions == ('0', '10', '20', 'inf')
-    assert colors == (['255', '0', '0', '255'], ['0', '255', '0', '255'], ['0', '0', '255', '255'], ['255', '255', '255', '255'])
+    assert position == "1"
+    assert color == ["0", "128", "255", "200"]
+    assert label == "high,risk"
 
-def test_parse_txt_empty_file(tmp_path):
-    file_path = create_test_file(tmp_path, "")
-    with pytest.raises(ValueError):  # Assuming your function raises ValueError for empty input
-        col.parse_txt(file_path)
 
-def test_parse_txt_inf_handling(tmp_path):
-    content = """
-    # line 1
-    # line 2
-    0,255,0,0,255,label1
-    inf,255,255,255,255,label2
-    """
-    file_path = create_test_file(tmp_path, content)
-    positions, colors = col.parse_txt(file_path)
-    assert positions == ('0', 'inf')
-    assert colors == (['255', '0', '0', '255'], ['255', '255', '255', '255'])
+@pytest.mark.parametrize(
+    "line, message",
+    [
+        ("1,2,3", "Invalid line format"),
+        ("low,0,0,0,255,label", "Invalid position"),
+        ("1,256,0,0,255,label", "Invalid color"),
+        ("1,red,0,0,255,label", "Invalid color"),
+    ],
+)
+def test_parse_line_rejects_invalid_lines(line, message):
+    with pytest.raises(ValueError, match=message):
+        parse_line(line)
 
-def test_parse_txt_no_inf(tmp_path):
-    content = """
-    # line 1
-    # line 2
-    0,255,0,0,255,label1
-    10,0,255,0,255,label2
-    """
-    file_path = create_test_file(tmp_path, content)
-    positions, colors = col.parse_txt(file_path)
-    assert positions == ('0', '10')
-    assert colors == (['255', '0', '0', '255'], ['0', '255', '0', '255'])
 
-def test_create_colormap_with_valid_input():
-    # Input: List of RGB colors
-    colors = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
-    cmap = col.create_colormap(colors)
-    assert isinstance(cmap, ListedColormap), "The function should return a ListedColormap object"
-    assert len(cmap.colors) == 4, "Colormap should contain 4 colors"
-    np.testing.assert_array_almost_equal(cmap.colors[0], [1.0, 0.0, 0.0, 1.0], err_msg="First color should be red in normalized form")
+def test_parse_colors_sorts_finite_breaks_and_keeps_inf_last(tmp_path):
+    color_file = write_colors(
+        tmp_path,
+        "1,0,255,0,255,high\n"
+        "inf,0,0,255,255,extreme\n"
+        "-1,255,0,0,255,low\n"
+        "0,255,255,0,255,normal\n",
+    )
 
-def test_create_colormap_with_empty_input():
-    # Input: Empty list of colors
-    with pytest.raises(ValueError):
-        col.create_colormap([])
+    positions, colors, labels = parse_colors(color_file)
 
-def test_keep_used_colors_with_valid_input():
-    unique_values = [1.0, 2.0]
-    colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
-    expected_colors = [(0, 255, 0, 255), (0, 0, 255, 255)]
-    result = col.keep_used_colors(unique_values, colors)
-    assert result == expected_colors, f"Expected: {expected_colors}, Got: {result}"
+    assert positions == ("-1", "0", "1", "inf")
+    assert colors == (
+        ["255", "0", "0", "255"],
+        ["255", "255", "0", "255"],
+        ["0", "255", "0", "255"],
+        ["0", "0", "255", "255"],
+    )
+    assert labels == ["low", "normal", "high", "extreme"]
 
-def test_keep_used_colors_all_colors_used():
-    unique_values = [0, 1, 2]
-    colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
-    expected_colors = colors
-    result = col.keep_used_colors(unique_values, colors)
-    assert result == expected_colors, f"Expected: {expected_colors}, Got: {result}"
 
-def test_keep_used_colors_no_colors_used():
-    unique_values = [4.0, 5.0]
-    colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
-    expected_colors = []
-    result = col.keep_used_colors(unique_values, colors)
-    assert result == expected_colors, "Function should remove all colors when none are used"
+def test_parse_colors_supports_color_file_without_inf(tmp_path):
+    color_file = write_colors(
+        tmp_path,
+        "1,0,255,0,255,high\n"
+        "-1,255,0,0,255,low\n"
+        "0,255,255,0,255,normal\n",
+    )
 
-def test_keep_used_colors_empty_inputs():
-    unique_values = []
-    colors = []
-    expected_colors = []
-    result = col.keep_used_colors(unique_values, colors)
-    assert result == expected_colors, "Function should handle empty inputs gracefully"
+    positions, colors, labels = parse_colors(color_file)
+
+    assert positions == ("-1", "0", "1")
+    assert colors == (
+        ["255", "0", "0", "255"],
+        ["255", "255", "0", "255"],
+        ["0", "255", "0", "255"],
+    )
+    assert labels == ["low", "normal", "high"]
+
+
+def test_parse_colors_ignores_malformed_lines_when_valid_entries_remain(tmp_path):
+    color_file = write_colors(
+        tmp_path,
+        "not,a,color,line\n"
+        "0,255,255,0,255,normal\n"
+        "1,500,0,0,255,bad\n",
+    )
+
+    positions, colors, labels = parse_colors(color_file)
+
+    assert positions == ("0",)
+    assert colors == (["255", "255", "0", "255"],)
+    assert labels == ["normal"]
+
+
+@pytest.mark.parametrize("content", ["", "not,a,color,line\n1,500,0,0,255,bad\n"])
+def test_parse_colors_raises_clear_error_when_no_valid_entries_remain(tmp_path, content):
+    color_file = write_colors(tmp_path, content)
+
+    with pytest.raises(ValueError, match="No valid color definitions"):
+        parse_colors(color_file)
+
+
+def test_keep_used_colors_preserves_range_between_used_values():
+    colors = [
+        ("255", "0", "0", "255"),
+        ("255", "255", "0", "255"),
+        ("0", "255", "0", "255"),
+        ("0", "0", "255", "255"),
+    ]
+
+    assert keep_used_colors([1, 3], colors) == colors[1:4]

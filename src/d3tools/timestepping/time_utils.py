@@ -1,7 +1,166 @@
-import datetime
+"""Utility functions for time manipulation and unit conversions.
+
+This module provides various utilities for working with time periods, including:
+- Constructing time windows and ranges
+- Generating date lists for climatological calculations
+- Converting and comparing time units (days, months, years, dekads, etc.)
+- Parsing time unit strings into canonical forms
+
+The module supports various time units:
+- 'd': days
+- 'h': hours
+- 'w': weeks
+- 'm': months
+- 'y': years
+- 't': dekads (10-day periods, 36 per year)
+- 'v': VIIRS/MODIS periods (8-day periods, 46 per year)
+"""
+
+import datetime as dt
 from dateutil.relativedelta import relativedelta
 import warnings
-from typing import Iterable
+
+from typing import Iterable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .timeperiods import TimeRange
+
+# backward compatibility, this function used to be in this module
+from .time_parsing import get_date_from_str
+
+def get_window(time: dt.datetime, size: int, unit: str, start = False) -> 'TimeRange':
+    """Build a time range that ends or starts at a given datetime.
+
+    The returned range is inclusive and uses the calendar-aware semantics of the
+    underlying timestep definitions. Day, week, month, and year windows are built
+    with the same convention used elsewhere in the timestepping package; dekad
+    windows are snapped to the containing dekad when the reference time is not on a
+    natural boundary.
+
+    Args:
+        time (datetime.datetime): The reference time point. By default, the window
+            ends at this time (inclusive). If start=True, the window begins at this time.
+        size (int): The size of the window in the specified units. Must be an integer;
+            fractional sizes are not currently supported.
+        unit (str): The time unit for the window size. Can be:
+            - 'd' or 'days': days
+            - 'm' or 'months': months
+            - 'y' or 'years': years
+            - 'w' or 'weeks': weeks
+            - 't' or 'dekads': dekads (10-day periods)
+            Hours and VIIRS/MODIS units are not supported by this function.
+        start (bool, optional): If False (default), the window ends at `time`.
+            If True, the window starts at `time`. Defaults to False.
+
+    Returns:
+        TimeRange: A TimeRange object representing the constructed time window,
+            with start and end datetime attributes.
+
+    Raises:
+        ValueError: If the unit is not recognized, or if size is a float (fractional
+            sizes are not yet supported).
+
+    Examples:
+        >>> window = get_window(dt.datetime(2024, 2, 20), 3, 'm')
+        >>> window.start
+        datetime.datetime(2023, 11, 21, 0, 0)
+        >>> window.end
+        datetime.datetime(2024, 2, 20, 0, 0)
+        >>> get_window(dt.datetime(2024, 1, 1), 2, 't', start=True).start
+        datetime.datetime(2024, 1, 1, 0, 0)
+    """
+    from .timeperiods import Dekad, TimeRange
+
+    # if size is a float, raise an error, because right now I cannot handle fractional sizes
+    if isinstance(size, float):
+        raise ValueError('Size must be an integer, fractional sizes are not supported yet')
+
+    unit = find_unit_of_time(unit)
+
+    if unit in ['m', 'y', 'd', 'w']:
+        reldelta_unitmap = {'d': 'days', 'm': 'months', 'y': 'years', 'w': 'weeks'}
+        reldelta_unit = reldelta_unitmap[unit]
+        if start:
+            time_start:dt.datetime = time
+            time_end:dt.datetime = time + dt.timedelta(days=1) + relativedelta(**{reldelta_unit: size}) - dt.timedelta(days=2)
+        else:
+            time_start:dt.datetime = time + dt.timedelta(days=1) - relativedelta(**{reldelta_unit: size})
+            time_end:dt.datetime = time
+    elif unit == 't':
+        time_dekad:Dekad = Dekad.from_date(time) # dekad of the given time
+        if start:
+            start_dekad:Dekad = time_dekad
+            end_dekad:Dekad = start_dekad + size - 1
+            if start_dekad.start.date() != time.date():
+                warnings.warn('The given time does not correspond to the start of a dekad. The window will start at the beginning of the dekad.')
+        else:
+            end_dekad:Dekad = time_dekad
+            start_dekad:Dekad = end_dekad - size + 1
+            if end_dekad.end.date() != time.date():
+                warnings.warn('The given time does not correspond to the end of a dekad. The window will end at the end of the dekad.')
+        time_start:dt.datetime = start_dekad.start
+        time_end:dt.datetime = end_dekad.end
+    else:
+        raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
+    
+
+
+    return TimeRange(time_start, time_end)
+
+def get_md_dates(years: Iterable[int], month: int, day: int) -> list[dt.datetime]:
+    """Generate datetime objects for a specific month-day combination across multiple years.
+
+    This function is particularly useful for generating dates for climatological means,
+    calculating multi-year statistics, or creating reference date lists. It intelligently
+    handles leap years for February 28/29 by returning February's last day in each
+    year when either February 28 or 29 is requested.
+
+    Args:
+        years (Iterable[int]): An iterable of year values (e.g., list, range) for which
+            to generate dates.
+        month (int): The month number (1-12).
+        day (int): The day of the month (1-31).
+
+    Returns:
+        list[datetime.datetime]: A sorted list of datetime objects (at 00:00:00),
+            one for each year in the input. For Feb 29 in non-leap years, Feb 28 is
+            substituted.
+
+    Examples:
+        >>> # Get Feb 29 for leap and non-leap years
+        >>> get_md_dates([2020, 2021, 2024], 2, 29)
+        [datetime.datetime(2020, 2, 29, 0, 0),
+         datetime.datetime(2021, 2, 28, 0, 0),
+         datetime.datetime(2024, 2, 29, 0, 0)]
+        
+        >>> # Get March 15 for a range of years
+        >>> get_md_dates(range(2020, 2023), 3, 15)
+        [datetime.datetime(2020, 3, 15, 0, 0),
+         datetime.datetime(2021, 3, 15, 0, 0),
+         datetime.datetime(2022, 3, 15, 0, 0)]
+        
+        >>> # Works with any iterable
+        >>> get_md_dates([2020, 2022, 2024], 1, 1)
+        [datetime.datetime(2020, 1, 1, 0, 0),
+         datetime.datetime(2022, 1, 1, 0, 0),
+         datetime.datetime(2024, 1, 1, 0, 0)]
+
+    Note:
+        - All returned datetime objects have time set to midnight (00:00:00).
+        - The returned list is always sorted chronologically.
+                - Requests for February 28 or 29 both return February 29 in leap years and
+                    February 28 in other years.
+    """
+    from .timeperiods import Year
+    if month == 2 and day in [28, 29]:
+        year = list(years)  # Ensure the iterable can be traversed multiple times
+        leaps = [year for year in years if Year(year).is_leap()]
+        nonleaps = [year for year in years if not Year(year).is_leap()]
+        dates = [dt.datetime(year, 2, 29) for year in leaps] + [dt.datetime(year, 2, 28) for year in nonleaps]
+    else:
+        dates = [dt.datetime(year, month, day) for year in years]
+    
+    return sorted(dates)
 
 UNIT_CONVERSIONS = {
     'h' : {'d': 24,   'w': 168, 'v' : 192},
@@ -13,89 +172,120 @@ UNIT_CONVERSIONS = {
     'y' : {'t': 1/36, 'm': 1/12}
 }
 
-def get_date_from_str(str: str, format: None|str = None, end = False) -> datetime.datetime:
+def unit_is_multiple(unit1: str, unit2: str) -> bool:
+    """Determine if unit1 can be expressed as an integer multiple of unit2.
+
+    This function checks whether one time unit is a clean multiple of another,
+    which is useful for determining compatibility in aggregation operations and
+    time period calculations. The relationship is directional: months and years
+    are considered multiples of days and hours, while the reverse is not true.
+
+    Args:
+        unit1 (str): The unit to check (will be parsed through find_unit_of_time).
+            Examples: 'd', 'days', 'daily', 'm', 'months', 'y', 'years', etc.
+        unit2 (str): The reference unit (also parsed through find_unit_of_time).
+
+    Returns:
+        bool: True if unit1 is a multiple of unit2, False otherwise.
+
+    Examples:
+        >>> unit_is_multiple('m', 'd')  # months are multiples of days
+        True
+        >>> unit_is_multiple('d', 'm')  # days are not multiples of months
+        False
+        >>> unit_is_multiple('d', 'd')  # same units are multiples
+        True
+        >>> unit_is_multiple('w', 'd')  # weeks are multiples of days (7)
+        True
+        >>> unit_is_multiple('y', 'm')  # years are multiples of months (12)
+        True
+        >>> unit_is_multiple('v', 'w')  # VIIRS/8-day not multiple of weeks
+        False
+
+    Note:
+        - Units are first normalized using find_unit_of_time().
+        - Months and years are considered multiples of days and hours even though
+          the conversion factor varies (e.g., months have 28-31 days).
+                - Other pairs are determined by the integer conversion factors in
+                    ``UNIT_CONVERSIONS``; the relationship is directional.
     """
-    Returns a datetime object from a string.
-    """
-    _date_formats = ['%Y-%m-%d', '%Y%m%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y', '%d %b %Y', '%d %B %Y', '%Y %b %d', '%Y %B %d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H']
-    if format:
-        date = datetime.datetime.strptime(str, format)
 
-    for date_format in _date_formats:
-        try:
-            date = datetime.datetime.strptime(str, date_format)
-            format = date_format
-            break
-        except ValueError:
-            pass
+    unit1 = find_unit_of_time(unit1)
+    unit2 = find_unit_of_time(unit2)
+
+    # if the units are the same, they are multiples of each other
+    if unit1 == unit2:
+        return True
+    # if their conversion factor is an integer, they are multiples of each other
+    elif unit1 in UNIT_CONVERSIONS[unit2]:
+        return  UNIT_CONVERSIONS[unit2][unit1] == int(UNIT_CONVERSIONS[unit2][unit1])
+    # months and years are multiples of days (and hours) even if the conversion factor is not an integer
+    elif unit2 in ['d', 'h']:
+        return unit1 in ['m', 'y']
+    # in all other cases, they are not multiples of each other
     else:
-        raise ValueError(f'Cannot parse date string "{str}"')
-    
-    if end:
-        if '%S' not in format: date = date.replace(second = 59)
-        if '%M' not in format: date = date.replace(minute = 59)
-        if '%H' not in format: date = date.replace(hour = 23)
-
-    return date
-
-def get_window(time: datetime.datetime, size: int, unit: str, start = False) -> 'TimeRange':
-        """
-        Returns a TimeRange object that represents a window of time ending (start == False) or starting (start == True) at the given time.
-        The size is given in the unit specified.
-        Units can be 'months', 'years', 'days', 'weeks', 'dekads'.
-        """
-        from .fixed_num_timestep import Dekad
-        from .timerange import TimeRange
-
-        unit = find_unit_of_time(unit)
-        
-        if unit in ['m', 'y', 'd', 'w']:
-            reldelta_unitmap = {'d': 'days', 'm': 'months', 'y': 'years', 'w': 'weeks'}
-            reldelta_unit = reldelta_unitmap[unit]
-            if start:
-                time_start:datetime.datetime = time
-                time_end:datetime.datetime = time + datetime.timedelta(days=1) + relativedelta(**{reldelta_unit: size}) - datetime.timedelta(days=2)
-            else:
-                time_start:datetime.datetime = time + datetime.timedelta(days=1) - relativedelta(**{reldelta_unit: size})
-                time_end:datetime.datetime = time
-        elif unit == 't':
-            time_dekad:Dekad = Dekad.from_date(time) # dekad of the given time
-            if start:
-                start_dekad:Dekad = time_dekad
-                end_dekad:Dekad = start_dekad + size - 1
-                if start_dekad.start != time:
-                    warnings.warn('The given time does not correspond to the start of a dekad. The window will start at the beginning of the dekad.')
-            else:
-                end_dekad:Dekad = time_dekad
-                start_dekad:Dekad = end_dekad - size + 1
-                if end_dekad.end != time:
-                    warnings.warn('The given time does not correspond to the end of a dekad. The window will end at the end of the dekad.')
-            time_start:datetime.datetime = start_dekad.start
-            time_end:datetime.datetime = end_dekad.end
-        else:
-            raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
-        return TimeRange(time_start, time_end)
-
-def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime.datetime]:
-    from .fixed_num_timestep import Year
-    if month == 2 and day in [28, 29]:
-        leaps = [year for year in years if Year(year).is_leap()]
-        nonleaps = [year for year in years if not Year(year).is_leap()]
-        return [datetime.datetime(year, 2, 29) for year in leaps] + [datetime.datetime(year, 2, 28) for year in nonleaps]
-    else:
-        return [datetime.datetime(year, month, day) for year in years]
+        return False
     
 def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = None) -> str:
-    """
-    Tries to interpret the string given as a unit of time.
-    It will return one of the following:
-    'd' for days,
-    'm' for months,
-    'y' for years,
-    't' for dekads,
-    'v' for 8-day periods like viirs,
-    'h' for hours,
-    'w' for weeks.
+    """Parse and normalize a time unit string into a canonical single-character code.
+
+    This function provides flexible parsing of various time unit representations,
+    allowing for different naming conventions and formats. It can parse explicit
+    unit strings or infer the unit from the number of timesteps per year.
+
+    Args:
+        unit (str|None, optional): The unit string to parse. Can be:
+            - A single character code: 'd', 'm', 'y', 't', 'v', 'h', 'w'
+            - A full word: 'daily', 'days', 'monthly', 'months', etc.
+            - Variants: 'dekads', 'dekadly', 'yearly', 'annual', etc.
+            - Composite forms: '10d' for dekads, '8d' for VIIRS
+            Non-alphanumeric characters are ignored during parsing.
+        timesteps_per_year (int|None, optional): If unit is None, infer the unit
+            from this value. Supported values:
+            - 365: daily ('d')
+            - 36: dekadly ('t')
+            - 12: monthly ('m')
+            - 1: yearly ('y')
+
+    Returns:
+        str: A single-character canonical unit code:
+            - 'd': days
+            - 'h': hours
+            - 'w': weeks
+            - 'm': months
+            - 'y': years
+            - 't': dekads (10-day periods, 36 per year)
+            - 'v': VIIRS/MODIS periods (8-day periods)
+
+    Raises:
+        ValueError: If neither argument is provided or if the unit string cannot
+            be recognized.
+        KeyError: If ``unit`` is None and ``timesteps_per_year`` is not one of
+            1, 12, 36, or 365.
+
+    Examples:
+        >>> find_unit_of_time('daily')
+        'd'
+        >>> find_unit_of_time('months')
+        'm'
+        >>> find_unit_of_time(timesteps_per_year=36)
+        't'
+        >>> find_unit_of_time('10-days')  # Composite 10-day spellings mean dekads
+        't'
+        >>> find_unit_of_time('10 days')  # Both forms normalize to the same unit
+        't'
+        >>> find_unit_of_time('dekads')
+        't'
+        >>> find_unit_of_time('8d')
+        'v'
+        >>> find_unit_of_time('annual')
+        'y'
+
+    Note:
+        - The function is case-insensitive and ignores non-alphanumeric characters.
+        - Both 'a' and 'y' maps to yearly ('y').
+        - 'annual', 'annually', 'yearly', 'year', 'years' all map to 'y'.
+        - Special composite forms like '10d' and '8d' are recognized.
     """
 
     ts_unit_map = {365:'d', 36: 't', 12: 'm', 1: 'y'}
@@ -106,8 +296,8 @@ def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = N
         else:
             raise ValueError('Either unit or timesteps_per_year must be given')
     
-    # remove all non-alphanumeric characters
-    unit = ''.join([c for c in unit if c.isalnum()])
+    # remove all non-alphanumeric characters and convert to lowercase
+    unit = ''.join([c.lower() for c in unit if c.isalnum()])
 
     if unit in ['d', 'days', 'day', 'daily']:
         return 'd'
@@ -132,20 +322,3 @@ def find_unit_of_time(unit: str|None = None, *, timesteps_per_year: int|None = N
     
     else:
         raise ValueError(f'Unit {unit} not recognized')
-
-def unit_is_multiple(unit1: str, unit2: str) -> bool:
-    """
-    Returns True if unit1 is a multiple of unit2, False otherwise.
-    """
-    # if the units are the same, they are multiples of each other
-    if unit1 == unit2:
-        return True
-    # if their conversion factor is an integer, they are multiples of each other
-    elif unit1 in UNIT_CONVERSIONS[unit2]:
-        return  UNIT_CONVERSIONS[unit2][unit1] == int(UNIT_CONVERSIONS[unit2][unit1])
-    # months and years are multiples of days (and hours) even if the conversion factor is not an integer
-    elif unit1 in ['d', 'h']:
-        return unit2 in ['m', 'y']
-    # in all other cases, they are not multiples of each other
-    else:
-        return False

@@ -1,0 +1,157 @@
+# CHIRPS-to-SPI case study
+
+## Case study overview and prerequisites
+
+This walk-through connects three engines:
+
+1. DOOR downloads 10-day CHIRPS precipitation for a fixed area.
+2. DAM creates 1-month and 3-month accumulations while retaining a 10-day
+   output cadence.
+3. DRYES computes SPI1 and SPI3 from pre-computed parameters.
+
+Install D3tools and all three engines: [DOOR](https://github.com/c-hydro/door/tree/main_new),
+[DAM](https://github.com/c-hydro/dam), and
+[DRYES](https://github.com/c-hydro/dryes). The source CHIRPS example uses no
+credentials. The run needs network access to the CHIRPS service and enough
+local disk for raw precipitation, aggregates, indices, parameters, and logs.
+The sample bounding box is `[8, 38.5, 10, 41.5]`; the period used below is
+2021, with the parameter reference period recorded in the configuration as
+1990–2020. The parameter bundle fixes the matching grid as well as the area,
+aggregation windows, and reference period; do not substitute a different grid
+or resample these inputs. Parameter generation and SPI methodology are owned
+by DRYES documentation and are outside this guide.
+
+All outputs use the `output_root` tag, set to `/tmp/d3tools-case-study` for
+the documented safe test location. Change that one tag in each file to choose
+another writable root. Outputs are organised beneath `input/chirps`,
+`aggregate`, `spi`, and `logs`.
+
+The matching parameter bundle is published as a versioned dataset under
+[CC BY 4.0 on Zenodo](https://doi.org/10.5281/zenodo.24556246). It contains
+gamma `a`, `loc`, and `scale`, and `prob0` rasters for every dekad and both
+aggregation windows. Download and verify the exact case-study version with:
+
+```bash
+python scripts/fetch_case_study_parameters.py
+```
+
+By default the script extracts the bundle to
+`/tmp/d3tools-case-study/parameters/chirps-spi-parameters-v1`, which is also
+the default `parameter_root` in the Step 3 and combined configurations. To use
+another location, pass `--destination` and set `SPI_PARAMETER_ROOT` to the
+same directory before loading the workflow.
+
+```bash
+python scripts/fetch_case_study_parameters.py --destination /path/to/parameters
+export SPI_PARAMETER_ROOT=/path/to/parameters
+```
+
+## Step 1: download 10-day CHIRPS precipitation (DOOR)
+
+The full file below is the Step 1 workflow. Its D3tools-facing parts are the
+root tag, destination dataset, dataset timestep, and run range. The DOOR
+section is engine-owned; see [DOOR](https://github.com/c-hydro/door/tree/main_new) for its
+complete payload contract.
+
+<!-- check-docs: skip -->
+```json
+--8<-- "docs/workflow_orchestration/case-study/01_download_chirps.json"
+```
+
+Run it with the installed D3tools command:
+
+```bash
+d3run docs/workflow_orchestration/case-study/01_download_chirps.json \
+  --start 2020-10-01 \
+  --end 2021-12-31
+```
+
+Start at least three months (eight 10-day timesteps) before the first SPI
+date so the 3-month accumulation has input history. The downloaded files
+appear beneath `<output_root>/input/chirps/`. This example was run
+successfully for the 45 dekads from 2020-10-01 through 2021-12-31.
+
+## Step 2: aggregate to 1-month and 3-month windows (DAM)
+
+The full Step 2 workflow reuses the Step 1 input definition and writes
+window-templated aggregate keys. The DAM `aggregate_times` block is
+engine-owned; see [DAM](https://github.com/c-hydro/dam) for its full contract.
+
+<!-- check-docs: skip -->
+```json
+--8<-- "docs/workflow_orchestration/case-study/02_aggregate.json"
+```
+
+Run the aggregation over the download period, including the warm-up data:
+
+```bash
+d3run docs/workflow_orchestration/case-study/02_aggregate.json \
+  --start 2020-10-01 \
+  --end 2021-12-31
+```
+
+The DAM example was run successfully: it wrote 43 1-month and 37 3-month
+GeoTIFFs at dekadal dates beneath `<output_root>/aggregate/1m/` and
+`<output_root>/aggregate/3m/`. This verifies this example's window/cadence
+combination with the installed DAM environment; engine option semantics
+remain owned by [DAM](https://github.com/c-hydro/dam).
+
+## Step 3: compute SPI1 and SPI3 (DRYES)
+
+Step 3 reads the 1-month and 3-month aggregate datasets and the matching
+pre-computed parameter rasters. Parameter references use update tags for the
+parameter name; the parameter key pattern includes an `{agg_window}` slot,
+as in the DRYES example. DRYES expands the `agg_window` mapping into two
+cases: case tags `1` and `3` select parameter and output directories `1m` and
+`3m`, while the corresponding option values `1m` and `3m` select the DAM
+aggregate inputs. This binding has been verified by constructing the workflow
+and rendering all three key families with the installed DRYES integration.
+`timesteps_per_year` is set to 36 for the 10-day timestep. The DRYES section
+is engine-owned; see [DRYES](https://github.com/c-hydro/dryes) for its full
+payload contract.
+
+<!-- check-docs: skip -->
+```json
+--8<-- "docs/workflow_orchestration/case-study/03_spi.json"
+```
+
+After downloading the parameter bundle, run the target 2021 period:
+
+```bash
+d3run docs/workflow_orchestration/case-study/03_spi.json \
+  --start 2021-01-01 \
+  --end 2021-12-31
+```
+
+SPI output keys are written beneath `<output_root>/spi/`. The published bundle
+matches the fixed area, grid, aggregation windows, dekadal cycle, and 1990–2020
+reference period used here. How to calculate those parameters belongs to
+DRYES documentation, not this guide.
+
+## Run the whole chain as one workflow
+
+The combined JSON keeps the three sections in order and defines shared
+datasets and logging once. The full file is:
+
+<!-- check-docs: skip -->
+```json
+--8<-- "docs/workflow_orchestration/case-study/chirps_spi_case_study.json"
+```
+
+After downloading the parameter bundle, run the combined workflow with the
+shared download/warm-up range:
+
+```bash
+d3run docs/workflow_orchestration/case-study/chirps_spi_case_study.json \
+  --start 2020-10-01 \
+  --end 2021-12-31
+```
+
+A supplied workflow range is passed to every section, so the combined run
+uses that interval throughout; run Step 3 separately if only the 2021 SPI
+output range is wanted. The sequence is download, aggregate, then SPI, and a
+failure stops later sections. Inspect `<output_root>/input/chirps/`,
+`aggregate/`, `spi/`, and `logs/`; the log includes a separate structured
+run-state file. See [Workflows](workflows.md) for ordering and range rules,
+and [Logging](logging.md) for log behaviour. The combined workflow has not
+yet been rerun end to end with the published bundle.

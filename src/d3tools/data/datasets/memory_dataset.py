@@ -1,0 +1,83 @@
+"""In-memory storage implementation for :class:`Dataset`."""
+
+from typing import Any
+
+from .dataset import Dataset
+from ...parse import KeyParser
+
+class MemoryDataset(Dataset):
+    """Dataset storing values in a process-local dictionary.
+
+    Reads remove stored values by default; set ``keep_after_reading`` to true
+    to preserve values after retrieval.
+    """
+
+    type = 'memory'
+
+    def __init__(self, key_pattern: str, keep_after_reading = False, **kwargs):
+        """Create an empty in-memory dataset.
+
+        Args:
+            key_pattern: Pattern used as keys in the internal data mapping.
+            keep_after_reading: If true, reads leave values in memory;
+                otherwise, a read removes that key.
+            **kwargs: Shared Dataset configuration and remaining options.
+        """
+        self.key_pattern = key_pattern
+        super().__init__(**kwargs)
+        self.data_dict = {}
+        self.keep_after_reading = keep_after_reading
+        self._creation_kwargs.update({'keep_after_reading': self.keep_after_reading})
+
+    @property
+    def key_pattern(self):
+        return self._key_pattern
+
+    @key_pattern.setter
+    def key_pattern(self, key_pattern: str):
+        self._key_pattern = key_pattern
+
+    ## INPUT/OUTPUT METHODS
+    def _read_data(self, input_key: str, **kwargs) -> Any:
+        if self.keep_after_reading:
+            return self.data_dict.get(input_key)
+        else:
+            return self.data_dict.pop(input_key)
+    
+    def _write_data(self, output: Any, output_key: str, **kwargs) -> None:
+        #future: add append mode for tables and text 
+        # currently they are not supported in MemoryDataset since the Mixins are not called here
+        self.data_dict[output_key] = output
+
+    def _rm_data(self, key: str) -> None:
+        self.data_dict.pop(key)
+
+    ## METHODS TO CHECK DATA AVAILABILITY
+    def _check_data(self, data_path: str) -> bool:
+        for key in self.data_dict.keys():
+            if key.startswith(data_path):
+                return True
+        else:
+            return False
+    
+    def _walk(self, prefix: str):
+        for key in self.data_dict.keys():
+            if key.startswith(prefix):
+                yield key
+    
+    def _post_update_init(self, source_dataset, **kwargs):
+        """Handle MemoryDataset-specific attribute preservation after update.
+        
+        This filters available_keys if they were cached in the source dataset.
+        
+        Args:
+            source_dataset: The MemoryDataset being updated
+            kwargs: kwargs passed to super()._post_update_init
+        """
+        # Call parent implementation first (Dataset._post_update_init)
+        super()._post_update_init(source_dataset, **kwargs)
+        
+        # Filter data_dict to only include keys matching the new pattern
+        key_parser = KeyParser(self.key_pattern)
+        matching_keys = key_parser.get_matching_keys(source_dataset.available_keys)
+        self.data_dict= {key: source_dataset.data_dict.get(key) for key in matching_keys}

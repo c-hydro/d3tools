@@ -1,0 +1,498 @@
+"""
+Raster-specific functionality mixin for Dataset classes.
+
+This mixin provides template management and raster-specific operations
+for datasets that store gridded/raster data (NetCDF, GeoTIFF, etc.).
+"""
+import numpy as np
+import xarray as xr
+import rioxarray as rxr
+import os
+import datetime as dt
+from typing import Optional
+import rasterio
+
+from .base import FormatMixin
+from ...spatial import TemplateManager
+from ...timestepping import TimeStep, get_date_from_str
+
+class RasterMixin(FormatMixin):
+    """
+    Mixin providing raster/gridded data functionality.
+    
+    This mixin adds:
+    - Template management for spatial grids
+    - Coordinate system handling
+    - Raster-specific read/write operations
+    
+    Used by datasets that store spatially gridded data like NetCDF, GeoTIFF.
+    [future] Separate into submixins for NetCDF vs GeoTIFF if needed.
+    """
+    
+    def _init_format_properties(self):
+        """Initialize raster-specific properties. Call from __init__."""
+        self.template_manager = TemplateManager()
+    
+    def _post_update_init(self, source_dataset, preserve_spatial=True,**kwargs):
+        """Handle raster-specific attribute preservation after update.
+        
+        This method preserves template_manager and tile_names when preserve_spatial=True.
+        Always calls super() first to ensure proper MRO handling with Dataset base class.
+        
+        Args:
+            source_dataset: The dataset being updated
+            preserve_spatial: Whether to preserve spatial attributes
+            kwargs: kwargs passed to super()._post_update_init
+        """
+        # Call parent implementation first (Dataset._post_update_init)
+        super()._post_update_init(source_dataset, **kwargs)
+        
+        # Preserve spatial/raster attributes if requested
+        if preserve_spatial:
+            if hasattr(source_dataset, 'template_manager'):
+                self.template_manager = source_dataset.template_manager
+            
+            if hasattr(source_dataset, '_tile_names'):
+                self._tile_names = source_dataset._tile_names
+    
+    def _read_from_file(self, path: str, chunk_threshold: int = 500, **kwargs) -> xr.DataArray | xr.Dataset:
+        """Read raster data from a file using xarray or rioxarray.
+        
+        Args:
+            path: Path to the raster file
+            chunk_threshold: File size threshold (in MB) for using dask
+            **kwargs: Additional arguments [unused in this method but passed for consistency]
+
+        Returns:
+            xarray DataArray or Dataset read from the raster file
+        """
+
+        # read the data from a geotiff
+        if self.format == 'geotiff':
+            # check the size of the file to decide whether to use dask or not
+            file_size = self.estimate_tiff_decoded_mb(path)  # size in MB
+            if file_size > chunk_threshold:  # threshold for using dask
+                data = rxr.open_rasterio(path, chunks = {})
+            else:
+                data = rxr.open_rasterio(path)
+        # read the data from a netcdf
+        elif self.format == 'netcdf':
+            data = xr.open_dataset(path, engine = 'h5netcdf')
+            # check if there is a single variable in the dataset
+            if len(data.data_vars) == 1:
+                data = data[list(data.data_vars)[0]]
+        return data
+
+    def _format_after_read(self, data, **kwargs):
+        """
+        Post-process raster data after reading from storage.
+        
+        Handles coordinate straightening, nodata value conversion,
+        and template application/creation.
+        
+        Args:
+            data: Raw raster data from storage
+            **kwargs: Additional arguments (as_is flag, etc.)
+            
+        Returns:
+            Processed xarray ready for use
+        """
+        from ..io_utils_raster import straighten_data, set_type
+
+        # Ensure data has descending latitudes
+        data = straighten_data(data)
+        
+        # Convert nodata values
+        data = set_type(data, self.nan_value, read=True)
+        
+        # handle source metadata
+        where_code = kwargs.pop('source', 1)
+        if where_code == 1:
+            full_key = self.get_key(**kwargs)
+            metadata = {'source_key': full_key}
+        elif where_code == 2:
+            keys = [p.get_key(**kwargs) for p in self.parents.values()]
+            full_key = ", ".join(keys)
+            metadata = {'source_key': full_key, 'source': 'calculated_data'}
+        elif where_code == 3:
+            full_key = self.fallback.get_key(**kwargs)
+            metadata = {'source_key': full_key, 'source': 'fallback_data'}
+
+        # Handle templates
+        template_dict = self.get_template_dict(make_it=False, **kwargs)
+        if template_dict is None:
+            # Create template from data
+            self.set_template(data, **kwargs)
+        else:
+            # Apply existing template to align coordinates
+            attrs = data.attrs
+            data = self.set_data_to_template(data, template_dict)
+            data.attrs.update(attrs)
+        
+        # Add source metadata -> move this to a more general place in Dataset.read_data after format-specific processing
+        data.attrs.update(metadata)
+        
+        return data
+
+    def _format_before_write(
+        self,
+        data,
+        time=None,
+        template_search_start=None,
+        **kwargs,
+    ):
+        """
+        Prepare raster data for writing with format-specific logic.
+        
+        Handles template creation/application, coordinate straightening,
+        and nodata value management.
+        
+        Args:
+            data: Raster data to prepare (xarray or numpy array)
+            time: Optional time used to anchor template discovery.
+            template_search_start: Optional lower bound for template discovery.
+            **kwargs: Additional arguments
+            
+        Returns:
+            Prepared xarray ready for writing
+        """
+        from ..io_utils_raster import straighten_data, set_type
+        
+        # Ensure there is a template available
+        try:
+            template_dict = self.get_template_dict(
+                reference_time=time,
+                template_search_start=template_search_start,
+                **kwargs,
+            )
+        except PermissionError:
+            template_dict = None
+
+        if template_dict is None:
+            if isinstance(data, (xr.DataArray, xr.Dataset)):
+                self.set_template(data, **kwargs)
+                template_dict = self.get_template_dict(
+                    reference_time=time,
+                    template_search_start=template_search_start,
+                    make_it=False,
+                    **kwargs,
+                )
+            else:
+                reference_time = self._resolve_template_date(time)
+                configured_start = (
+                    template_search_start
+                    if template_search_start is not None
+                    else self.options.get('template_search_start')
+                )
+                if configured_start is None:
+                    search_description = (
+                        f"the default five-year interval preceding {reference_time:%Y-%m-%d}"
+                        if reference_time is not None
+                        else "the default five-year interval preceding the current date"
+                    )
+                else:
+                    configured_start = self._resolve_template_date(configured_start)
+                    search_description = (
+                        f"the interval starting {configured_start:%Y-%m-%d}"
+                    )
+                raise ValueError(
+                    "Cannot write a NumPy raster without a template: "
+                    f"dataset {self.name!r} has no accessible source raster in "
+                    f"{search_description}. Configure template_search_start "
+                    "to search further back or provide an xarray object with "
+                    "spatial coordinates."
+                )
+        
+        # Apply template to data
+        if isinstance(data, (xr.DataArray, xr.Dataset)):
+            data = straighten_data(data)
+            output = self.set_data_to_template(data, template_dict)
+        else:
+            output = self.set_data_to_template(data, template_dict)
+            output = straighten_data(output)
+        
+        # Fix the type and nodata value
+        output = set_type(output, self.nan_value, read=False)
+        
+        return output
+
+    def _write_to_file(self, data: xr.DataArray, path: str, **kwargs):
+        """Write raster data to a file using xarray.
+        Args:
+            data: xarray DataArray or Dataset prepared for writing
+            path: Path to the output file
+            **kwargs: Additional arguments [unused in this method but passed for consistency]
+
+        """
+        from ..io_utils import ensure_directory_exists
+        ensure_directory_exists(path)
+        
+        if self.format == 'geotiff':
+            if data.chunks is not None:
+                # If data is chunked, save it in chunks
+                from ..io_utils_raster import save_raster_in_chunks, save_raster_as_cog
+                save_raster_in_chunks(data, path)
+                #save_raster_as_cog(data, path)
+            else:
+                # If not chunked, write directly
+                data.rio.to_raster(path, compress='LZW', windowed=np.prod(data.shape) > 1e8)
+
+        # write the data to a netcdf
+        elif self.format == 'netcdf':
+            data.to_netcdf(path, engine = 'h5netcdf')
+
+    @property
+    def _template(self) -> dict:
+        """Backward compatibility property for accessing templates."""
+        return self.template_manager._templates
+    
+    @_template.setter
+    def _template(self, value: dict):
+        """Backward compatibility property for setting templates."""
+        self.template_manager._templates = value
+    
+    def _resolve_template_date(self, value):
+        """Normalize a template search boundary to a datetime."""
+        if value is None:
+            return None
+        if isinstance(value, TimeStep):
+            return self.get_time_signature(value)
+        if isinstance(value, dt.datetime):
+            return value
+        if isinstance(value, dt.date):
+            return dt.datetime.combine(value, dt.time.min)
+        if isinstance(value, str):
+            return get_date_from_str(value)
+        raise TypeError(
+            "Template search dates must be datetime, date, TimeStep, or string values."
+        )
+
+    def get_template_dict(
+        self,
+        make_it: bool = True,
+        reference_time=None,
+        template_search_start=None,
+        **kwargs,
+    ):
+        """
+        Get template dictionary for raster data.
+        
+        Templates define the spatial grid (coordinates, CRS, etc.) for raster data.
+        If template doesn't exist and make_it=True, creates it from actual data.
+        
+        Args:
+            make_it: Whether to create template if it doesn't exist
+            reference_time: Optional upper bound for finding a source raster.
+                Historical writes pass their target time so discovery does not
+                depend on the current date.
+            template_search_start: Optional lower bound for source-raster
+                discovery. Accepts a datetime, date, ``TimeStep``, or supported
+                date string. When omitted, the Dataset's
+                ``template_search_start`` option is used before falling back to
+                the catalogue's default five-year lookback.
+            **kwargs: Additional options (tile, etc.)
+            
+        Returns:
+            Template dictionary or dict of templates (for tiled datasets)
+        """
+        # frop the file_version if it exists
+        kwargs.pop('file_version', None)
+        
+        tile = kwargs.pop('tile', None)
+        if tile is None:
+            if self.has_tiles:
+                template_dict = {}
+                for tile in self.tile_names:
+                    template_dict[tile] = self.get_template_dict(
+                        make_it=make_it,
+                        reference_time=reference_time,
+                        template_search_start=template_search_start,
+                        tile=tile,
+                        **kwargs,
+                    )
+                return template_dict
+            else:
+                tile = '__tile__'
+
+        template_dict = self.template_manager.get(tile)
+        if template_dict is None and make_it:
+            if not self.has_time:
+                data = self.get_data(as_is=True, **kwargs)
+                self.set_template(data, tile=tile)
+
+            else:
+                # Use get_any_date instead of get_last_date - we don't care which file
+                reference_time = self._resolve_template_date(reference_time)
+                if template_search_start is None:
+                    template_search_start = self.options.get('template_search_start')
+                template_search_start = self._resolve_template_date(template_search_start)
+                any_date = self.get_any_date(
+                    now=reference_time,
+                    lim=template_search_start,
+                    tile=tile,
+                    **kwargs,
+                )
+                if any_date is not None:
+                    data = self.get_data(time=any_date, tile=tile, as_is=True, **kwargs)
+                else:
+                    return None
+            
+            from ..io_utils_raster import straighten_data
+            data = straighten_data(data)
+            self.set_template(data, tile=tile)
+            template_dict = self.get_template_dict(make_it=False, tile=tile, **kwargs)
+        
+        return template_dict
+    
+    def set_template(self, templatearray: xr.DataArray | xr.Dataset, **kwargs):
+        """
+        Set the spatial template for this raster dataset.
+        
+        Args:
+            templatearray: xarray with coordinate system to use as template
+            **kwargs: Additional options (tile, etc.)
+        """
+        tile = kwargs.get('tile', '__tile__')
+        self.template_manager.set(templatearray, spatial_key=tile)
+
+    @staticmethod
+    def build_templatearray(template_dict: dict, data=None) -> xr.DataArray | xr.Dataset:
+        """
+        Build a template xarray.DataArray from a dictionary.
+        
+        Args:
+            template_dict: Dictionary with template metadata
+            data: Optional data array to apply template to
+            
+        Returns:
+            xarray DataArray or Dataset with template applied
+        """
+        return TemplateManager.build_array(template_dict, data)
+
+    @staticmethod
+    def set_data_to_template(data: np.ndarray | xr.DataArray | xr.Dataset,
+                             template_dict: dict) -> xr.DataArray | xr.Dataset:
+        """
+        Apply template to data array.
+        
+        Ensures data conforms to the spatial grid defined in template.
+        
+        Args:
+            data: Numpy array or xarray to apply template to
+            template_dict: Template metadata dictionary
+            
+        Returns:
+            xarray with template coordinates applied
+        """
+        return TemplateManager.apply_to_data(data, template_dict)
+
+    def set_metadata(self, data: xr.DataArray|xr.Dataset, **kwargs) -> xr.DataArray|xr.Dataset:
+        """
+        Add metadata to the xarray object.
+        
+        Args:
+            data: xarray object to which metadata should be added
+            **kwargs: Metadata key-value pairs to add
+            
+        Returns:
+            xarray object with metadata attached
+        """
+        
+        time = kwargs.pop('time', None)
+        if time is not None:
+            datatime = self.get_time_signature(time)
+            kwargs['time'] = datatime.strftime('%Y-%m-%d')
+
+        if hasattr(data, 'attrs'):
+            if 'long_name' in data.attrs:
+                data.attrs.pop('long_name')
+            if 'time' in data.attrs:
+                data.attrs.pop('time')
+            kwargs.update(data.attrs)
+
+        metadata = kwargs.copy()
+        name = metadata.get('name', self.name)
+        if 'long_name' in metadata:
+            metadata.pop('long_name')
+
+        metadata['time_produced'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        data.attrs.update(metadata)
+
+        if isinstance(data, xr.DataArray):
+            data.name = name
+
+        return data
+
+    def update_metadata(self, data: xr.DataArray|xr.Dataset, **kwargs) -> xr.DataArray|xr.Dataset:
+        """
+        Update existing metadata on the xarray object.
+        
+        Args:
+            data: xarray object whose metadata should be updated
+            **kwargs: Metadata key-value pairs to update
+            
+        Returns:
+            xarray object with updated metadata
+        """
+        attrs = data.attrs if hasattr(data, 'attrs') else {}
+        attrs.update(kwargs)
+        data.attrs = attrs
+        return data
+    
+    def get_metadata(self, data: xr.DataArray|xr.Dataset, keys: Optional[list|str] = None) -> dict:
+        """
+        Retrieve metadata from the xarray object.
+                
+        Args:
+            data: xarray object from which to retrieve metadata
+            keys: Optional list of metadata keys to retrieve (if None, retrieve all)
+            
+        Returns:
+            Metadata dictionary extracted from the xarray object
+        """
+        if hasattr(data, 'attrs'):
+            metadata = data.attrs
+            if keys is not None:
+                if isinstance(keys, str):
+                    keys = [keys]
+                metadata = {k: v for k, v in metadata.items() if k in keys}
+            return dict(metadata)
+        else:
+            return {}
+
+    def validate_data(self, data: xr.DataArray|xr.Dataset|np.ndarray, **kwargs) -> xr.DataArray|xr.Dataset|np.ndarray:
+        """
+        Validate the data object in a format-specific way.
+        
+        This is a helper method that can be used to validate data before writing.
+        The implementation will depend on the data structure.
+        
+        Args:
+            data: Data object to validate
+            **kwargs: Additional arguments for validation
+            
+        Returns:
+            Validated data object
+        """
+        if isinstance(data, (xr.DataArray, xr.Dataset)):
+            output = data.rio.write_nodata(data.attrs.get('_FillValue', self.nan_value))
+            return output
+        else:
+            return data
+    
+    @staticmethod
+    def estimate_tiff_decoded_mb(path: str) -> float:
+        with rasterio.open(path) as src:  # reads metadata/header
+            itemsize = np.dtype(src.dtypes[0]).itemsize
+            decoded_bytes = src.width * src.height * src.count * itemsize
+
+            # Optional safety margins:
+            # - add one byte/pixel if a mask is present
+            if src.mask_flag_enums and any(src.mask_flag_enums):
+                decoded_bytes += src.width * src.height
+
+            # - if overviews exist and may be touched in workflows, add small overhead
+            ovr_factor = 1.0 + 0.35 if src.overviews(1) else 1.0
+            decoded_bytes = int(decoded_bytes * ovr_factor)
+
+        return decoded_bytes / (1024**2)

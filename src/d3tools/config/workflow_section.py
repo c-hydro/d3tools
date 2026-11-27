@@ -1,0 +1,313 @@
+"""Workflow section recognition, metadata, execution, and run results.
+
+The module maps section-name aliases to engine names and provides the
+``WorkflowSection`` container used by the configuration parsing pipeline.
+
+``WORKFLOW_SECTION_ALIASES`` maps ``door_downloader``, ``downloader``,
+``download``, and ``ingest`` to ``door``; ``dam_workflow``, ``process``, and
+``publish`` to ``dam``; and ``dryes_index``, ``index``, and ``calculate`` to
+``dryes``.
+"""
+
+from dataclasses import dataclass
+
+from typing import Any
+import os
+
+from .parsers import workflow_section_from_config
+from .utils import get_timerange_from_run_state
+from ..parse.string_rendering import normalise_string
+from ..timestepping import TimeRange, TimeWindow
+
+WORKFLOW_SECTION_ALIASES = {
+    "door_downloader": "door",
+    "downloader": "door",
+    "download": "door",
+    "ingest": "door",
+    "dam_workflow": "dam",
+    "process": "dam",
+    "publish": "dam",
+    "dryes_index": "dryes",
+    "index": "dryes",
+    "calculate": "dryes",
+}
+
+AVAILBALE_EXECUTION_OPTIONS = {
+    "times_from_run": "Reference a prior workflow run's execution window for this section's execution range",
+    "all_available": "Execute for the entire available time range (currently only supported for 'dam' sections)",
+    "repeat_window": "Extend the execution time range backwards by this amount (e.g. '7d' or '1m') to re-process some prior timesteps",
+    "split": "If true and the execution time range is longer than 31 days, split into monthly sub-ranges for execution",
+}
+
+@dataclass
+class WorkflowSectionRunResult:
+    """Outcome of a ``WorkflowSection`` run attempt.
+
+    Attributes:
+        section_name: Name reported for the section.
+        engine: Engine used by the section.
+        time_range: Range passed to the section, or ``None`` when skipped.
+        executed: Whether the section performed engine work.
+        reason: Skip or split explanation, when one is available.
+    """
+
+    section_name: str
+    engine: str
+    time_range: TimeRange | None
+    executed: bool
+    reason: str | None = None
+
+def resolve_workflow_section_alias(section: str) -> str | None:
+    """Resolve a section name containing an alias to an engine keyword.
+
+    Matching normalizes case and other string formatting through
+    :func:`d3tools.parse.string_rendering.normalise_string`. An alias may be
+    embedded in a longer section name, such as ``Download_01``.
+
+    Args:
+        section: Workflow section name to inspect.
+
+    Returns:
+        ``"door"``, ``"dam"``, or ``"dryes"`` when an alias matches;
+        otherwise ``None``.
+    """
+
+    for alias, engine in WORKFLOW_SECTION_ALIASES.items():
+        if normalise_string(alias) in normalise_string(section):
+            return engine
+    return None
+
+@dataclass
+class WorkflowSection:
+    """Normalized workflow section entry collected from top-level config keys.
+
+    This object stores only the minimal information required to build the
+    package-specific runtime object in a later stage.
+
+    - ``name``:    original top-level key name
+    - ``engine``:  engine keyword (``door``, ``dam``, ``dryes``)
+    - ``definition``: section payload for this section item
+    - ``value``:   parsed section payload or engine object
+    - ``exec_options``: section-level execution options, if provided
+    """
+    name: str
+    engine: str
+    definition: Any
+    value: Any
+    exec_options: dict[str, Any] = None
+
+    @classmethod
+    def from_config(
+            cls,
+            name: str,
+            definition: Any,
+            build_object: bool = True,
+            strict_imports: bool = True,
+        ) -> "WorkflowSection":
+        """Build a workflow section from raw top-level key/value.
+
+        Args:
+            name: Original top-level workflow key.
+            definition: Section payload. The method removes ``engine`` and
+                ``exec_options`` from this dictionary while parsing it.
+            build_object: If ``True``, try constructing an engine runtime
+                object; otherwise retain the parser's raw value.
+            strict_imports: If ``True``, propagate engine build/import errors.
+
+        Returns:
+            A normalized workflow section with the selected engine, parsed
+            value, and section execution options.
+
+        Raises:
+            ValueError: If neither the explicit engine nor the section name
+                identifies ``door``, ``dam``, or ``dryes``.
+        """
+        # attempt to get the `engine` keyword from the definition key
+        engine = definition.pop("engine", None)
+        if engine is None or engine not in ['door', 'dam', 'dryes']:
+            # if not found, try to resolve from the section name
+            engine = resolve_workflow_section_alias(name)
+        if engine is None:
+            raise ValueError(f"Key '{name}' is not a recognized workflow section")
+        
+        exec_options = definition.pop("exec_options", {})
+        value = workflow_section_from_config(
+            engine,
+            definition,
+            build_object=build_object,
+            strict_imports=strict_imports,
+        )
+        return cls(name=name, engine=engine, definition=definition, value=value, exec_options=exec_options)
+    
+    def get_exec_option(self, option_name: str, default: Any = None, asbool=False) -> Any:
+        """Read one execution option, allowing an environment override.
+
+        Args:
+            option_name: Name of the section execution option.
+            default: Value returned when neither the environment nor section
+                options define the option.
+            asbool: Convert the value to a boolean. The strings ``true``,
+                ``1``, ``yes``, and ``on`` are true, case-insensitively.
+
+        Returns:
+            The environment value from the upper-case option name, the
+            configured section value, or ``default``. When ``asbool`` is true,
+            the result is a boolean.
+        """
+
+        option_env_name = f"{option_name.upper()}"
+        value = os.getenv(option_env_name, (self.exec_options or {}).get(option_name, default))
+        if asbool:
+            value = str(value).lower() in ("true", "1", "yes", "on")
+        return value
+
+    def get_run_timerange(self) -> TimeRange:
+        """Determine the execution range for this workflow section.
+
+        Checks exec_options in the following priority order:
+
+        1. ``all_available``: If true, returns the full range from the first to
+           the last available timestep. Currently only supported for ``dam``
+           sections.
+        2. ``times_from_run``: References a prior workflow run's saved execution
+           window. If a valid range is found, it is returned immediately
+           (after applying ``repeat_window`` if set). If no prior run state is
+           found, resolution falls through to the normal logic below.
+        3. Normal resolution: Calls ``get_last_ts()`` on the section value,
+           which returns ``(last_available, last_done)``. The range spans from
+           the first unprocessed timestep to the last available one.
+
+        ``repeat_window`` (e.g. ``'7d'``, ``'1m'``) can be combined with either
+        ``times_from_run`` or normal resolution to extend the start of the range
+        backwards, re-processing some prior timesteps.
+
+        Returns:
+            TimeRange spanning the timesteps that still need to be processed,
+            or ``None`` if all available timesteps have already been processed
+            and no ``repeat_window`` is set.
+
+        Raises:
+            ValueError: If the section has no available data, or if
+                ``all_available`` is used on a non-``dam`` section.
+        """
+
+        all_available = self.get_exec_option("all_available", False, asbool=True)
+        if all_available:
+            if self.engine != "dam":
+                raise ValueError(f"exec_option 'all_available' is currently only supported for 'dam' sections, but section '{self.name}' has engine '{self.engine}'")
+            first_ts = self.value.get_first_ts()
+            last_ts  = self.value.get_last_ts()[0]
+            if first_ts is None or last_ts is None:
+                raise ValueError(f"Workflow section '{self.name}' has no available data to determine time range for execution")
+            return TimeRange(first_ts.start, last_ts.end)
+        
+        repeat_window = self.get_exec_option("repeat_window")
+        if repeat_window is not None:
+            repeat_window = TimeWindow.from_str(repeat_window)
+
+        # Check for times_from_run exec_option first
+        times_from_run = self.get_exec_option("times_from_run")
+        if times_from_run:
+            time_range = get_timerange_from_run_state(times_from_run)
+            if time_range is not None:
+                if repeat_window is not None:
+                    time_range = time_range.extend(repeat_window, before=True)
+                return time_range
+            else:
+                # if the prior state file has no times, it means it was skipped or had an error, so we should skip this section too
+                return None
+
+        # Normal resolution logic
+        process = self.value
+        last_available, last_done = process.get_last_ts()
+
+        if last_available is None or last_done is None:
+            raise ValueError(f"Workflow section '{self.name}' has not enough available data to determine time range for execution")
+        elif last_available <= last_done and repeat_window is None:
+            return None
+
+        next_ts = last_done + 1
+        last_ts = next_ts
+        while last_ts.end <= last_available.end:
+            last_ts = last_ts + 1
+        
+        start = next_ts.start
+        end = (last_ts - 1).end
+        time_range = TimeRange(start, end)
+
+        if repeat_window is not None:
+            time_range = time_range.extend(repeat_window, before = True)
+        
+        return time_range
+
+    def run(self, time_range: TimeRange | None = None) -> WorkflowSectionRunResult:
+        """Execute a single workflow section using its engine-specific interface.
+
+        Args:
+            time_range: Range for execution. If omitted, resolve it from the
+                section's execution options and data availability.
+
+        Returns:
+            WorkflowSectionRunResult with execution/skipping details.
+
+        Raises:
+            TypeError: If the section's engine is not recognized when the
+                section is executed.
+        """
+
+        # Get the actual workflow object
+        process = self.value
+        engine = self.engine
+        section_name = self.name if self.name else "Unnamed Section"
+        
+        # figure out the time range for this section, if not provided
+        if time_range is None:
+            time_range = self.get_run_timerange()
+
+        # If no time range is available, section is skipped.
+        if time_range is None:
+            return WorkflowSectionRunResult(
+                section_name=section_name,
+                engine=engine,
+                time_range=None,
+                executed=False,
+                reason="nothing to do",
+            )
+        else:
+            output = WorkflowSectionRunResult(
+                section_name=section_name,
+                engine=engine,
+                time_range=time_range,
+                executed=True,
+                reason=None,
+            )           
+
+        split = self.get_exec_option("split", "false", asbool=True)
+        if split and time_range.length() > 31:
+            time_ranges = time_range.months
+            time_ranges[0].start = time_range.start
+            time_ranges[-1].end = time_range.end
+            results = []
+            for tr in time_ranges:
+                result = self.run(tr)
+                results.append(result)
+            output.reason = f"split into {len(time_ranges)} sub-ranges"
+            return output
+            
+        # Execute based on engine type
+        match engine:
+            case 'door':
+                process.get_data(time_range)
+            case 'dam':
+                process.run(time_range)
+            case 'dryes':
+                # check for the env variable "SETUP" (as 1, True, 'true', etc.)
+                SETUP = os.getenv('SETUP', 'False').lower() in ('1', 'true', 'yes')
+                process.compute(time_range, make_parameters=SETUP)
+            case _:
+                raise TypeError(
+                    f"Workflow section '{section_name}' has unrecognized engine '{engine}'. "
+                    f"Expected one of: 'door', 'dam', 'dryes'"
+                )
+
+        return output
