@@ -9,7 +9,7 @@ This walk-through connects three engines:
    output cadence.
 3. DRYES computes SPI1 and SPI3 from pre-computed parameters.
 
-Install d3tools and all three engines: [DOOR](https://github.com/c-hydro/door),
+Install D3tools and all three engines: [DOOR](https://github.com/c-hydro/door/tree/main_new),
 [DAM](https://github.com/c-hydro/dam), and
 [DRYES](https://github.com/c-hydro/dryes). The source CHIRPS example uses no
 credentials. The run needs network access to the CHIRPS service and enough
@@ -48,9 +48,9 @@ export SPI_PARAMETER_ROOT=/path/to/parameters
 
 ## Step 1: download 10-day CHIRPS precipitation (DOOR)
 
-The full file below is the Step 1 workflow. Its d3tools-facing parts are the
+The full file below is the Step 1 workflow. Its D3tools-facing parts are the
 root tag, destination dataset, dataset timestep, and run range. The DOOR
-section is engine-owned; see [DOOR](https://github.com/c-hydro/door) for its
+section is engine-owned; see [DOOR](https://github.com/c-hydro/door/tree/main_new) for its
 complete payload contract.
 
 <!-- check-docs: skip -->
@@ -58,7 +58,7 @@ complete payload contract.
 --8<-- "docs/workflow_orchestration/case-study/01_download_chirps.json"
 ```
 
-Run it from a d3tools checkout:
+Run it from a D3tools checkout:
 
 ```bash
 python scripts/run_workflow.py docs/workflow_orchestration/case-study/01_download_chirps.json \

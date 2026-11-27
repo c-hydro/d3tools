@@ -1,6 +1,6 @@
 # Tools
 
-d3tools provides shared Python building blocks used by DOOR, DAM, and DRYES.
+D3tools provides shared Python building blocks used by DOOR, DAM, and DRYES.
 They can also be imported and used without workflow JSON or a workflow engine.
 Use these pages for concepts and worked examples; use the linked API reference
 for complete signatures and members.

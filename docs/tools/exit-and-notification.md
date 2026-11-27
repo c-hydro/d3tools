@@ -1,6 +1,6 @@
 # Exit handling and notification
 
-d3tools provides a small exit-callback queue for deferred cleanup. It also
+D3tools provides a small exit-callback queue for deferred cleanup. It also
 contains an experimental SMTP email helper, but that helper is known to be
 unreliable and is not recommended for production workflows.
 

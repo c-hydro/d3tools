@@ -1,8 +1,8 @@
 # Getting started
 
-## Install d3tools and required extras
+## Install D3tools and required extras
 
-d3tools requires Python 3.12 or newer. Install it into an active virtual
+D3tools requires Python 3.12 or newer. Install it into an active virtual
 environment:
 
 ```bash
@@ -17,7 +17,7 @@ python -m pip install 'd3tools[thumbnails]'   # configured thumbnail generation
 python -m pip install 'd3tools[remote-data]'  # remote dataset access
 ```
 
-Each section also needs its engine package: [DOOR](https://github.com/c-hydro/door)
+Each section also needs its engine package: [DOOR](https://github.com/c-hydro/door/tree/main_new)
 for `door`, [DAM](https://github.com/c-hydro/dam) for `dam`, or
 [DRYES](https://github.com/c-hydro/dryes) for `dryes`. Follow that project's
 installation guidance for its engine and domain-specific dependencies. A
@@ -27,7 +27,7 @@ cannot execute a section whose engine or dependencies are missing; see
 
 Raster and vector support is part of the base installation through Rasterio,
 rioxarray, and GeoPandas. Some deployments also require the system GDAL
-libraries used by those packages; GDAL is not a separate d3tools extra. S3
+libraries used by those packages; GDAL is not a separate D3tools extra. S3
 and SFTP support are both supplied by `remote-data`.
 
 ## Create, load, and run a minimal workflow
@@ -57,7 +57,7 @@ data, continue to the [CHIRPS-to-SPI case study](case-study.md).
 
 ## Run from the command line
 
-From a d3tools checkout, pass the JSON file to the CLI runner. Date arguments
+From a D3tools checkout, pass the JSON file to the CLI runner. Date arguments
 are optional:
 
 ```bash
@@ -100,13 +100,13 @@ The runner does not translate failures into engine-specific status codes:
 | `2` | `argparse` rejected the command line, for example because `workflow_json` is missing or an option is unknown. It prints usage information before exiting. |
 
 Signal-derived shell statuses, such as an interactive interruption, are
-platform and shell behavior rather than d3tools exit codes.
+platform and shell behavior rather than D3tools exit codes.
 
 ## How engines are selected and imported
 
 Every top-level key that is not reserved configuration is treated as a
 workflow section. A section can set `engine` to `door`, `dam`, or `dryes`;
-otherwise d3tools infers the engine from a recognized section-name alias such
+otherwise D3tools infers the engine from a recognized section-name alias such
 as `door_downloader`, `dam_workflow`, or `dryes_index`. A top-level `engine`
 provides the default for sections that do not set their own. See
 [workflow sections and engines](workflows.md#define-sections-and-choose-an-engine) for

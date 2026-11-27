@@ -1,13 +1,13 @@
 # Architecture and engine integration
 
-This page defines the boundary between d3tools and the workflow engines. It
+This page defines the boundary between D3tools and the workflow engines. It
 is intended for maintainers and engine integrators. Operators normally need
 the [workflow](../workflows.md) and [configuration](../configuration.md)
 pages instead.
 
 ## Responsibilities and boundaries
 
-d3tools has two related roles: it orchestrates multi-engine workflows, and it
+D3tools has two related roles: it orchestrates multi-engine workflows, and it
 provides reusable Python tools. The workflow layer resolves shared
 configuration, constructs datasets, preserves section order, selects
 execution ranges, dispatches sections, and records workflow-level logs. It
@@ -16,8 +16,8 @@ section.
 
 | Component | Owned responsibility |
 | --- | --- |
-| d3tools | Workflow loading and parsing, shared datasets, section ordering, execution ranges, dispatch, workflow logging, and run-state output. |
-| [DOOR](https://github.com/c-hydro/door) | Download configuration and data acquisition. |
+| D3tools | Workflow loading and parsing, shared datasets, section ordering, execution ranges, dispatch, workflow logging, and run-state output. |
+| [DOOR](https://github.com/c-hydro/door/tree/main_new) | Download configuration and data acquisition. |
 | [DAM](https://github.com/c-hydro/dam) | Processing, aggregation, and publication configuration. |
 | [DRYES](https://github.com/c-hydro/dryes) | Indicator configuration and computation. |
 | Calling application | Chooses when to load and run a workflow and manages the resulting objects' lifetime. |
@@ -81,7 +81,7 @@ notification](../../tools/exit-and-notification.md#experimental-email-notificati
 ## Engine construction contract
 
 Engine integration is a fixed, built-in mapping rather than a third-party
-plugin registry. While collecting sections, d3tools chooses `door`, `dam`, or
+plugin registry. While collecting sections, D3tools chooses `door`, `dam`, or
 `dryes` from a valid section-level engine, the workflow default, or the
 recognized section-name aliases. The selected builder receives the resolved
 section payload after `engine` and `exec_options` have been removed:
@@ -94,10 +94,10 @@ section payload after `engine` and `exec_options` have been removed:
 
 A DRYES payload must be a mapping. Its `setup` value is true when the `SETUP`
 environment variable is `1`, `true`, or `yes`, ignoring case. All three
-runtime objects must provide `get_last_ts()` when d3tools derives a range from
+runtime objects must provide `get_last_ts()` when D3tools derives a range from
 availability; DAM must additionally provide `get_first_ts()` when
 `all_available` is enabled. The timestep values returned by those methods
-must support the operations used to construct a d3tools `TimeRange`.
+must support the operations used to construct a D3tools `TimeRange`.
 
 `WorkflowSection.run()` passes the same explicit workflow range to each
 section, or derives a range separately for each section. It calls only the
@@ -119,7 +119,7 @@ builder mapping, execution dispatch, range behavior, logging integration, and
 the relevant engine-owned documentation. Preserve these boundaries:
 
 1. Keep shared parsing, ordering, range selection, logging, and result
-   reporting in d3tools.
+   reporting in D3tools.
 2. Keep domain payload semantics and processing in the engine package.
 3. Pass constructed datasets and resolved shared values through the existing
    payload instead of introducing a second configuration path.

@@ -5,13 +5,13 @@ The documentation is organized by reader need:
 - `workflow_orchestration/` explains workflow configuration and operation, including
   datasets in JSON, workflow sections, logging, examples, troubleshooting, and the
   integration boundary with DOOR, DAM, and DRYES.
-- `tools/` provides Python-first guidance for the reusable d3tools components. Examples
+- `tools/` provides Python-first guidance for the reusable D3tools components. Examples
   should work without workflow JSON unless they explicitly link to a workflow equivalent.
 - `reference/` contains concise, module-shaped mkdocstrings pages. Narrative explanation
   belongs in the other sections; do not hand-write API signatures here.
 
 Keep each fact on one owning page and link to it elsewhere. The companion engines own
-their complete payload schemas and processing semantics; d3tools documents only their
+their complete payload schemas and processing semantics; D3tools documents only their
 shared integration boundary. Check claims against `src/d3tools/` and use `tests/` as
 evidence of exercised behaviour. Clearly label anything unexecuted or unresolved.
 

@@ -130,7 +130,7 @@ when the primary dataset and its parents do not provide requested data:
 
 A file-version pattern uses `{file_version}`. On reads without an explicit
 version, the latest available version is selected. On writes without an
-explicit version, d3tools creates `01` if none exists; later writes increment
+explicit version, D3tools creates `01` if none exists; later writes increment
 the last numeric part of the greatest existing version. For example, `v08`
 becomes `v09`. These naming rules are distinct from engine-specific update
 policies.
@@ -177,7 +177,7 @@ input requirements, and standalone use are documented in
 
 ## Understand time and availability
 
-`time_signature` tells d3tools whether a stored timestamp represents the start
+`time_signature` tells D3tools whether a stored timestamp represents the start
 or end boundary of a logical timestep. It defaults to `end`.
 Set `timestep` explicitly when the frequency is known. If omitted, it is not
 inferred when the dataset is created; a later availability query may infer it

@@ -1,8 +1,12 @@
-site_name: d3tools
+site_name: D3tools
+site_description: Reusable Python tools and workflows for operational drought monitoring
+site_url: https://c-hydro.github.io/d3tools/
 repo_url: https://github.com/c-hydro/d3tools
+repo_name: c-hydro/d3tools
 docs_dir: docs
 
 nav:
+  - Home: index.md
   - Workflow orchestration:
       - Overview: workflow_orchestration/index.md
       - Getting started: workflow_orchestration/getting-started.md
@@ -36,9 +40,23 @@ nav:
       - Spatial: reference/spatial.md
       - Thumbnails: reference/thumbnails.md
       - Timestepping: reference/timestepping.md
+  - Contributing: CONTRIBUTING.md
 
 theme:
   name: material
+  logo: assets/branding/d3tools.svg
+  favicon: assets/branding/d3tools.svg
+  palette:
+    scheme: default
+    primary: custom
+    accent: custom
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
 
 plugins:
   - search
@@ -55,6 +73,8 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
   - tables
   - pymdownx.snippets
   - toc:
@@ -64,3 +84,6 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra_css:
+  - stylesheets/branding.css

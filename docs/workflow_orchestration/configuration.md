@@ -2,7 +2,7 @@
 
 ## Workflow JSON shape
 
-A workflow file is a JSON object. Reserved top-level keys configure d3tools;
+A workflow file is a JSON object. Reserved top-level keys configure D3tools;
 every other top-level key is interpreted as a workflow section and must select
 a recognized engine.
 
@@ -64,7 +64,7 @@ current process before resolution:
 
 Values from `env` are converted to strings and affect the whole Python process,
 not just one workflow. Do not put credentials in committed JSON; use the
-process environment or a secret manager. d3tools does not load `.env` files
+process environment or a secret manager. D3tools does not load `.env` files
 itself.
 
 The operator-visible resolution order is: values in `env`, `{ENV...}`
@@ -156,4 +156,4 @@ for object-level details.
 For dataset, execution-range, and engine-validation failures, follow the
 corresponding task page: [Datasets](datasets.md), [Workflows](workflows.md),
 or [Troubleshooting](troubleshooting.md). Engine-specific payload validation
-belongs to the engine project, not the d3tools configuration contract.
+belongs to the engine project, not the D3tools configuration contract.

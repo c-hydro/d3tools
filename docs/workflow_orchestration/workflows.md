@@ -20,8 +20,8 @@ section-level `engine` falls back to alias matching, not to the workflow
 default. If no supported engine can be selected, loading fails.
 
 Use the spelling shown in the selected engine's docs for section payloads.
-d3tools selects the engine and orders sections; the schema and behavior of the
-engine-owned payload are defined by [DOOR](https://github.com/c-hydro/door),
+D3tools selects the engine and orders sections; the schema and behavior of the
+engine-owned payload are defined by [DOOR](https://github.com/c-hydro/door/tree/main_new),
 [DAM](https://github.com/c-hydro/dam), and
 [DRYES](https://github.com/c-hydro/dryes). See also the
 [section construction and engine dispatch](under-the-hood/lifecycle.md#section-construction-and-engine-dispatch).
@@ -75,9 +75,9 @@ the range can raise an error. See [Datasets — time and availability](datasets.
 
 ## Keep engine responsibilities clear
 
-d3tools resolves sections to DOOR, DAM, or DRYES and runs them in order. It
+D3tools resolves sections to DOOR, DAM, or DRYES and runs them in order. It
 does not define a universal schema for engine payloads. A key observed in one
 workflow is not necessarily required or supported in every workflow. Use the
 complete configuration contract published by the selected engine; the
-[case study](case-study.md) illustrates d3tools integration without
+[case study](case-study.md) illustrates D3tools integration without
 attempting to document engine options.

@@ -66,7 +66,7 @@ assert key == "/data/temperature/2024/data_20240115.tif"
 
 For `LocalDataset`, `path` plus `filename` is equivalent to one complete key;
 `dir` and `file` are constructor aliases. A name can be supplied explicitly.
-Otherwise d3tools derives it from the key-pattern basename after removing the
+Otherwise D3tools derives it from the key-pattern basename after removing the
 extension and common date directives.
 
 The concrete classes can also be constructed directly when the storage type
@@ -221,7 +221,7 @@ finds and moves bytes; its format mixin validates Python values, reads and
 writes local files, handles metadata, and converts between storage and
 application objects.
 
-If `format` is omitted, d3tools infers it from the final extension. Files with
+If `format` is omitted, D3tools infers it from the final extension. Files with
 no extension and `.png`, `.pdf`, `.jpg`, or `.jpeg` use the generic `file`
 format. Set `format` explicitly when the extension is ambiguous.
 
@@ -289,7 +289,7 @@ skipped because the stored value is already a Python object.
 
 `S3Dataset`, `OVHS3Dataset`, and `SFTPDataset` stage remote files under a local
 temporary directory so format mixins can process them. If `tmp_dir` is omitted,
-d3tools creates one and registers it for removal at interpreter exit. A read
+D3tools creates one and registers it for removal at interpreter exit. A read
 downloads a missing staged file; a write serializes locally and uploads it.
 Remote shapefile operations also transfer the `.dbf`, `.shx`, and `.prj`
 sidecar files when present.
@@ -465,11 +465,11 @@ be resolved together.
 ### Versions
 
 `{file_version}` activates version-aware lookup. When a read, availability
-check, or point check omits `file_version`, d3tools extracts available version
+check, or point check omits `file_version`, D3tools extracts available version
 tags, sorts them, and uses the greatest value. Pass `file_version` explicitly
 to select a particular item.
 
-On a write without an explicit version, d3tools uses `01` if none exists.
+On a write without an explicit version, D3tools uses `01` if none exists.
 Otherwise it increments the last numeric part of the greatest version while
 preserving its width where possible: `v08` becomes `v09`, and `v99` becomes
 `v100`. Version ordering before that increment is lexicographic, so choose a
@@ -643,7 +643,7 @@ vector rendering, overlays, legends, and `ThumbnailCollection`.
 
 ## Extending datasets
 
-d3tools has no runtime plugin registry for arbitrary backends or formats.
+D3tools has no runtime plugin registry for arbitrary backends or formats.
 Extensions are coordinated source changes using the existing class and mixin
 registration paths.
 

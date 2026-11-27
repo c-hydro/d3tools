@@ -1,6 +1,6 @@
 # Spatial tools
 
-d3tools provides a small set of CRS-aware helpers for raster bounds and
+D3tools provides a small set of CRS-aware helpers for raster bounds and
 cropping. Use `BoundingBox` to carry bounds with their coordinate reference
 system (CRS), and use `crop_to_bb()` when a raster may need CRS transformation
 before clipping.
@@ -148,7 +148,7 @@ or caller-supplied CRS units.
 `crop_to_bb()` is the high-level helper. It accepts a raster path, raster-aware
 `DataArray`, or raster-aware `Dataset`, plus a `BoundingBox`:
 
-1. File paths are read through d3tools' format-aware file reader.
+1. File paths are read through D3tools' format-aware file reader.
 2. Longitudes greater than 180 are shifted by -360 and the x axis is sorted.
 3. If the source has a CRS, the bounding box is transformed to it.
 4. If the source has no CRS, the bounding-box CRS is assigned to the source.

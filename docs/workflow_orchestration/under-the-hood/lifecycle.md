@@ -128,7 +128,7 @@ At run time, `WorkflowSection.run()` dispatches through a fixed interface:
 | DRYES | `compute(time_range, make_parameters=...)` |
 
 DRYES receives `make_parameters=True` when the `SETUP` environment value is
-one of `1`, `true`, or `yes` (case-insensitive). d3tools currently implements
+one of `1`, `true`, or `yes` (case-insensitive). D3tools currently implements
 these three dispatch branches; it does not expose a general plugin contract
 for arbitrary engines.
 
@@ -164,7 +164,7 @@ the loop immediately and prevents later sections from running.
 
 After parsing, `WorkflowDefinition` creates a `WorkflowLogManager` from
 `workflow_log`. Missing or empty configuration produces the default
-console-only manager. The manager configures the d3tools logger and attaches
+console-only manager. The manager configures the `d3tools` logger and attaches
 the same handlers to the DOOR, DAM, and DRYES package loggers.
 
 `run()` wraps the workflow and each section in logging contexts. These contexts
@@ -184,7 +184,7 @@ Closing detaches and closes managed handlers; remote log destinations are
 first written through a temporary local file and uploaded during close.
 Repeated successful calls are ignored.
 
-The manager also registers `close()` through d3tools' `ExitHandler`. Exit
+The manager also registers `close()` through D3tools' `ExitHandler`. Exit
 callbacks registered with `run_at_exit()` run in registration order;
 `run_at_exit_first()` prepends a callback. If a callback raises, later
 callbacks in that queue do not run. For standalone cleanup APIs and safe
