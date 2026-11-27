@@ -29,6 +29,9 @@ dependencies = [
     "geopandas~=1.1.1",
 ]
 
+[project.scripts]
+d3run = "d3tools.cli:main"
+
 [project.urls]
 Repository = "https://github.com/c-hydro/d3tools"
 

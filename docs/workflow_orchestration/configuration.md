@@ -45,7 +45,7 @@ The CLI shell can provide environment values:
 
 ```bash
 export DATA_ROOT="/srv/my-workflow-data"
-python scripts/run_workflow.py workflow.json
+d3run workflow.json
 ```
 
 Alternatively, the workflow's top-level `env` object sets values in the

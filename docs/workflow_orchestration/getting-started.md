@@ -57,16 +57,16 @@ data, continue to the [CHIRPS-to-SPI case study](case-study.md).
 
 ## Run from the command line
 
-From a D3tools checkout, pass the JSON file to the CLI runner. Date arguments
-are optional:
+After installing D3tools, pass the JSON file to `d3run`. Date arguments are
+optional:
 
 ```bash
-python scripts/run_workflow.py workflow.json \
+d3run workflow.json \
   --start 2024-01-01 \
   --end 2024-01-05
 ```
 
-The script accepts only these arguments:
+The command accepts only these arguments:
 
 | Argument | Required | Meaning |
 | --- | --- | --- |

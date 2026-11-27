@@ -58,10 +58,10 @@ complete payload contract.
 --8<-- "docs/workflow_orchestration/case-study/01_download_chirps.json"
 ```
 
-Run it from a D3tools checkout:
+Run it with the installed D3tools command:
 
 ```bash
-python scripts/run_workflow.py docs/workflow_orchestration/case-study/01_download_chirps.json \
+d3run docs/workflow_orchestration/case-study/01_download_chirps.json \
   --start 2020-10-01 \
   --end 2021-12-31
 ```
@@ -85,7 +85,7 @@ engine-owned; see [DAM](https://github.com/c-hydro/dam) for its full contract.
 Run the aggregation over the download period, including the warm-up data:
 
 ```bash
-python scripts/run_workflow.py docs/workflow_orchestration/case-study/02_aggregate.json \
+d3run docs/workflow_orchestration/case-study/02_aggregate.json \
   --start 2020-10-01 \
   --end 2021-12-31
 ```
@@ -118,7 +118,7 @@ payload contract.
 After downloading the parameter bundle, run the target 2021 period:
 
 ```bash
-python scripts/run_workflow.py docs/workflow_orchestration/case-study/03_spi.json \
+d3run docs/workflow_orchestration/case-study/03_spi.json \
   --start 2021-01-01 \
   --end 2021-12-31
 ```
@@ -142,7 +142,7 @@ After downloading the parameter bundle, run the combined workflow with the
 shared download/warm-up range:
 
 ```bash
-python scripts/run_workflow.py docs/workflow_orchestration/case-study/chirps_spi_case_study.json \
+d3run docs/workflow_orchestration/case-study/chirps_spi_case_study.json \
   --start 2020-10-01 \
   --end 2021-12-31
 ```
