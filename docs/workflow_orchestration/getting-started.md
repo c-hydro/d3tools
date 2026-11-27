@@ -6,16 +6,19 @@ D3tools requires Python 3.12 or newer. Install it into an active virtual
 environment:
 
 ```bash
-python -m pip install d3tools
+python -m pip install cima-d3tools
 ```
 
 Install optional extras only when your workflow needs those capabilities:
 
 ```bash
-python -m pip install 'd3tools[more-data]'    # CSV, Parquet, and shapefile formats
-python -m pip install 'd3tools[thumbnails]'   # configured thumbnail generation
-python -m pip install 'd3tools[remote-data]'  # remote dataset access
+python -m pip install 'cima-d3tools[more-data]'    # Parquet formats
+python -m pip install 'cima-d3tools[thumbnails]'   # configured thumbnail generation
+python -m pip install 'cima-d3tools[remote-data]'  # remote dataset access
 ```
+
+The distribution is named `cima-d3tools`; the Python package remains
+`d3tools`, so existing imports continue to use `import d3tools`.
 
 Each section also needs its engine package: [DOOR](https://github.com/c-hydro/door/tree/main_new)
 for `door`, [DAM](https://github.com/c-hydro/dam) for `dam`, or
@@ -57,16 +60,16 @@ data, continue to the [CHIRPS-to-SPI case study](case-study.md).
 
 ## Run from the command line
 
-From a D3tools checkout, pass the JSON file to the CLI runner. Date arguments
-are optional:
+After installing D3tools, pass the JSON file to `d3run`. Date arguments are
+optional:
 
 ```bash
-python scripts/run_workflow.py workflow.json \
+d3run workflow.json \
   --start 2024-01-01 \
   --end 2024-01-05
 ```
 
-The script accepts only these arguments:
+The command accepts only these arguments:
 
 | Argument | Required | Meaning |
 | --- | --- | --- |

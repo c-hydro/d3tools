@@ -1,20 +1,21 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "d3tools"
-version = "2.4.0"
+name = "cima-d3tools"
+version = "3.0.0"
 description = "A package of common tools for the door, dam and dryes packages of CIMA Research Foundation"
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" }
 ]
-license = { file = "LICENSE" }
+license = "EUPL-1.2"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: ECPL License",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
 
@@ -25,17 +26,23 @@ dependencies = [
     "rioxarray~=0.20.0",
     "rasterio~=1.4.0",
     "xarray~=2025.11.0",
-    "setuptools>=42",
+    "dask~=2025.11.0",
+    "h5netcdf~=1.7.3",
+    "pandas~=2.3.3",
     "geopandas~=1.1.1",
 ]
 
+[project.scripts]
+d3run = "d3tools.cli:main"
+
 [project.urls]
 Repository = "https://github.com/c-hydro/d3tools"
+Documentation = "https://c-hydro.github.io/d3tools/"
+Changelog = "https://github.com/c-hydro/d3tools/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # dependencies for using csv and parquet files and shapefiles
 more-data = [
-    "pandas~=2.3.3",
     "pyarrow~=20.0.0",
     "fastparquet~=2024.11.0",
 ]
@@ -59,4 +66,9 @@ remote-data = [
 docs = [
     "zensical==0.1.3",
     "mkdocstrings-python==2.0.9",
+]
+
+# dependencies for running the repository test suite
+test = [
+    "pytest~=9.0.3",
 ]

@@ -27,13 +27,13 @@ memory datasets, raster and vector dependencies, exit handling, and
 notification. Install an extra when a tool needs optional dependencies:
 
 ```bash
-pip install "d3tools[more-data]"    # CSV, Parquet, and shapefile workflows
-pip install "d3tools[remote-data]"  # S3 and SFTP datasets
-pip install "d3tools[thumbnails]"   # Thumbnail rendering
+pip install "cima-d3tools[more-data]"    # Parquet workflows
+pip install "cima-d3tools[remote-data]"  # S3 and SFTP datasets
+pip install "cima-d3tools[thumbnails]"   # Thumbnail rendering
 ```
 
 Extras can be combined, for example
-`pip install "d3tools[more-data,remote-data,thumbnails]"`.
+`pip install "cima-d3tools[more-data,remote-data,thumbnails]"`.
 
 ## Import conventions
 

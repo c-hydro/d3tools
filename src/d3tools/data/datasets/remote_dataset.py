@@ -2,20 +2,39 @@
 
 import tempfile
 from typing import Any, Optional
-import boto3
 import os
 from functools import cached_property
-import paramiko
 import hashlib
-from requests.models import PreparedRequest
 
 import datetime as dt
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
-from botocore.awsrequest import AWSRequest
-from botocore.auth import SigV4Auth
-from botocore.httpsession import URLLib3Session
-from botocore.credentials import Credentials
+
+try:
+    import boto3
+    from botocore.awsrequest import AWSRequest
+    from botocore.auth import SigV4Auth
+    from botocore.credentials import Credentials
+    from botocore.httpsession import URLLib3Session
+    from requests.models import PreparedRequest
+except ModuleNotFoundError as error:
+    boto3 = None
+    AWSRequest = None
+    SigV4Auth = None
+    Credentials = None
+    URLLib3Session = None
+    PreparedRequest = None
+    _S3_IMPORT_ERROR = error
+else:
+    _S3_IMPORT_ERROR = None
+
+try:
+    import paramiko
+except ModuleNotFoundError as error:
+    paramiko = None
+    _SFTP_IMPORT_ERROR = error
+else:
+    _SFTP_IMPORT_ERROR = None
 
 import stat
 import posixpath
@@ -23,6 +42,24 @@ import posixpath
 from .dataset import Dataset
 from ...parse import KeyParser
 from ...exit import rm_at_exit
+
+
+def _require_s3_dependencies() -> None:
+    """Raise an actionable error when the S3 dependencies are unavailable."""
+    if _S3_IMPORT_ERROR is not None:
+        raise ModuleNotFoundError(
+            "S3 dataset support requires the 'remote-data' extra; "
+            "install it with `python -m pip install 'cima-d3tools[remote-data]'`."
+        ) from _S3_IMPORT_ERROR
+
+
+def _require_sftp_dependencies() -> None:
+    """Raise an actionable error when the SFTP dependencies are unavailable."""
+    if _SFTP_IMPORT_ERROR is not None:
+        raise ModuleNotFoundError(
+            "SFTP dataset support requires the 'remote-data' extra; "
+            "install it with `python -m pip install 'cima-d3tools[remote-data]'`."
+        ) from _SFTP_IMPORT_ERROR
 
 class RemoteDataset(Dataset):
     """Base class for backends that stage remote files in a local directory.
@@ -188,6 +225,8 @@ class S3Dataset(RemoteDataset):
                  profile_name: Optional[str] = None,
                  tmp_dir: Optional[str] = None,
                  **kwargs):
+
+        _require_s3_dependencies()
 
         self.key_pattern = key_pattern
         self.bucket_name = bucket_name
@@ -405,6 +444,7 @@ class SFTPDataset(RemoteDataset):
                 private-key path.
 
         Raises:
+            ModuleNotFoundError: If the ``remote-data`` extra is not installed.
             ValueError: If a password environment reference or private key
                 cannot be resolved.
             paramiko.SSHException: If SSH authentication or connection fails.
@@ -412,6 +452,8 @@ class SFTPDataset(RemoteDataset):
         Side effects:
             Opens an SFTP connection when no client is cached for the host.
         """
+
+        _require_sftp_dependencies()
 
         self.key_pattern = key_pattern
 
