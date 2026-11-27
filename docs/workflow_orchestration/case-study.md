@@ -23,7 +23,7 @@ by DRYES documentation and are outside this guide.
 
 All outputs use the `output_root` tag, set to `/tmp/d3tools-case-study` for
 the documented safe test location. Change that one tag in each file to choose
-another writable root. Outputs are organized beneath `input/chirps`,
+another writable root. Outputs are organised beneath `input/chirps`,
 `aggregate`, `spi`, and `logs`.
 
 The matching parameter bundle is published as a versioned dataset under
@@ -153,5 +153,5 @@ output range is wanted. The sequence is download, aggregate, then SPI, and a
 failure stops later sections. Inspect `<output_root>/input/chirps/`,
 `aggregate/`, `spi/`, and `logs/`; the log includes a separate structured
 run-state file. See [Workflows](workflows.md) for ordering and range rules,
-and [Logging](logging.md) for log behavior. The combined workflow has not
+and [Logging](logging.md) for log behaviour. The combined workflow has not
 yet been rerun end to end with the published bundle.

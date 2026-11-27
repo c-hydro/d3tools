@@ -130,7 +130,7 @@ annotations, and legends.
 
 `Thumbnail.save(destination, **options)` creates missing parent directories,
 stores the destination as `thumbnail_file`, and closes its Matplotlib figure
-after writing. The recognized options are:
+after writing. The recognised options are:
 
 | Option | Accepted value | Behaviour |
 | --- | --- | --- |

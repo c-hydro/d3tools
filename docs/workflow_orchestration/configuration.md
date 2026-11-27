@@ -4,7 +4,7 @@
 
 A workflow file is a JSON object. Reserved top-level keys configure D3tools;
 every other top-level key is interpreted as a workflow section and must select
-a recognized engine.
+a recognised engine.
 
 | Top-level key | Value | Purpose |
 |---|---|---|
@@ -145,7 +145,7 @@ for object-level details.
   the reference carries update assignments.
 - **Unknown top-level key or section:** all unreserved keys are treated as
   sections. Correct a misspelled reserved key, or give the section a
-  recognized alias or explicit supported engine.
+  recognised alias or explicit supported engine.
 - **Execution option appears to be ignored:** place it inside `exec_options`
   at workflow or section level, not alongside section payload settings.
 - **Wrong engine seems selected:** check the section's `engine`, the workflow

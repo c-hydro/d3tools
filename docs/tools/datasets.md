@@ -5,7 +5,7 @@ behind one Python interface. The same methods address local files, in-process
 values, S3 objects, and SFTP paths. Workflow authors configure these objects
 through JSON; this page documents direct Python use.
 
-This page is organized as follows:
+This page is organised as follows:
 
 1. [Choosing and creating a dataset](#choosing-and-creating-a-dataset)
 2. [Key patterns and `KeyParser`](#key-patterns-and-keyparser)
@@ -153,7 +153,7 @@ filters candidate keys with the same matching rules.
 
 When key rendering receives a `TimeStep`, the Dataset's `time_signature`
 chooses its `start` or `end`. Passing a `datetime` uses that datetime directly,
-with precision normalized to the directives present in the pattern.
+with precision normalised to the directives present in the pattern.
 
 ## Reading and writing
 
@@ -290,7 +290,7 @@ skipped because the stored value is already a Python object.
 `S3Dataset`, `OVHS3Dataset`, and `SFTPDataset` stage remote files under a local
 temporary directory so format mixins can process them. If `tmp_dir` is omitted,
 D3tools creates one and registers it for removal at interpreter exit. A read
-downloads a missing staged file; a write serializes locally and uploads it.
+downloads a missing staged file; a write serialises locally and uploads it.
 Remote shapefile operations also transfer the `.dbf`, `.shx`, and `.prj`
 sidecar files when present.
 
@@ -580,7 +580,7 @@ assert log_output.get_data()["dataset"] == "rain"
 In normal Dataset use, `_make_log()` supplies the resolved dataset name,
 written key, optional thumbnail path, requested time, write context, and data
 attributes. Attributes take precedence when names overlap. Supported scalar
-metadata is normalized; unsupported values, empty strings, and internal values
+metadata is normalised; unsupported values, empty strings, and internal values
 beginning with `__` are omitted.
 
 For a `DataArray`, `data_checks` includes maximum, minimum, NaN and zero counts
@@ -591,7 +591,7 @@ append mode, so the destination format must support compatible append
 behaviour.
 
 The log occurs after storage. A logging failure can therefore leave valid data
-already written. Full field and formatting details are also summarized in
+already written. Full field and formatting details are also summarised in
 [Workflow orchestration: Logging](../workflow_orchestration/logging.md#configure-dataset-logs).
 
 ## Dataset-driven thumbnails
@@ -661,7 +661,7 @@ To add a storage backend:
 
 To add a format:
 
-1. Implement a `FormatMixin` with initialization, local file read/write, and
+1. Implement a `FormatMixin` with initialisation, local file read/write, and
    before-write/after-read conversion hooks.
 2. Override validation and metadata hooks when the format needs them, retaining
    cooperative update behaviour for format state.

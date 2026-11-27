@@ -100,13 +100,13 @@ The runner does not translate failures into engine-specific status codes:
 | `2` | `argparse` rejected the command line, for example because `workflow_json` is missing or an option is unknown. It prints usage information before exiting. |
 
 Signal-derived shell statuses, such as an interactive interruption, are
-platform and shell behavior rather than D3tools exit codes.
+platform and shell behaviour rather than D3tools exit codes.
 
 ## How engines are selected and imported
 
 Every top-level key that is not reserved configuration is treated as a
 workflow section. A section can set `engine` to `door`, `dam`, or `dryes`;
-otherwise D3tools infers the engine from a recognized section-name alias such
+otherwise D3tools infers the engine from a recognised section-name alias such
 as `door_downloader`, `dam_workflow`, or `dryes_index`. A top-level `engine`
 provides the default for sections that do not set their own. See
 [workflow sections and engines](workflows.md#define-sections-and-choose-an-engine) for

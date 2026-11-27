@@ -14,7 +14,7 @@ aligned timestep, and a relative window:
 ## Units and aliases
 
 `find_unit_of_time()` removes non-alphanumeric characters, ignores case, and
-normalizes names to a one-character code.
+normalises names to a one-character code.
 
 Support differs between aligned `TimeStep` objects (including Dataset
 `timestep` values) and relative `TimeWindow` durations:
@@ -200,7 +200,7 @@ assert [step.start.hour for step in issues] == [0, 12, 0, 12]
 `from_str()` accepts joined forms such as `3days` and separated forms such as
 `3 days`, `3-d`, or `3.days`.
 
-The joined strings `10d` and `8d` are ambiguous because the unit normalizer
+The joined strings `10d` and `8d` are ambiguous because the unit normaliser
 also uses them for dekad and VIIRS timestep aliases. `TimeWindow.from_str()`
 therefore rejects them. Use a separator for literal days (`10 days`, `8 days`)
 or name the intended special unit (`1 dekad`, `1 viirs`).
@@ -290,7 +290,7 @@ pattern is rendered. See [Datasets — Key patterns](datasets.md#key-patterns-an
 ## Estimation and utility helpers
 
 `estimate_timestep(sample)` sorts a mutable datetime sample in place and uses
-the modal consecutive difference. It recognizes hourly, daily, VIIRS-like
+the modal consecutive difference. It recognises hourly, daily, VIIRS-like
 eight-day, dekadal (roughly 9–11 day), monthly (28–31 day), and yearly
 (365–366 day) spacing. It returns a timestep class or `None`; irregular data
 can be misclassified when one difference dominates, so explicit Dataset
@@ -340,7 +340,7 @@ assert not unit_is_multiple("day", "month")
 ## Errors and edge cases
 
 - Unknown unit strings raise `ValueError`; unsupported timesteps such as weeks
-  normalize successfully but then fail class lookup or range generation.
+  normalise successfully but then fail class lookup or range generation.
 - `TimeWindow.from_str()` raises for an unparseable or ambiguous string.
 - Fractional sizes are not a stable public duration model. `TimeWindow`
   converts its size with `int()`, while `get_window()` rejects floats.
@@ -349,7 +349,7 @@ assert not unit_is_multiple("day", "month")
 - Leap years change February, annual day/hour counts, third-February-dekad
   length, and the final fixed-DOY period.
 - Fixed-DOY schedules are annual definitions; invalid or unsorted start days
-  are not normalized into a safe schedule for callers.
+  are not normalised into a safe schedule for callers.
 - Parsed dates are timezone-naive. Avoid mixing naive and timezone-aware
   datetimes in comparisons or range construction.
 

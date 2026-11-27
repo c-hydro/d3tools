@@ -49,7 +49,7 @@ processing, or calculate drought indicators. Engine-backed workflows therefore r
 the companion package responsible for each stage to be installed:
 
 - **[DOOR](https://github.com/c-hydro/door/tree/main_new)** acquires source data from remote services
-  and organizes it into the datasets consumed by later stages.
+  and organises it into the datasets consumed by later stages.
 - **[DAM](https://github.com/c-hydro/dam)** processes those inputs and creates the
   aggregations and derived datasets needed for indicator calculation.
 - **[DRYES](https://github.com/c-hydro/dryes)** calculates drought indicators from the

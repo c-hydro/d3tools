@@ -41,12 +41,12 @@ come from the same virtual environment.
 - **Configuration rejects a top-level key:** a typo in a reserved key may be
   interpreted as a section. Ensure every non-reserved key selects DOOR, DAM,
   or DRYES through an alias or supported explicit `engine`.
-- **Format cannot be selected:** use a recognized extension or set an
+- **Format cannot be selected:** use a recognised extension or set an
   explicit `format`; check that the required format extra is installed.
 - **Availability or time inference fails:** provide an explicit `timestep`
   and verify that matching data is present for the requested dates. Remote
-  catalogs can take longer to inspect; sparse keys may not support inference.
-- **Thumbnail setup fails:** verify the color file, output path, optional
+  catalogues can take longer to inspect; sparse keys may not support inference.
+- **Thumbnail setup fails:** verify the colour file, output path, optional
   overlay, and thumbnail dependencies. See [dataset thumbnails](datasets.md#configure-thumbnails).
 
 ### Spatial-template failures
@@ -65,7 +65,7 @@ owning workflow section.
 `TemplateNotFoundError` and `TemplateCompatibilityError` are also public
 template exception types, but the current `TemplateManager` does not raise
 them. If an engine or extension raises either one, follow its traceback rather
-than assuming it came from the manager. Direct template setup, cache behavior,
+than assuming it came from the manager. Direct template setup, cache behaviour,
 and reconstruction are described in
 [Tools — Spatial templates](../tools/datasets.md#spatial-templates).
 

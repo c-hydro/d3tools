@@ -83,7 +83,7 @@ notification](../../tools/exit-and-notification.md#experimental-email-notificati
 Engine integration is a fixed, built-in mapping rather than a third-party
 plugin registry. While collecting sections, D3tools chooses `door`, `dam`, or
 `dryes` from a valid section-level engine, the workflow default, or the
-recognized section-name aliases. The selected builder receives the resolved
+recognised section-name aliases. The selected builder receives the resolved
 section payload after `engine` and `exec_options` have been removed:
 
 | Engine | Construction call | Execution call |
@@ -115,7 +115,7 @@ inspection but does not satisfy the execution contract.
 
 Adding an engine requires coordinated source changes; configuration alone
 cannot register one. A contributor must update section recognition, the
-builder mapping, execution dispatch, range behavior, logging integration, and
+builder mapping, execution dispatch, range behaviour, logging integration, and
 the relevant engine-owned documentation. Preserve these boundaries:
 
 1. Keep shared parsing, ordering, range selection, logging, and result
@@ -129,7 +129,7 @@ the relevant engine-owned documentation. Preserve these boundaries:
    verified against the corresponding engine version.
 
 Do not describe a new integration as supported until every fixed dispatch
-site is updated and cross-package behavior has been exercised.
+site is updated and cross-package behaviour has been exercised.
 
 ## Contributor checks
 

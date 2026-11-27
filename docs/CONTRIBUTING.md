@@ -1,6 +1,6 @@
 # Contributing to the documentation
 
-The documentation is organized by reader need:
+The documentation is organised by reader need:
 
 - `workflow_orchestration/` explains workflow configuration and operation, including
   datasets in JSON, workflow sections, logging, examples, troubleshooting, and the
@@ -14,6 +14,17 @@ Keep each fact on one owning page and link to it elsewhere. The companion engine
 their complete payload schemas and processing semantics; D3tools documents only their
 shared integration boundary. Check claims against `src/d3tools/` and use `tests/` as
 evidence of exercised behaviour. Clearly label anything unexecuted or unresolved.
+
+## Language and naming
+
+- Write the human-facing package name as **D3tools**, with a capital `D`. Preserve the
+  lowercase form where it is an exact technical identifier, including the Python package
+  and import namespace (`d3tools`), installation commands, module paths, URLs, logger
+  names, filenames, and filesystem paths.
+- Use British English throughout narrative documentation, including forms such as
+  `colour`, `behaviour`, `recognise`, `organise`, and `normalise`. Preserve American
+  spelling when it is part of an exact API name, configuration key, code sample, command,
+  filename, external quotation, or other literal identifier.
 
 ## Writing examples
 

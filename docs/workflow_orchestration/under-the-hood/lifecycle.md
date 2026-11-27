@@ -58,7 +58,7 @@ the same declarative shape as a Python mapping. Both paths call
    `datasets.__defaults__` mapping.
 6. Replace whole-value dataset references with those objects; references with
    tag assignments use `Dataset.update()`.
-7. Normalize and validate the `workflow_log` value without creating the
+7. Normalise and validate the `workflow_log` value without creating the
    logging manager yet.
 8. Convert every non-reserved top-level entry into one or more ordered
    `WorkflowSection` objects and remove the original entries.
@@ -70,7 +70,7 @@ Unresolved ordinary tags remain strings; a missing environment value without
 a default raises during parsing.
 
 The result is an `Options` mapping containing resolved tags, constructed
-datasets, normalized workflow controls, and `workflow_sections`. A
+datasets, normalised workflow controls, and `workflow_sections`. A
 `WorkflowDefinition` retains that mapping as `options` and exposes the main
 parts as `tags`, `datasets`, `workflow_sections`, and `other_options`.
 
@@ -110,7 +110,7 @@ suffixes in list order.
 
 For each section, the parser combines workflow defaults with the section
 mapping. A section-level `engine` replaces the workflow default. If that value
-is absent or unsupported, the section name is matched against the recognized
+is absent or unsupported, the section name is matched against the recognised
 aliases. `engine` and `exec_options` are removed from the remaining definition;
 the rest is passed to the selected engine parser.
 

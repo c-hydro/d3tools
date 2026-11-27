@@ -28,7 +28,7 @@ latitude/longitude axis ordering. This does not change the dimension order of
 an xarray object; its raster x and y dimensions must already be identified by
 the `rio` accessor.
 
-`get_crs()` normalizes an EPSG integer, CRS string, or existing `pyproj.CRS`:
+`get_crs()` normalises an EPSG integer, CRS string, or existing `pyproj.CRS`:
 
 ```python
 from d3tools.spatial import get_crs
@@ -183,7 +183,7 @@ Assigning the bounding-box CRS to a CRS-less source is an assumption, not a
 reprojection. Only use that path when the source coordinates are already
 expressed in the bounding-box CRS.
 
-The longitude normalization is intended for rasters using 0–360 coordinates.
+The longitude normalisation is intended for rasters using 0–360 coordinates.
 It shifts every x coordinate greater than 180, so use care with projected
 coordinate systems whose eastings can also exceed 180.
 
@@ -211,7 +211,7 @@ cropped = clip_xarray(grid, (1, 1, 3, 3))
 assert cropped.shape == (3, 3)
 ```
 
-`clip_xarray()` does not transform a CRS or normalize longitudes. Prefer
+`clip_xarray()` does not transform a CRS or normalise longitudes. Prefer
 `crop_to_bb()` when either operation may be needed.
 
 For complete member signatures, see the

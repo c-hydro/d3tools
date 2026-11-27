@@ -32,12 +32,12 @@ Other configured locations include:
 
 | Type | Operator-facing settings | Notes |
 |---|---|---|
-| `memory` | `key_pattern`; optionally `keep_after_reading` | Keeps values in the current process. Read-retention behavior is not fully covered by tests. |
+| `memory` | `key_pattern`; optionally `keep_after_reading` | Keeps values in the current process. Read-retention behaviour is not fully covered by tests. |
 | `s3` | `bucket_name`, `key_pattern`; optional `region_name`, `profile_name`, `tmp_dir` | Uses standard AWS credential discovery. |
 | `s3-ovh` | S3 settings plus `endpoint_url` | For an S3-compatible endpoint. |
 | `sftp` | `host`, `key_pattern`, `username`; optional password or `private_key`, `port`, `tmp_dir` | Use environment placeholders for credentials. Username is required. |
 
-An SFTP example with sanitized settings (the endpoint is illustrative and is
+An SFTP example with sanitised settings (the endpoint is illustrative and is
 not contacted by the documentation checker):
 
 <!-- check-docs: skip -->
@@ -88,7 +88,7 @@ convenient alternative. Patterns can combine time directives (`%Y`, `%m`,
 ```
 
 If `format` is omitted, it is inferred from the key pattern's extension.
-Common recognized extensions include `.tif`/`.tiff` for GeoTIFF and `.nc`
+Common recognised extensions include `.tif`/`.tiff` for GeoTIFF and `.nc`
 for NetCDF. Set `format` explicitly when inference is not suitable; supported
 format names include `netcdf`, `geotiff`, `csv`, `parquet`, `shp`, `geojson`,
 `json`, `txt`, `log`, and `file`. Unknown extensions or format names can fail
@@ -145,7 +145,7 @@ behaviour belongs to
 ## Configure thumbnails
 
 To create thumbnails from raster writes, add a `thumbnail` mapping to the
-dataset. It needs color definitions and a destination; an overlay, annotation,
+dataset. It needs colour definitions and a destination; an overlay, annotation,
 and legend are optional:
 
 <!-- check-docs: skip -->
@@ -167,11 +167,11 @@ and legend are optional:
 }
 ```
 
-The color file must use the supported QGIS-style color-definition format.
+The colour file must use the supported QGIS-style colour-definition format.
 Thumbnail generation also needs the thumbnail extra and its rendering
 dependencies. See
 [Tools — Dataset-driven thumbnails](../tools/datasets.md#dataset-driven-thumbnails)
-for attachment and write behavior. Colour syntax, accepted rendering options,
+for attachment and write behaviour. Colour syntax, accepted rendering options,
 input requirements, and standalone use are documented in
 [Tools — Thumbnails](../tools/thumbnails.md).
 

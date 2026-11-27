@@ -4,7 +4,7 @@
 
 Each ordinary workflow section is a non-reserved top-level JSON key. You can
 name an engine explicitly on the section, use a workflow-level default, or
-choose a recognized section-name alias.
+choose a recognised section-name alias.
 
 | Section-name aliases | Engine |
 |---|---|
@@ -13,14 +13,14 @@ choose a recognized section-name alias.
 | `dryes_index`, `index`, `calculate` | DRYES (`dryes`) |
 
 Matching is case-insensitive and ignores dashes and spaces; an alias can occur
-within a longer section name. A recognized section-level `engine` takes
+within a longer section name. A recognised section-level `engine` takes
 precedence. If the section omits it, the workflow-level `engine` is used;
 otherwise the section name is matched to an alias. A null or unsupported
 section-level `engine` falls back to alias matching, not to the workflow
 default. If no supported engine can be selected, loading fails.
 
 Use the spelling shown in the selected engine's docs for section payloads.
-D3tools selects the engine and orders sections; the schema and behavior of the
+D3tools selects the engine and orders sections; the schema and behaviour of the
 engine-owned payload are defined by [DOOR](https://github.com/c-hydro/door/tree/main_new),
 [DAM](https://github.com/c-hydro/dam), and
 [DRYES](https://github.com/c-hydro/dryes). See also the
