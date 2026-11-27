@@ -121,8 +121,8 @@ shutdown. Python callers that know when processing is finished should still
 call `workflow.logger.close()` explicitly: this surfaces errors at a useful
 point and does not depend on interpreter shutdown.
 
-See [Workflow lifecycle — Logging, failure, and
-cleanup](../workflow_orchestration/under-the-hood/lifecycle.md#logging-failure-and-cleanup)
+See [Workflow lifecycle — Logging, exceptions, and
+cleanup](../workflow_orchestration/under-the-hood/lifecycle.md#logging-exceptions-and-cleanup)
 for the orchestration lifecycle.
 
 ## Experimental email notification

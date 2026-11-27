@@ -113,8 +113,8 @@ class WorkflowLogManager:
 
         Raises:
             TypeError: If ``config`` is neither ``None``, a string, nor a dict.
-            Exceptions from placeholder resolution, destination parsing, or
-            manager initialization are propagated.
+            Exception: If placeholder resolution, destination parsing, or manager
+                initialization fails.
         """
 
         # Handle None or empty config with default console-only logging

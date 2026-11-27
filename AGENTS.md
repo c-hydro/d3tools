@@ -41,8 +41,8 @@
 - Keep each fact on one owning page and link to it elsewhere.
 - Validate Markdown with:
   `/home/luca/Documents/CIMA_code/workspace_env/.venv/bin/python tools/check_docs.py`.
-- Do not run MkDocs commands unless the maintainer explicitly asks for a rendered-site
-  check.
+- Zensical is the production documentation generator. Do not run documentation build or
+  preview commands unless the maintainer explicitly asks for a rendered-site check.
 - Never commit credentials, private infrastructure details, or downloaded case-study
   parameter data.
 
