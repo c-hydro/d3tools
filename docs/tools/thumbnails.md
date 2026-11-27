@@ -12,7 +12,7 @@ PNG previews. It provides three entry points:
 Install the optional dependencies before using these APIs:
 
 ```bash
-pip install "d3tools[thumbnails]"
+pip install "cima-d3tools[thumbnails]"
 ```
 
 Raster paths also rely on the geospatial raster dependencies used by d3tools.

@@ -8,6 +8,9 @@ Notable changes to D3tools are documented here. The project follows
 ### Breaking changes
 
 - Python 3.12 or newer is now required.
+- The installable distribution is named `cima-d3tools` because the `d3tools`
+  name on PyPI belongs to an unrelated project. The import package remains
+  `d3tools`, and the command remains `d3run`.
 - Workflow configuration and execution are coordinated by
   `WorkflowDefinition`; the legacy `Options` type remains available for
   configuration mappings but is no longer the workflow runner.

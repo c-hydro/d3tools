@@ -61,6 +61,7 @@ def test_base_package_imports_without_remote_dependencies():
                 backend(**kwargs)
             except ModuleNotFoundError as error:
                 assert expected in str(error)
+                assert "cima-d3tools[remote-data]" in str(error)
             else:
                 raise AssertionError(f"{backend.__name__} accepted missing dependencies")
         """

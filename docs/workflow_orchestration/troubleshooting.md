@@ -16,17 +16,16 @@ Use the first missing module in the traceback to distinguish these cases:
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `WorkflowEngineImportError` names `door`, `dam`, or `dryes` | D3tools selected that engine, but importing the engine or one of its dependencies failed. | Install the named engine and its dependencies in the same environment as D3tools. Inspect the exception's chained error or `original_error` for the first missing transitive dependency. Use `build_workflow_objects=False` only to inspect configuration. |
-| `ModuleNotFoundError` names `boto3`, `botocore`, `paramiko`, or `requests` | The S3/SFTP backend dependencies are absent. Because the remote backend module participates in the data API imports, this can surface before a remote dataset is constructed. | Install `d3tools[remote-data]`, then retry the import and workflow load. |
-| `ModuleNotFoundError` names `pandas` while importing or loading a workflow | Pandas is imported by ordinary data and template modules, so its absence can prevent general workflow loading before any table dataset is used. | Install `d3tools[more-data]`, then retry the original workflow load. |
-| A Parquet operation reports that `pyarrow` or `fastparquet` is unavailable | Pandas cannot find a usable Parquet engine. | Install `d3tools[more-data]` and keep at least one of `pyarrow` or `fastparquet` importable. |
-| `ModuleNotFoundError` names `matplotlib`, `img2pdf`, or `PIL` | Thumbnail rendering or collection output was imported without its optional dependencies. | Install `d3tools[thumbnails]`. `PIL` is provided by Pillow. |
+| Constructing an S3 or SFTP dataset reports that `remote-data` is required | Remote storage is optional and its dependencies are absent. Local and memory datasets remain available. | Install `cima-d3tools[remote-data]`, then retry construction. |
+| `ModuleNotFoundError` names `pandas` or `h5netcdf` while importing or using a base feature | A required base dependency is absent, usually because the environment is incomplete or dependencies were deliberately skipped. | Reinstall `cima-d3tools` without `--no-deps`, then retry the original operation. |
+| A Parquet operation reports that `pyarrow` or `fastparquet` is unavailable | Pandas cannot find a usable Parquet engine. | Install `cima-d3tools[more-data]` and keep at least one of `pyarrow` or `fastparquet` importable. |
+| `ModuleNotFoundError` names `matplotlib`, `img2pdf`, or `PIL` | Thumbnail rendering or collection output was imported without its optional dependencies. | Install `cima-d3tools[thumbnails]`. `PIL` is provided by Pillow. |
 | A Rasterio or GeoPandas import reports missing or incompatible GDAL libraries | The active Python geospatial stack is installed incompletely, or its native GDAL libraries do not match. GDAL is not a D3tools extra. | Install compatible system GDAL libraries first, then reinstall the matching Python geospatial packages. Use `gdalinfo --version` to check the system version. D3tools defines and exports `GDAL_ImportError`, but current implementation paths do not raise it; seeing that type would therefore indicate an engine or extension. |
 | A large GeoTIFF read requests a chunk manager that is unavailable | Files above the raster reader's chunk threshold are opened with dask chunks, but dask is not installed. | Install a compatible dask release or raise the read's `chunk_threshold` only when reading the file eagerly is safe for available memory. |
-| A NetCDF read or write says the `h5netcdf` engine is unavailable | NetCDF I/O explicitly selects xarray's `h5netcdf` engine, which is not supplied by a named D3tools extra. | Install compatible `h5netcdf` and HDF5 Python dependencies in the workflow environment. |
+| A NetCDF read or write says the `h5netcdf` engine is unavailable | The required base dependency is missing or damaged. | Reinstall `cima-d3tools` without `--no-deps`. |
 
 The package metadata defines `more-data`, `remote-data`, and `thumbnails` as
-the D3tools extras. Dask and `h5netcdf` are runtime requirements of the
-specific paths above, not current D3tools extras. When an import still fails
+the D3tools extras. Dask is not currently supplied by an extra. When an import still fails
 after installation, confirm that `python`, `pip`, and the workflow runner all
 come from the same virtual environment.
 

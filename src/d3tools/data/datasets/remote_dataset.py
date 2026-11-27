@@ -49,7 +49,7 @@ def _require_s3_dependencies() -> None:
     if _S3_IMPORT_ERROR is not None:
         raise ModuleNotFoundError(
             "S3 dataset support requires the 'remote-data' extra; "
-            "install it with `python -m pip install 'd3tools[remote-data]'`."
+            "install it with `python -m pip install 'cima-d3tools[remote-data]'`."
         ) from _S3_IMPORT_ERROR
 
 
@@ -58,7 +58,7 @@ def _require_sftp_dependencies() -> None:
     if _SFTP_IMPORT_ERROR is not None:
         raise ModuleNotFoundError(
             "SFTP dataset support requires the 'remote-data' extra; "
-            "install it with `python -m pip install 'd3tools[remote-data]'`."
+            "install it with `python -m pip install 'cima-d3tools[remote-data]'`."
         ) from _SFTP_IMPORT_ERROR
 
 class RemoteDataset(Dataset):

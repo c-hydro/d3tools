@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && 'testpypi' || 'pypi' }}
-      url: ${{ github.event_name == 'workflow_dispatch' && 'https://test.pypi.org/p/d3tools' || 'https://pypi.org/p/d3tools' }}
+      url: ${{ github.event_name == 'workflow_dispatch' && 'https://test.pypi.org/p/cima-d3tools' || 'https://pypi.org/p/cima-d3tools' }}
     permissions:
       id-token: write
     steps:
