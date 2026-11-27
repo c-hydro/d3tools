@@ -452,6 +452,94 @@ class TestRasterTemplateManagement:
         assert isinstance(result, xr.DataArray)
         assert result.shape == (10, 10)
 
+    def test_historical_write_anchors_template_discovery_to_write_time(self, tmp_path):
+        """Historical writes should find templates near the requested time."""
+        template_data = xr.DataArray(
+            np.ones((1, 4, 5)),
+            dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(10, 0, 4),
+                'x': np.linspace(0, 10, 5),
+            },
+            attrs={'_FillValue': -9999},
+        )
+        template_data.rio.write_crs("EPSG:4326", inplace=True)
+        template_data.rio.to_raster(tmp_path / "data_20190101.tif")
+
+        dataset = LocalDataset(path=str(tmp_path), file="data_%Y%m%d.tif")
+        output_time = dt.datetime(2019, 2, 1)
+
+        dataset.write_data(np.ones((1, 4, 5)), time=output_time)
+
+        assert (tmp_path / "data_20190201.tif").exists()
+        assert dataset.get_template_dict(make_it=False) is not None
+
+    def test_template_search_start_option_extends_discovery(self, tmp_path):
+        """Dataset configuration should extend template discovery explicitly."""
+        template_data = xr.DataArray(
+            np.ones((1, 4, 5)),
+            dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(10, 0, 4),
+                'x': np.linspace(0, 10, 5),
+            },
+            attrs={'_FillValue': -9999},
+        )
+        template_data.rio.write_crs("EPSG:4326", inplace=True)
+        template_data.rio.to_raster(tmp_path / "data_20140101.tif")
+        dataset = LocalDataset(
+            path=str(tmp_path),
+            file="data_%Y%m%d.tif",
+            template_search_start="2010-01-01",
+        )
+
+        template = dataset.get_template_dict(
+            reference_time=dt.datetime(2020, 1, 1),
+        )
+
+        assert template is not None
+
+    def test_template_search_start_call_override_extends_discovery(self, tmp_path):
+        """A direct lower-bound override should extend template discovery."""
+        template_data = xr.DataArray(
+            np.ones((1, 4, 5)),
+            dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(10, 0, 4),
+                'x': np.linspace(0, 10, 5),
+            },
+            attrs={'_FillValue': -9999},
+        )
+        template_data.rio.write_crs("EPSG:4326", inplace=True)
+        template_data.rio.to_raster(tmp_path / "data_20140101.tif")
+        dataset = LocalDataset(path=str(tmp_path), file="data_%Y%m%d.tif")
+
+        template = dataset.get_template_dict(
+            reference_time=dt.datetime(2020, 1, 1),
+            template_search_start=dt.date(2010, 1, 1),
+        )
+
+        assert template is not None
+
+    def test_numpy_write_error_explains_template_search_interval(self, tmp_path):
+        """A missing template should report the bounded search and remedy."""
+        dataset = LocalDataset(path=str(tmp_path), file="data_%Y%m%d.tif")
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "default five-year interval preceding 2019-02-01.*"
+                "Configure template_search_start"
+            ),
+        ):
+            dataset.write_data(
+                np.ones((1, 4, 5)),
+                time=dt.datetime(2019, 2, 1),
+            )
+
 
 class TestRasterCoordinateHandling:
     """Test coordinate system operations."""

@@ -637,7 +637,7 @@ class Dataset(metaclass=DatasetMeta):
         if as_is or self.type == 'memory':
             output = data
         else:
-            output = self._format_before_write(data, **kwargs)
+            output = self._format_before_write(data, time=time, **kwargs)
 
         # make the thubnail if configured (this is also a bit of a hack since thumbnails only make sense for certain formats,
         # but we want to allow the user to configure it on any dataset)
