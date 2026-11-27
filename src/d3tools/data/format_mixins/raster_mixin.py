@@ -133,7 +133,7 @@ class RasterMixin(FormatMixin):
         
         return data
 
-    def _format_before_write(self, data, **kwargs):
+    def _format_before_write(self, data, time=None, **kwargs):
         """
         Prepare raster data for writing with format-specific logic.
         
@@ -142,6 +142,7 @@ class RasterMixin(FormatMixin):
         
         Args:
             data: Raster data to prepare (xarray or numpy array)
+            time: Optional time used to anchor template discovery.
             **kwargs: Additional arguments
             
         Returns:
@@ -151,14 +152,18 @@ class RasterMixin(FormatMixin):
         
         # Ensure there is a template available
         try:
-            template_dict = self.get_template_dict(**kwargs)
+            template_dict = self.get_template_dict(reference_time=time, **kwargs)
         except PermissionError:
             template_dict = None
 
         if template_dict is None:
             if isinstance(data, (xr.DataArray, xr.Dataset)):
                 self.set_template(data, **kwargs)
-                template_dict = self.get_template_dict(**kwargs, make_it=False)
+                template_dict = self.get_template_dict(
+                    reference_time=time,
+                    make_it=False,
+                    **kwargs,
+                )
             else:
                 raise ValueError('Cannot write numpy array without a template.')
         
@@ -210,7 +215,7 @@ class RasterMixin(FormatMixin):
         """Backward compatibility property for setting templates."""
         self.template_manager._templates = value
     
-    def get_template_dict(self, make_it: bool = True, **kwargs):
+    def get_template_dict(self, make_it: bool = True, reference_time=None, **kwargs):
         """
         Get template dictionary for raster data.
         
@@ -219,6 +224,9 @@ class RasterMixin(FormatMixin):
         
         Args:
             make_it: Whether to create template if it doesn't exist
+            reference_time: Optional upper bound for finding a source raster.
+                Historical writes pass their target time so discovery does not
+                depend on the current date.
             **kwargs: Additional options (tile, etc.)
             
         Returns:
@@ -232,7 +240,12 @@ class RasterMixin(FormatMixin):
             if self.has_tiles:
                 template_dict = {}
                 for tile in self.tile_names:
-                    template_dict[tile] = self.get_template_dict(make_it=make_it, tile=tile, **kwargs)
+                    template_dict[tile] = self.get_template_dict(
+                        make_it=make_it,
+                        reference_time=reference_time,
+                        tile=tile,
+                        **kwargs,
+                    )
                 return template_dict
             else:
                 tile = '__tile__'
@@ -245,7 +258,7 @@ class RasterMixin(FormatMixin):
 
             else:
                 # Use get_any_date instead of get_last_date - we don't care which file
-                any_date = self.get_any_date(tile=tile, **kwargs)
+                any_date = self.get_any_date(now=reference_time, tile=tile, **kwargs)
                 if any_date is not None:
                     data = self.get_data(time=any_date, tile=tile, as_is=True, **kwargs)
                 else:

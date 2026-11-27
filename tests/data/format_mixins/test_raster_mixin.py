@@ -452,6 +452,29 @@ class TestRasterTemplateManagement:
         assert isinstance(result, xr.DataArray)
         assert result.shape == (10, 10)
 
+    def test_historical_write_anchors_template_discovery_to_write_time(self, tmp_path):
+        """Historical writes should find templates near the requested time."""
+        template_data = xr.DataArray(
+            np.ones((1, 4, 5)),
+            dims=['band', 'y', 'x'],
+            coords={
+                'band': [1],
+                'y': np.linspace(10, 0, 4),
+                'x': np.linspace(0, 10, 5),
+            },
+            attrs={'_FillValue': -9999},
+        )
+        template_data.rio.write_crs("EPSG:4326", inplace=True)
+        template_data.rio.to_raster(tmp_path / "data_20190101.tif")
+
+        dataset = LocalDataset(path=str(tmp_path), file="data_%Y%m%d.tif")
+        output_time = dt.datetime(2019, 2, 1)
+
+        dataset.write_data(np.ones((1, 4, 5)), time=output_time)
+
+        assert (tmp_path / "data_20190201.tif").exists()
+        assert dataset.get_template_dict(make_it=False) is not None
+
 
 class TestRasterCoordinateHandling:
     """Test coordinate system operations."""
