@@ -1,88 +1,45 @@
-import itertools
+"""Utility helpers for case expansion and case-ID traversal.
+
+The helpers in this module support generating case permutations, decorating
+functions to execute over multiple case tags, and resolving ancestor IDs for the
+hierarchical case trees created by :class:`d3tools.cases.case_manager.CaseManager`.
+"""
+
 import copy
+import itertools
+
 
 def withcases(func):
-    """
-    Decorator that enables case-based expansion of function calls.
-    
-    This decorator allows a function to be called once but executed multiple times,
-    once for each case in a list of cases. Each case contains a set of tag values
-    that are unpacked and passed to the decorated function.
-    
-    When a function is decorated with @withcases, it can accept a 'cases' keyword
-    argument. If provided, the function will be executed once per case, with each
-    case's tags merged into the function's kwargs.
-    
-    Use Cases:
-        - Processing datasets with multiple tag combinations (e.g., variables, aggregations)
-        - Batch operations across different parameter sets
-        - Workflows that need to run the same operation with different configurations
-    
+    """Decorate a function so it can be called once per case in a case list.
+
+    When the wrapped function receives a ``cases`` keyword containing a list of
+    case dictionaries, it executes the function once per case after merging each
+    case's ``tags`` mapping into the call arguments. If ``cases`` is missing or
+    ``None``, the function is invoked normally.
+
     Args:
-        func: The function to be decorated. Can be any callable.
-    
+        func: Callable to wrap.
+
     Returns:
-        A wrapper function that handles case expansion.
-    
-    Behavior:
-        - If 'cases' kwarg is present and not None:
-            * Executes func once per case
-            * Each case's 'tags' dict is unpacked into func's kwargs
-            * Returns a list of results, one per case
-        - If 'cases' kwarg is absent or None:
-            * Executes func normally with provided args/kwargs
-            * Returns single result
-    
-    Case Structure:
-        Each case in the cases list should be a dict with at minimum:
-        {
-            'tags': {
-                'tag_name': value,
-                ...
-            },
-            # Optional: other case metadata
-        }
-    
+        Callable: A wrapper that either runs ``func`` normally or expands it over
+        a sequence of case-tag dictionaries.
+
     Example:
-        >>> @withcases
-        ... def process_data(time, variable, agg):
-        ...     return f"Processing {variable} with {agg} aggregation at {time}"
-        
-        >>> # Normal call (no cases)
-        >>> process_data(time='2024-01', variable='temp', agg='3m')
-        'Processing temp with 3m aggregation at 2024-01'
-        
-        >>> # Call with cases - executes multiple times
-        >>> cases = [
-        ...     {'tags': {'variable': 'Tmin', 'agg': '3m'}},
-        ...     {'tags': {'variable': 'Tmin', 'agg': '6m'}},
-        ...     {'tags': {'variable': 'Tmax', 'agg': '3m'}},
-        ...     {'tags': {'variable': 'Tmax', 'agg': '6m'}},
-        ... ]
-        >>> process_data(time='2024-01', cases=cases)
-        [
-            'Processing Tmin with 3m aggregation at 2024-01',
-            'Processing Tmin with 6m aggregation at 2024-01',
-            'Processing Tmax with 3m aggregation at 2024-01',
-            'Processing Tmax with 6m aggregation at 2024-01'
-        ]
-    
-    Common Workflow Integration:
-        Used extensively with DataCatalogue methods to query data across
-        multiple tag combinations:
-        
-        >>> dataset.find_times(
-        ...     times=[...],
-        ...     cases=[
-        ...         {'tags': {'tile': 'h18v04'}},
-        ...         {'tags': {'tile': 'h19v04'}},
-        ...     ]
-        ... )
-        # Returns: [[times for h18v04], [times for h19v04]]
-    
-    Note:
-        The 'cases' parameter is consumed by the decorator (popped from kwargs),
-        so the decorated function does not need to handle it explicitly.
+        Generate output names for several variable/season cases while sharing
+        the year and file format across all runs::
+
+            >>> @withcases
+            ... def output_name(variable, season, year, extension):
+            ...     return f"{variable}_{season}_{year}.{extension}"
+            >>> output_name(
+            ...     year=2024,
+            ...     extension='nc',
+            ...     cases=[
+            ...         {'tags': {'variable': 'rain', 'season': 'JJA'}},
+            ...         {'tags': {'variable': 'temperature', 'season': 'DJF'}},
+            ...     ],
+            ... )
+            ['rain_JJA_2024.nc', 'temperature_DJF_2024.nc']
     """
     def wrapper(*args, **kwargs):
         if 'cases' in kwargs:
@@ -97,8 +54,19 @@ def withcases(func):
         return func(*args, **kwargs)
     return wrapper
 
-def permutate_options(options):
 
+def permutate_options(options):
+    """Expand a mapping of dictionary-valued options into all permutations.
+
+    Args:
+        options: Mapping whose dictionary entries define case dimensions; all
+            non-dictionary entries remain fixed for every generated case.
+
+    Returns:
+        tuple[list[dict], list[dict]]: The first list contains concrete option
+        dictionaries for each generated case, and the second contains the tag
+        dictionaries that record the selected dimension values.
+    """
     # get the options that need to be permutated and the ones that are fixed
 
     # dictionaries need to be permutated
@@ -106,7 +74,7 @@ def permutate_options(options):
 
     # and everything else is fixed
     fixed_options = {k: v for k, v in options.items() if not isinstance(v, dict)}
-    
+
     values_to_permutate = [v for v in to_permutate.values()]
     keys = list(to_permutate.keys())
 
@@ -119,7 +87,20 @@ def permutate_options(options):
 
     return permutations, identifiers
 
-def rand_str(l = 4, n = 0, skip = None):
+
+def rand_str(l=4, n=0, skip=None):
+    """Generate one or more random uppercase/digit identifiers.
+
+    Args:
+        l: Length of each generated identifier.
+        n: Number of identifiers to generate. A value of 0 returns a single
+            string instead of a list.
+        skip: Collection of identifiers that must not be reused.
+
+    Returns:
+        str | list[str]: A single identifier when ``n`` is 0, otherwise a list of
+        generated identifiers. Values in ``skip`` are avoided when possible.
+    """
     import random
     import string
 
@@ -138,7 +119,20 @@ def rand_str(l = 4, n = 0, skip = None):
 
     return lst
 
-def split_id(id, sep = '/', bracket = ('[', ']')):
+
+def split_id(id, sep='/', bracket=('[', ']')):
+    """Split a case ID on top-level separators while preserving grouped values.
+
+    Args:
+        id: The case ID to split.
+        sep: Separator to split on.
+        bracket: Opening and closing bracket characters that keep separator
+            characters inside grouped subexpressions from being treated as
+            top-level separators.
+
+    Returns:
+        list[str]: The ID split into its top-level segments.
+    """
     parts = []
     bracket_level = 0
     current_part = []
@@ -157,7 +151,17 @@ def split_id(id, sep = '/', bracket = ('[', ']')):
     parts.append(''.join(current_part))
     return parts
 
+
 def get_parents(id):
+    """Return parent case IDs for a hierarchical case ID.
+
+    Args:
+        id: Case ID to trace back through its ancestor chain.
+
+    Returns:
+        list[str]: Ancestor IDs, ordered from shortest to longest path and with
+        duplicates removed. Root-level IDs return an empty list.
+    """
     id_sep = split_id(id)
     if len(id_sep) == 1:
         return []
@@ -166,7 +170,7 @@ def get_parents(id):
     for i, piece in enumerate(id_sep[:-1]):
         if '&' in piece:
             more_parents = []
-            for subpiece in split_id(piece,'&'):
+            for subpiece in split_id(piece, '&'):
                 if subpiece.startswith('[') and subpiece.endswith(']'):
                     subpiece = subpiece[1:-1]
                 more_parents.append(subpiece)
@@ -174,12 +178,12 @@ def get_parents(id):
                 parents.extend(get_parents(parent))
             parents.extend(more_parents)
         else:
-            parents.append('/'.join(id_sep[:i+1]))
+            parents.append('/'.join(id_sep[:i + 1]))
 
     # remove duplicates
     parents = list(dict.fromkeys(parents))
 
     # order by length
-    parents.sort(key = lambda x: len(x))
+    parents.sort(key=lambda x: len(x))
 
     return parents

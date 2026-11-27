@@ -56,6 +56,7 @@ class RasterMixin(FormatMixin):
     
     def _read_from_file(self, path: str, chunk_threshold: int = 500, **kwargs) -> xr.DataArray | xr.Dataset:
         """Read raster data from a file using xarray or rioxarray.
+        
         Args:
             path: Path to the raster file
             chunk_threshold: File size threshold (in MB) for using dask

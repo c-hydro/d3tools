@@ -55,6 +55,14 @@ class TestSetDataset:
         assert isinstance(result, _DummyDataset)
         assert result.tags["tag"] == "bar"
 
+    def test_set_dataset_does_not_resolve_placeholder_with_suffix(self):
+        """Keep tagged references unchanged unless they occupy the full string."""
+        dataset = _DummyDataset()
+        placeholder = "{foo, tag='bar'} suffix"
+
+        assert set_dataset(placeholder, {"foo": dataset}) == placeholder
+        assert dataset.tags == {}
+
     def test_set_dataset_resolves_nested_structures(self):
         """Resolve dataset placeholders recursively in dict/list structures."""
         payload = {"ds": "{foo, tag = 'baz'}", "items": ["{foo, run = 'r1'}"]}

@@ -1,8 +1,7 @@
-"""
-Shared utilities for d3tools logging infrastructure.
+"""Shared helpers used by the dataset and workflow logging managers.
 
-Provides common formatters, handlers, and helper functions used
-by both DatasetLogManager and WorkflowLogManager.
+The functions in this module centralize the default log formats and create the
+file and console handlers that are attached to named loggers across d3tools.
 """
 
 import logging
@@ -29,30 +28,34 @@ def create_file_handler(
     format_style: str = 'detailed',
     mode: str = 'a'
 ) -> logging.FileHandler:
-    """
-    Create a file handler for logging.
-    
+    """Create a configured file handler for a logger.
+
+    The target directory is created if necessary, the file is opened in the
+    requested mode, and the handler is assigned a formatter from the known
+    templates in :data:`LOG_FORMATS`.
+
     Args:
-        log_file: Path to the log file
-        level: Logging level (e.g., logging.INFO or "INFO")
-        format_style: Format template name from LOG_FORMATS
-        mode: File open mode ('a' for append, 'w' for overwrite)
-    
+        log_file: Path to the destination log file.
+        level: Logging level for the handler, either as an integer or a string.
+        format_style: Name of the formatter template to use.
+        mode: File streaming mode, typically ``'a'`` for append or ``'w'`` for
+            overwrite.
+
     Returns:
-        Configured FileHandler instance
+        A configured :class:`logging.FileHandler` instance.
     """
 
     ensure_directory_exists(log_file)
 
     handler = logging.FileHandler(log_file, mode=mode)
     handler.setLevel(level)
-    
+
     formatter = logging.Formatter(
         LOG_FORMATS.get(format_style, LOG_FORMATS['detailed']),
         datefmt=DATE_FORMAT
     )
     handler.setFormatter(formatter)
-    
+
     return handler
 
 
@@ -61,26 +64,25 @@ def create_console_handler(
     format_style: str = 'simple',
     stream=None
 ) -> logging.StreamHandler:
-    """
-    Create a console handler for logging.
-    
+    """Create a configured console handler.
+
     Args:
-        level: Logging level (e.g., logging.INFO or "INFO")
-        format_style: Format template name from LOG_FORMATS
-        stream: Output stream (default: sys.stdout)
-    
+        level: Logging level for the handler, either as an integer or a string.
+        format_style: Name of the formatter template to use.
+        stream: Output stream to write to. Defaults to ``sys.stdout``.
+
     Returns:
-        Configured StreamHandler instance
+        A configured :class:`logging.StreamHandler` instance.
     """
     handler = logging.StreamHandler(stream or sys.stdout)
     handler.setLevel(level)
-    
+
     formatter = logging.Formatter(
         LOG_FORMATS.get(format_style, LOG_FORMATS['simple']),
         datefmt=DATE_FORMAT
     )
     handler.setFormatter(formatter)
-    
+
     return handler
 
 
@@ -94,41 +96,44 @@ def configure_logger(
     propagate: bool = True,
     clear_existing: bool = False
 ) -> logging.Logger:
-    """
-    Configure a logger with file and/or console handlers.
-    
-    This is a convenience function for setting up loggers with
-    standard configurations.
-    
+    """Configure a named logger with optional file and console handlers.
+
+    The logger level is set before any handlers are attached. If
+    ``clear_existing`` is true, the logger's current handlers are removed before
+    appending new ones. File logging is added first when ``file_path`` is set,
+    followed by a console handler when ``console`` is true.
+
     Args:
-        logger_name: Name of the logger (e.g., 'd3tools.workflow')
-        level: Base logging level (int or string like "INFO")
-        file_path: If provided, add a FileHandler to this path
-        console: If True, add a StreamHandler to stdout
-        format_file: Format style for file handler
-        format_console: Format style for console handler
-        propagate: Whether to propagate to parent loggers
-        clear_existing: If True, remove all existing handlers first
-    
+        logger_name: Logger name to configure.
+        level: Base logging level, as an integer or a standard ``logging`` level
+            name.
+        file_path: Optional path for a file-based log sink.
+        console: If true, attach a stream handler to stdout.
+        format_file: Formatter name to use for the file handler.
+        format_console: Formatter name to use for the console handler.
+        propagate: Whether the logger should propagate records to parent loggers.
+        clear_existing: If true, remove existing handlers before creating new
+            ones.
+
     Returns:
-        Configured Logger instance
+        The configured Python :class:`logging.Logger` instance.
     """
     logger = logging.getLogger(logger_name)
     logger.setLevel(level)
     logger.propagate = propagate
-    
+
     # Optionally clear existing handlers
     if clear_existing:
         logger.handlers.clear()
-    
+
     # Add file handler if requested
     if file_path:
         file_handler = create_file_handler(file_path, level, format_file)
         logger.addHandler(file_handler)
-    
+
     # Add console handler if requested
     if console:
         console_handler = create_console_handler(level, format_console)
         logger.addHandler(console_handler)
-    
+
     return logger

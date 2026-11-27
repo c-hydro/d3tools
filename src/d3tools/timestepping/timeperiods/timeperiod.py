@@ -164,6 +164,7 @@ class TimePeriod(ABC):
 
     #TODO remove this method eventually, it conflicts with the .length property of FixedLenTimeStep
     def length(self, **kwargs):
+        """Compatibility alias for :meth:`get_length`, forwarding keyword arguments."""
         return self.get_length(**kwargs)
 
     def contains(self, time: datetime.datetime|str):
@@ -187,29 +188,37 @@ class TimePeriod(ABC):
         return self.start <= time <= self.end
 
     def __repr__(self):
+        """Return the class name, date endpoints, and aggregation window when present."""
         if hasattr(self, 'agg_window') and self.agg_window is not None:
             return f'{self.__class__.__name__} ({self.start:%Y%m%d} - {self.end:%Y%m%d}) agg = {self.agg_window}'
         return f'{self.__class__.__name__} ({self.start:%Y%m%d} - {self.end:%Y%m%d})'
     
     def __str__(self):
+        """Return a lowercase class name and date endpoints, with aggregation when present."""
         if hasattr(self, 'agg_window') and self.agg_window is not None:
             return f'{self.__class__.__name__.lower()} {self.start:%Y%m%d}-{self.end:%Y%m%d} (agg={self.agg_window.__str__()})'
         return f'{self.__class__.__name__.lower()} {self.start:%Y%m%d}-{self.end:%Y%m%d}'
 
     def __eq__(self, other: 'TimePeriod'):
+        """Compare periods by exact equality of their start and end datetimes."""
         return self.start == other.start and self.end == other.end
 
     def __lt__(self, other: 'TimePeriod'):
+        """Return True only when this period ends before the other period starts."""
         return self.end < other.start
         
     def __gt__(self, other: 'TimePeriod'):
+        """Return True only when this period starts after the other period ends."""
         return self.start > other.end
 
     def __le__(self, other: 'TimePeriod'):
+        """Compare as strictly earlier than or exactly equal to the other period."""
         return self < other or self == other
     
     def __ge__(self, other: 'TimePeriod'):
+        """Compare as strictly later than or exactly equal to the other period."""
         return self > other or self == other
     
     def __hash__(self):
+        """Hash this period from its start and end datetimes."""
         return hash((self.start, self.end))

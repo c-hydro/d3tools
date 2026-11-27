@@ -29,7 +29,10 @@ class TimeRange(TimePeriod):
     flexible methods for custom timestep generation.
 
     Examples:
-        >>> range = TimeRange(datetime.datetime(2024, 1, 1), datetime.datetime(2024, 12, 31))\n        >>> months = range.months  # Get all months in 2024\n        >>> days = range.days  # Get all days in 2024\n        >>> dekads = range.dekads  # Get all dekads in 2024
+        >>> range = TimeRange(datetime.datetime(2024, 1, 1), datetime.datetime(2024, 12, 31))
+        >>> months = range.months  # Get all months in 2024
+        >>> days = range.days  # Get all days in 2024
+        >>> dekads = range.dekads  # Get all dekads in 2024
         >>> timesteps = range.get_timesteps('m')  # Alternative way to get months
     """
 
@@ -88,6 +91,7 @@ class TimeRange(TimePeriod):
         return self.get_timesteps_from_DOY(range(1, 366, 8))
 
     def extend(self, window: TimeWindow, before = False):
+        """Return this range extended by ``window`` before its start or after its end."""
         extended_period = super().extend(window, before)
         return TimeRange(extended_period.start, extended_period.end)
     
@@ -103,15 +107,17 @@ class TimeRange(TimePeriod):
                          'h'/'hourly', 'v'/'viirs'
                 - Integer: timesteps per year (1, 12, 36, 365, 365*24)
             agg (str|tuple|None, optional): Aggregation window to attach to each
-                timestep. Can be a string like '3d' or tuple like (3, 'd').
+                timestep. In string format like '7d' for 7 days, or as a (value:int,unit:str) tuple.
                 Defaults to None.
 
         Returns:
-            list: List of timestep objects appropriate for the frequency.
+            list: Whole timestep objects whose starts are no later than this
+                range's end. Timesteps are aligned to their calendar/frequency
+                boundaries and are not clipped to this range's endpoints.
 
         Raises:
             ValueError: If frequency is not supported.
-            TypeError: If freq is not int or str.
+            TypeError: If freq is not int or str, or if ``agg`` is unrecognised.
 
         Examples:
             >>> range.get_timesteps('m')  # Monthly timesteps
@@ -141,6 +147,16 @@ class TimeRange(TimePeriod):
         return tss
 
     def get_timesteps_like(self, timestep: 'TimeStep') -> list['TimeStep']:
+        """Generate timesteps matching another timestep's frequency and aggregation.
+
+        Args:
+            timestep (TimeStep): Reference timestep whose ``unit`` and
+                ``agg_window`` are reused.
+
+        Returns:
+            list[TimeStep]: Timesteps at the same frequency as ``timestep`` across
+                this range, with the same aggregation window attached when present.
+        """
         return self.get_timesteps(timestep.unit, timestep.agg_window)
 
     def gen_timesteps_from_tsnumber(self,
@@ -161,7 +177,9 @@ class TimeRange(TimePeriod):
             agg (str, optional): Aggregation window string to attach. Defaults to None.
 
         Yields:
-            FixedNTimeStep|FixedLenTimeStep: Timestep objects covering the range.
+            FixedNTimeStep|FixedLenTimeStep: Whole aligned timesteps, beginning
+                with the timestep containing this range's start and continuing
+                while each timestep starts on or before this range's end.
 
         Examples:
             >>> for month in range.gen_timesteps_from_tsnumber(12):
@@ -184,6 +202,19 @@ class TimeRange(TimePeriod):
             ts = ts + 1
 
     def get_timesteps_from_tsnumber(self, timesteps_per_year: int, agg: str = None) -> list['FixedNTimeStep']:
+        """Return whole aligned timesteps for the supplied annual frequency.
+
+        Args:
+            timesteps_per_year (int): Supported frequency count (1, 12, 36,
+                365, or 365*24).
+            agg (str, optional): Aggregation window string attached to each
+                returned timestep. Defaults to None.
+
+        Returns:
+            list[FixedNTimeStep|FixedLenTimeStep]: Generated timesteps; the
+                first and last may extend outside this range because periods
+                are not clipped.
+        """
         return list(self.gen_timesteps_from_tsnumber(timesteps_per_year, agg))
     
     def gen_timesteps_from_DOY(self, doy_list: Iterable[int], agg: str = None) -> Generator['FixedDOYTimeStep', None, None]:
@@ -213,11 +244,32 @@ class TimeRange(TimePeriod):
             ts = ts + 1
 
     def get_timesteps_from_DOY(self, doy_list: list[int], agg: str = None) -> list['FixedLenTimeStep']:
+        """Return a list of whole fixed-DOY timesteps intersecting this range.
+
+        Args:
+            doy_list (list[int]): Day-of-year start values defining the periods.
+            agg (str, optional): Aggregation window string attached to each
+                timestep. Defaults to None.
+
+        Returns:
+            list[FixedDOYTimeStep]: Generated timesteps are not clipped to the
+                range endpoints.
+        """
         return list(self.gen_timesteps_from_DOY(doy_list, agg))
 
     def gen_timesteps_from_issue_hour(self, issue_hours: list[int]) -> Generator['FixedLenTimeStep', None, None]:
-        """
-        This will yield the timesteps to of product issued daily at given hours
+        """Yield hourly timesteps at listed issue hours within this range.
+
+        Issue hours are considered in the order supplied. A timestep is yielded only
+        when its timestamp is between the current cursor and the range end plus
+        23 hours 59 minutes. Values outside the datetime hour range raise from the
+        ``datetime`` constructor.
+
+        Args:
+            issue_hours (list[int]): Hours of day used to construct issue times.
+
+        Yields:
+            FixedLenTimeStep: An hourly timestep for each accepted issue time.
         """
         from .fixed_len_timestep import FixedLenTimeStep
         now = self.start
@@ -231,5 +283,6 @@ class TimeRange(TimePeriod):
             now = datetime.datetime(day_after.year, day_after.month, day_after.day)
 
     def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list['FixedLenTimeStep']:
+        """Return the hourly issue timesteps as a list."""
         return list(self.gen_timesteps_from_issue_hour(issue_hours))
     

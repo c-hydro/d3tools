@@ -1,3 +1,5 @@
+"""Create annotated PNG thumbnails from raster or vector data."""
+
 import numpy as np
 import rioxarray
 import xarray as xr
@@ -13,12 +15,29 @@ import matplotlib.patches as mpatches
 from ..data import Dataset
 from .colors import parse_colors, keep_used_colors, create_colormap
 
-#TODO TEST
 class Thumbnail:
+    """Render raster or vector values using a color-definition file."""
+
     DEFAULT_VECTOR_SHORT_SIDE = 900
     MAX_VECTOR_LONG_SIDE = 2400
 
     def __init__(self, data:str|xr.DataArray|gpd.GeoDataFrame, color_definition_file:str):
+        """Prepare data and color bins for rendering.
+
+        Raster input may be an ``xarray.DataArray`` or a raster file path; after
+        squeezing, it must contain exactly one band. Vector input must be a
+        non-empty ``GeoDataFrame`` with a numeric ``value`` column. The color
+        definition file is parsed during initialization.
+
+        Args:
+            data: Raster data, a raster file path, or vector features.
+            color_definition_file: Path to the color and class-break definitions.
+
+        Raises:
+            TypeError: If ``data`` is not one of the supported input types.
+            ValueError: If raster data is not single-band, or vector data is
+                empty, lacks ``value``, or has a non-numeric ``value`` column.
+        """
         if isinstance(data, xr.DataArray):
             self.src = data
             self.type = 'raster'
@@ -168,6 +187,25 @@ class Thumbnail:
         return (x_min, x_max, y_min, y_max)
 
     def discretize(self, breaks: list, nan_value = np.nan):
+        """Map source values to integer classes using the instance's bins.
+
+        Missing values are assigned the instance's ``nan_class``. The
+        ``breaks`` and ``nan_value`` arguments are retained in the signature
+        for backward compatibility but are not used; bins and missing-value handling come from
+        initialization. With bins present, raster input returns an array and
+        vector input returns a copied GeoDataFrame with a ``value_discrete``
+        column. With no bins, the method instead returns ``zeros_like(self.img)``;
+        vector instances do not define ``self.img``.
+
+        Args:
+            breaks (list): Unused; the bins parsed during initialization are applied.
+            nan_value (float): Unused; missing values are identified from the source.
+
+        Returns:
+            numpy.ndarray | geopandas.GeoDataFrame: A discretized raster array or
+                copied vector GeoDataFrame. For vector input with no bins, the
+                method raises ``AttributeError`` because ``self.img`` is absent.
+        """
         # Create an array of bins from the positions
         if len(self.bins) == 0:
             return np.zeros_like(self.img)
@@ -196,6 +234,17 @@ class Thumbnail:
     def make_image(self,
                    size: Optional[float] = None,
                    dpi: Optional[float] = None):
+        """Create and retain a Matplotlib figure for the classified data.
+
+        The resulting figure, axes, and plotted image are stored on this
+        object. When neither sizing argument is provided, raster and vector
+        inputs use different sizing calculations; explicit ``size`` or
+        ``dpi`` determines the other value from the source dimensions.
+
+        Args:
+            size: Scale factor for the source dimensions, or ``None`` to infer it.
+            dpi: Figure resolution, or ``None`` to infer it.
+        """
         
         target_dpi = 150
         target_inches = 6
@@ -237,6 +286,11 @@ class Thumbnail:
         self.im = im
 
     def make_no_data_image(self, dpi: Optional[float] = None):
+        """Create and retain a gray figure labeled ``No data``.
+
+        Args:
+            dpi: Figure resolution. Defaults to 150.
+        """
         if dpi is None:
             dpi = 150
 
@@ -315,6 +369,21 @@ class Thumbnail:
         raise TypeError("Thumbnail overlay must be a string, Dataset, GeoDataFrame, dict, False, or None.")
 
     def add_overlay(self, shp_file: str|Dataset, **kwargs):
+        """Draw overlay boundaries after reprojecting them to the source CRS.
+
+        The source and overlay must both have a CRS. The overlay is read from
+        a path, copied from a GeoDataFrame, or loaded through ``Dataset``;
+        default boundary styling is transparent fill, black edges, and a
+        0.5 linewidth. The source extent and equal aspect ratio are restored
+        after plotting.
+
+        Args:
+            shp_file: Overlay path, Dataset, or GeoDataFrame.
+            **kwargs (Any): Options passed to GeoPandas boundary plotting.
+
+        Raises:
+            ValueError: If either the thumbnail source or overlay has no CRS.
+        """
 
         if isinstance(shp_file, str):
             shapes:gpd.GeoDataFrame = gpd.read_file(shp_file)
@@ -345,6 +414,14 @@ class Thumbnail:
         self.ax.set_ylim(self.extent[2], self.extent[3])
 
     def add_annotation(self, text:str, **kwargs):
+        """Add text to the current axes, using size-aware defaults.
+
+        Args:
+            text: Annotation text.
+            **kwargs (Any): Options passed to ``Axes.annotate``. Defaults place the
+                text near the lower-left axes corner and choose a font size
+                based on the figure dimensions and text length.
+        """
 
         if 'xycoords' not in kwargs:
             kwargs['xycoords'] = 'axes fraction'
@@ -374,6 +451,13 @@ class Thumbnail:
         self.ax.annotate(text, clip_on = True, **kwargs)
 
     def add_legend(self, **kwargs):
+        """Add a legend containing all classes from the color definition.
+
+        Args:
+            **kwargs (Any): Options passed to ``Axes.legend``. Defaults to the upper
+                right with no axes padding. A supplied ``bbox_to_anchor`` is
+                discarded for compatibility with older callers.
+        """
 
         if 'loc' not in kwargs:
             kwargs['loc'] = 'upper right'
@@ -396,6 +480,25 @@ class Thumbnail:
                 delattr(self, attr)
 
     def save(self, destination:str, **kwargs):
+        """Render the thumbnail to a file and close its temporary figure.
+
+        The parent directory is created when needed. For all-missing input, a
+        no-data image is written and other rendering options are not applied.
+        Otherwise, recognized options are ``size``, ``dpi``, ``shape``,
+        ``vector_short_side``, ``vector_max_long_side``, ``overlay``,
+        ``annotation``, and ``legend``. An inferred annotation is added by
+        default when source metadata or a raster path supplies text; a legend
+        is added by default. The destination is also stored as
+        ``thumbnail_file``.
+
+        Args:
+            destination: Output image path.
+            **kwargs (Any): Rendering and optional overlay, annotation, and legend
+                options.
+
+        Returns:
+            str: The destination string.
+        """
         self.thumbnail_file = destination
         self._close_figure()
         try:

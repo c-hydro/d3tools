@@ -1,12 +1,10 @@
-import paramiko.ed25519key
-import xarray as xr
-import pandas as pd
+"""Remote storage datasets and S3/SFTP backend implementations."""
+
 import tempfile
 from typing import Any, Optional
 import boto3
 import os
 from functools import cached_property
-import shutil
 import paramiko
 import hashlib
 from requests.models import PreparedRequest
@@ -27,9 +25,27 @@ from ...parse import KeyParser
 from ...exit import rm_at_exit
 
 class RemoteDataset(Dataset):
+    """Base class for backends that stage remote files in a local directory.
+
+    Concrete subclasses implement download, upload, delete, existence checks,
+    and key walking. A generated staging directory is registered for removal
+    at process exit.
+    """
+
     type = 'remote'
 
     def __init__(self, *, tmp_dir: Optional[str] = None, **kwargs):
+        """Initialize a remote dataset's local staging directory.
+
+        Args:
+            tmp_dir: Local directory for staged files. If omitted, a temporary
+                directory is created.
+            **kwargs: Shared Dataset configuration and backend options.
+
+        Side effects:
+            Creates the staging directory and registers it for removal at
+            process exit.
+        """
 
         if tmp_dir:
             os.makedirs(tmp_dir, exist_ok = True)
@@ -146,6 +162,21 @@ class RemoteDataset(Dataset):
         return self.get_available_keys()
 
 class S3Dataset(RemoteDataset):
+    """Remote dataset backed by an AWS S3 bucket.
+
+    Args:
+        key_pattern: Object-key pattern within the bucket.
+        bucket_name: S3 bucket containing the objects.
+        region_name: Optional AWS region passed to the session client.
+        profile_name: Optional AWS credential profile.
+        tmp_dir: Optional local staging directory.
+        **kwargs: Shared Dataset configuration.
+
+    Side effects:
+        Creates a boto3 session and initializes the class-level S3 client on
+        the first instance.
+    """
+
     type = 's3'
 
     s3_client = None  # Class-level attribute to store the S3 client
@@ -206,6 +237,13 @@ class S3Dataset(RemoteDataset):
 
 
 class OVHS3Dataset(S3Dataset):
+    """S3-compatible dataset using a custom endpoint and SigV4 requests.
+
+    Args:
+        endpoint_url: Base URL of the S3-compatible service.
+        **kwargs: S3Dataset configuration, including key pattern and bucket.
+    """
+
 
     type = 's3-ovh'
 
@@ -336,6 +374,13 @@ class OVHS3Dataset(S3Dataset):
 
 
 class SFTPDataset(RemoteDataset):
+    """Remote dataset accessed over SFTP using Paramiko.
+
+    Credentials may be supplied as a password (literal or environment-variable
+    reference) or through a private key. When neither is supplied, matching
+    private keys under ``~/.ssh`` are tried.
+    """
+
     type = 'sftp'
     sftp_clients = {}  # Class-level attribute to store the SFTP clients
 
@@ -347,6 +392,26 @@ class SFTPDataset(RemoteDataset):
                  port = 22,
                  tmp_dir: Optional[str] = None,
                  **kwargs):
+        """Initialize an SFTP dataset and reuse a client for the host.
+
+        Args:
+            key_pattern: Remote path pattern.
+            host: SFTP server hostname.
+            username: Login username.
+            password: Optional password or ``$ENV_VAR`` reference.
+            port: Server port, defaulting to 22.
+            tmp_dir: Optional local staging directory.
+            **kwargs: Shared Dataset options; ``private_key`` may specify a
+                private-key path.
+
+        Raises:
+            ValueError: If a password environment reference or private key
+                cannot be resolved.
+            paramiko.SSHException: If SSH authentication or connection fails.
+
+        Side effects:
+            Opens an SFTP connection when no client is cached for the host.
+        """
 
         self.key_pattern = key_pattern
 
@@ -379,10 +444,7 @@ class SFTPDataset(RemoteDataset):
         try:
             if self.password is None:
                 if self.private_key is not None:
-                    if 'rsa' in self.private_key:
-                        private_key = paramiko.RSAKey.from_private_key_file(self.private_key)
-                    elif 'ed25519' in self.private_key:
-                        private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(self.private_key)
+                    private_key = paramiko.PKey.from_path(self.private_key)
                     transport = paramiko.Transport((self.hostname, self.port))
                     transport.connect(username=self.username, pkey=private_key)
                 else:
@@ -392,10 +454,7 @@ class SFTPDataset(RemoteDataset):
                     possible_files = [f'~/.ssh/{key}' for key in keys]
                     for file in possible_files:
                         try:
-                            if 'rsa' in file:
-                                private_key = paramiko.RSAKey.from_private_key_file(os.path.expanduser(file))
-                            elif 'ed25519' in file:
-                                private_key = paramiko.ed25519key.Ed25519Key.from_private_key_file(os.path.expanduser(file))
+                            private_key = paramiko.PKey.from_path(file)
                             transport = paramiko.Transport((self.hostname, self.port))
                             transport.connect(username=self.username, pkey=private_key)
                             break

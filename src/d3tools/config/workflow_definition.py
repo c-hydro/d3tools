@@ -9,20 +9,22 @@ from .utils import load_jsons
 from .options import Options
 
 class WorkflowDefinition:
-    """
-    Workflow definition and execution coordinator.
+    """Workflow definition and execution coordinator.
 
-    ``WorkflowDefinition`` is the primary interface for defining, parsing, and executing
-    workflows. It automatically parses configuration through the d3tools pipeline and
-    provides structured access to workflow components.
+    ``WorkflowDefinition`` parses configuration through the d3tools pipeline
+    and provides structured access to workflow components. Constructing an
+    instance may import and build engine-specific objects, depending on the
+    build flags.
 
     Attributes:
-        options (Options): Full parsed configuration as an Options instance
-        workflow_sections (list): Ordered list of WorkflowSection objects to execute
-        workflow_name (str): Name identifier for the workflow
-        tags (dict): Resolved configuration tags/variables
-        datasets (dict): Parsed dataset definitions
-        logger (WorkflowLogManager): Workflow logging manager (may be None)
+        options: Full parsed configuration as an ``Options`` instance.
+        workflow_sections: Ordered list of ``WorkflowSection`` objects.
+        workflow_name: Workflow name, defaulting to ``"workflow"``.
+        tags: Resolved configuration tags and variables.
+        datasets: Parsed dataset definitions.
+        other_options: Parsed ``other_options`` mapping.
+        logger: Workflow logging manager, or ``None`` when logging is not
+            configured.
 
     Usage:
         Create from dict::
@@ -47,14 +49,15 @@ class WorkflowDefinition:
         """Initialize and parse workflow definition.
         
         Args:
-            config: Workflow configuration dict or Options instance
-            build_workflow_objects: Whether to build runtime workflow objects
-                (door/dam/dryes) in collected sections
-            strict_workflow_imports: If True, raise errors on workflow engine
-                import failures instead of falling back to raw section data
+            config: Workflow configuration dictionary or ``Options`` instance.
+            build_workflow_objects: Whether to build runtime ``door``, ``dam``,
+                and ``dryes`` objects in collected sections.
+            strict_workflow_imports: Whether to raise engine import failures
+                instead of falling back to raw section data.
                 
         Raises:
-            TypeError: If config is not a dict-like structure
+            TypeError: If ``config`` is neither a dictionary nor an
+                ``Options`` instance.
         """
         # Validate input
         if not isinstance(config, (dict, Options)):
@@ -105,7 +108,11 @@ class WorkflowDefinition:
                 import failures instead of falling back to raw section data
 
         Returns:
-            Parsed and initialized WorkflowDefinition instance
+            Parsed and initialized ``WorkflowDefinition`` instance.
+
+        Raises:
+            ValueError: If a JSON path has an unsupported file extension or
+                the merged configuration cannot be parsed.
 
         Example::
 
@@ -149,9 +156,17 @@ class WorkflowDefinition:
         - **dam** engine: calls ``run(time_range)``
         - **dryes** engine: calls ``compute(time_range)``
 
+        Returns:
+            ``None``. Section results are used internally for logging and
+            persisted run state; they are not returned to the caller.
+
         Raises:
-            TypeError: If a section doesn't have a recognized engine
-                or runnable workflow object
+            TypeError: If a section has an unrecognised engine when executed.
+
+        Side Effects:
+            Executes sections in configuration order. If a logger is
+            configured, it records workflow and section events and writes run
+            state after execution. A section failure stops the sequential run.
 
         Example::
 

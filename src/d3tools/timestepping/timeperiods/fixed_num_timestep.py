@@ -43,6 +43,7 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
     """
 
     def __init__(self, year: int, step: int, n_steps: int):
+        """Initialize a timestep by year, step number, and annual step count."""
         self.year: int = year
         self.step: int = step       # step is the number of the day, dekad, month, or year (always 1 for year)
         self.n_steps: int = n_steps # number of steps in a year (36 for dekads, 12 for months)
@@ -159,18 +160,17 @@ class FixedNTimeStep(TimeStep, ABC, metaclass=FixedNTimeStepMeta):
     @staticmethod
     @abstractmethod
     def get_step_from_date(date: datetime.datetime):
-        """
-        Returns the step of the year for the given date.
-        The year is divided into n_steps steps.
-        """
+        """Return the 1-based annual step containing ``date``."""
         raise NotImplementedError
 
     @abstractmethod
     def get_start(self):
+        """Return the start datetime for this timestep."""
         raise NotImplementedError
     
     @abstractmethod
     def get_end(self):
+        """Return the end datetime for this timestep."""
         raise NotImplementedError
     
 class Dekad(FixedNTimeStep):
@@ -203,10 +203,7 @@ class Dekad(FixedNTimeStep):
 
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
-        """
-        Returns the dekad of the year for the given date.
-        The year is divided into 36 dekads, each of ~10 days.
-        """
+        """Return the 1-based dekad number containing ``date`` (1 through 36)."""
         month = date.month
         day = date.day
         if 1 <= day <= 10:
@@ -217,12 +214,14 @@ class Dekad(FixedNTimeStep):
             return (month - 1) * 3 + 3
     
     def get_start(self):
+        """Return midnight on the first day of this dekad."""
         dekad = self.step
         month = self.month
         day   = ((dekad - 1) % 3) * 10 + 1
         return datetime.datetime(self.year, month, day)
     
     def get_end(self):
+        """Return midnight on the final calendar day of this dekad."""
         start_date = self.get_start()
         if self.dekad_of_month == 3:
             next_dkd_month = start_date.month + 1 if start_date.month < 12 else 1
@@ -276,15 +275,15 @@ class Month(FixedNTimeStep):
 
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
-        """
-        Returns the month of the year for the given date.
-        """
+        """Return the month number containing ``date``."""
         return date.month
 
     def get_start(self):
+        """Return midnight on the first day of this month."""
         return datetime.datetime(self.year, self.month, 1)
     
     def get_end(self):
+        """Return midnight on the final calendar day of this month."""
         next_month_month = self.month + 1 if self.month < 12 else 1
         next_month_year = self.year + 1 if self.month == 12 else self.year
         return datetime.datetime(next_month_year, next_month_month, 1) - datetime.timedelta(days=1)
@@ -319,19 +318,20 @@ class Year(FixedNTimeStep):
     unit = 'y'
 
     def __init__(self, year: int, dummy: int = 1):
+        """Initialize the year timestep; ``dummy`` is accepted but ignored."""
         super().__init__(year, 1, Year.n_steps)
 
     @staticmethod
     def get_step_from_date(date: datetime.datetime):
-        """
-        Returns the year for the given date.
-        """
+        """Return the sole annual step number, 1, for any date."""
         return 1
 
     def get_start(self):
+        """Return midnight on January 1 of this year."""
         return datetime.datetime(self.year, 1, 1)
     
     def get_end(self):
+        """Return midnight on December 31 of this year."""
         return datetime.datetime(self.year, 12, 31)
 
     def is_leap(self):

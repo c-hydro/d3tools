@@ -1,8 +1,10 @@
-"""Public parsing API.
+"""Public parsing helpers and compatibility exports.
 
-Phase-1 note:
-- Keep legacy exports via ``parse_utils`` for backward compatibility.
-- Expose new scaffold modules so callers can migrate progressively.
+This package contains the canonical string-rendering, key-pattern, and
+placeholder-resolution utilities used across d3tools. The legacy names in
+:mod:`d3tools.parse.parse_utils` remain available for backward compatibility,
+while the focused modules in this package are the preferred implementation
+locations for new code.
 """
 
 from .parse_utils import *

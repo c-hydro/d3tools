@@ -1,12 +1,28 @@
+"""In-memory storage implementation for :class:`Dataset`."""
+
 from typing import Any
 
 from .dataset import Dataset
 from ...parse import KeyParser
 
 class MemoryDataset(Dataset):
+    """Dataset storing values in a process-local dictionary.
+
+    Reads remove stored values by default; set ``keep_after_reading`` to true
+    to preserve values after retrieval.
+    """
+
     type = 'memory'
 
     def __init__(self, key_pattern: str, keep_after_reading = False, **kwargs):
+        """Create an empty in-memory dataset.
+
+        Args:
+            key_pattern: Pattern used as keys in the internal data mapping.
+            keep_after_reading: If true, reads leave values in memory;
+                otherwise, a read removes that key.
+            **kwargs: Shared Dataset configuration and remaining options.
+        """
         self.key_pattern = key_pattern
         super().__init__(**kwargs)
         self.data_dict = {}

@@ -1,3 +1,14 @@
+"""Public API for calendar and period-based timestepping utilities.
+
+This package exposes helpers for parsing date strings, creating time windows,
+constructing time ranges, and iterating over standard timestep types such as days,
+hours, months, dekads, years, and VIIRS/MODIS fixed-DOY periods.
+
+The symbols in this module are re-exported for convenience from the underlying
+implementation modules and remain compatible with the older import paths used by
+previous d3tools versions.
+"""
+
 from .time_utils import *
 from .timewindow import *
 

@@ -317,8 +317,8 @@ class TestWorkflowDefinitionRunExecution:
                 calls.append(("dam", time_range))
 
         class MockDryesProcess:
-            def compute(self, time_range):
-                calls.append(("dryes", time_range))
+            def compute(self, time_range, *, make_parameters):
+                calls.append(("dryes", time_range, make_parameters))
 
         # Mock the parsing to return pre-built sections
         from d3tools.config import parsing_pipeline
@@ -340,12 +340,14 @@ class TestWorkflowDefinitionRunExecution:
             "parse_options",
             lambda config, **kwargs: parsed_config
         )
+        monkeypatch.delenv("SETUP", raising=False)
         
         wf = WorkflowDefinition({})
         wf.run(start="2024-01-01", end="2024-01-31")
         
         # Should execute in order: door, dam, dryes
         assert [call[0] for call in calls] == ["door", "dam", "dryes"]
+        assert calls[-1][2] is False
 
     def test_run_with_minimal_workflow(self, minimal_config):
         """run() should work with workflow that has no sections."""

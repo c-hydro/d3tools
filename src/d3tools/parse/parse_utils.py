@@ -18,11 +18,17 @@ def extract_date_and_tags(string: str, string_pattern: str):
     """Parse a key string into datetime and tags using ``KeyParser``.
 
     Args:
-        string: Concrete key/path value to parse.
-        string_pattern: Key pattern template used for matching.
+        string: Concrete key or path value to parse.
+        string_pattern: Pattern template containing datetime directives and/or
+            tag placeholders.
 
     Returns:
-        A tuple ``(parsed_datetime, parsed_tags_dict)``.
+        A tuple containing the parsed ``datetime`` and a dictionary of tag
+        values.
+
+    Raises:
+        ValueError: If the key does not match the pattern or repeated tag
+            placeholders contain conflicting values.
     """
     # Local import avoids circular dependency:
     # key_parser -> string_rendering -> parse_utils.
@@ -34,45 +40,94 @@ def extract_date_and_tags(string: str, string_pattern: str):
 def set_env(structure):
     """Compatibility wrapper for :func:`d3tools.parse.config_resolution.set_env`.
 
-    Kept for backward compatibility with existing imports from ``parse_utils``.
+    Recursively resolves environment placeholders in strings, dictionary keys
+    and values, and lists. This wrapper is retained for backward compatibility.
+
+    Args:
+        structure: Value or nested structure to resolve.
+
+    Returns:
+        The resolved value or structure.
+
+    Raises:
+        ValueError: If a referenced environment variable is unset and has no
+            non-empty default.
     """
     return _set_env_impl(structure)
 
 def set_dataset(structure, obj_dict):
     """Compatibility wrapper for :func:`d3tools.parse.config_resolution.set_dataset`.
 
-    Kept for backward compatibility with existing imports from ``parse_utils``.
+    Recursively resolves dataset placeholders. This wrapper is retained for
+    backward compatibility.
+
+    Args:
+        structure: Value or nested structure to resolve.
+        obj_dict: Mapping of dataset keys to dataset-like objects.
+
+    Returns:
+        The resolved value or structure. A placeholder with tag assignments
+        calls ``update(**tags)`` on its resolved object.
+
+    Note:
+        Placeholder matching starts at the beginning of a string; any suffix
+        after the matched placeholder is not retained when it resolves.
     """
     return _set_dataset_impl(structure, obj_dict)
 
 def substitute_values(structure, tag_dict, **kwargs):
     """Compatibility wrapper for :func:`d3tools.parse.string_rendering.substitute_values`.
 
-    Kept for backward compatibility with existing imports from ``parse_utils``.
+    Recursively substitutes placeholders in nested structures. This wrapper
+    is retained for backward compatibility.
+
+    Args:
+        structure: Value or nested structure to render.
+        tag_dict: Mapping of placeholder names to values.
+        **kwargs: Forwarded to :func:`d3tools.parse.string_rendering.substitute_values`.
+
+    Returns:
+        A rebuilt structure with substituted string leaves and dictionary
+        keys. List-valued placeholders can expand a string leaf into a nested
+        list.
     """
     return _substitute_values_impl(structure, tag_dict, **kwargs)
 
 def substitute_string(string, tag_dict, rec=False):
     """Compatibility wrapper for :func:`d3tools.parse.string_rendering.substitute_string`.
 
-    Kept for backward compatibility with existing imports from ``parse_utils``.
+    Renders placeholders in a string. List-valued tags expand into lists of
+    rendered strings; the ``rec`` argument is retained for compatibility and
+    does not disable recursive expansion.
+
+    Args:
+        string: Template string or value to render.
+        tag_dict: Mapping of placeholder names to values.
+        rec: Compatibility flag; list expansion remains recursive regardless
+            of this value.
+
+    Returns:
+        The rendered value, possibly a nested list when list-valued tags are
+        expanded.
     """
     return _substitute_string_impl(string, tag_dict, rec=rec)
 
 def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
-    """
-    Flatten a nested dictionary into a single-level dictionary.
+    """Flatten nested dictionaries into a single-level dictionary.
 
-    Each nested key is combined with its parent keys, separated by `sep`.
-    All combinations of parent keys are included.
+    For nested entries, the result includes keys both with and without their
+    ancestor prefixes. If different values produce the same flattened key,
+    those values are accumulated in a list.
 
     Args:
-        nested_dict (dict): The dictionary to flatten.
-        sep (str): Separator for combined keys. Default is '.'.
-        parent_key (str): Used internally for recursion.
+        nested_dict: Dictionary to flatten.
+        sep: Separator between nested key components. Defaults to ``'.'``.
+        parent_key: Prefix used during recursive flattening; normally left
+            empty by callers.
 
     Returns:
-        dict: Flattened dictionary with combined keys.
+        A new dictionary containing flattened keys and their values. The input
+        dictionary is not modified.
 
     Example:
         >>> flatten_dict({'a': {'b': 1, 'c': 2}})
@@ -102,17 +157,19 @@ def flatten_dict(nested_dict:dict, sep:str = '.', parent_key:str = '') -> dict:
     return flat_dict
 
 def make_hashable(obj: dict|list|Any) -> tuple|Any:
-    """
-    Convert a nested dictionary or list (including subclasses like Options) to a hashable object (tuple).
+    """Encode dictionaries and lists as tuples for use in hash-based collections.
 
-    Useful for deduplication and storing complex structures in sets.
+    Dictionary and list subclasses are recorded in the encoding so
+    :func:`transform_back` can reconstruct their types. Other values, including
+    tuples, are returned unchanged.
 
     Args:
-        obj (dict, list, or subclass, or other): The object to convert.
+        obj: Value to encode. Dictionaries and lists are traversed recursively.
 
     Returns:
-        tuple or original object: Hashable representation. If the input is a custom dict/list subclass (e.g., Options),
-        the class type is preserved and will be restored by transform_back.
+        A tuple encoding for a dictionary or list, or the original value for
+        other input types. The result is hashable only when its unchanged
+        values are themselves hashable.
 
     Example:
         >>> make_hashable({'a': [1, 2]})
@@ -128,17 +185,18 @@ def make_hashable(obj: dict|list|Any) -> tuple|Any:
         return obj
 
 def transform_back(obj: tuple) -> dict|list|Any:
-    """
-    Transform a hashable tuple (created by make_hashable) back to its original form.
+    """Reconstruct a dictionary or list encoded by :func:`make_hashable`.
 
-    If the tuple was created from a custom dict/list subclass (e.g., Options),
-    the returned object will be of the same subclass type.
+    The encoded container type is preserved, including custom dictionary and
+    list subclasses. Values that are not recognized container encodings are
+    returned unchanged.
 
     Args:
-        obj (tuple): Hashable object.
+        obj: Tuple encoding to reconstruct.
 
     Returns:
-        dict, list, custom subclass, or original value: Original structure, preserving custom types.
+        Reconstructed dictionary or list, or the input tuple unchanged when it
+        does not encode one of those container types.
 
     Example:
         >>> transform_back((dict, ('a', (list, 1, 2))))
@@ -154,14 +212,20 @@ def transform_back(obj: tuple) -> dict|list|Any:
     return obj
 
 def get_unique_values(values: list) -> list:
-    """
-    Deduplicate a list of values, handling nested dicts/lists.
+    """Return unique values, supporting nested dictionaries and lists.
+
+    Values are deduplicated through :func:`make_hashable`. Result ordering is
+    not guaranteed because the encoded values are collected in a set.
 
     Args:
-        values (list): List of values (can be dicts/lists).
+        values: Values to deduplicate; nested dictionaries and lists are
+            supported.
 
     Returns:
-        list: List of unique values.
+        A list of unique values, reconstructing dictionary and list encodings.
+
+    Raises:
+        TypeError: If an encoded value is still unhashable, such as a set.
 
     Example:
         >>> get_unique_values([{'a': 1}, {'a': 1}, {'a': 2}])
@@ -173,16 +237,19 @@ def get_unique_values(values: list) -> list:
     return [transform_back(value) if isinstance(value, tuple) else value for value in unique_values]
 
 def format_dict(dict: dict) -> str:
-    """
-    Format a dictionary as a readable string for printing.
+    """Format dictionary entries as a comma-separated string.
 
-    Floats are formatted to two decimals, datetimes to YYYY-MM-DD.
+    Values whose exact type is ``float`` are formatted to two decimal places;
+    values whose exact type is ``datetime.datetime`` use ``YYYY-MM-DD``. Other
+    values use their standard string representation. Entry order follows the
+    dictionary's iteration order.
 
     Args:
-        dict (dict): Dictionary to format.
+        dict: Dictionary to format.
 
     Returns:
-        str: Formatted string.
+        A comma-separated string of ``key=value`` entries, or an empty string
+        for an empty dictionary.
 
     Example:
         >>> format_dict({'a': 1.234, 'b': datetime.datetime(2024,2,20)})

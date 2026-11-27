@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+/.pytest_cache/
+/.ruff_cache/
 
 # Distribution / packaging
 .Python
@@ -39,8 +41,17 @@ venv.bak/
 
 #old stuff
 _old*
+/tmp/
+
+# Downloaded case-study data
+/chirps-spi-parameters-v1/
 
 # workflow logs and summaries
 _working*
-
-docs/
+!_working_summaries/
+_working_summaries/*
+!_working_summaries/docs_topic_inventory.md
+!_working_summaries/findings/
+_working_summaries/findings/*
+!_working_summaries/findings/phase*.md
+site

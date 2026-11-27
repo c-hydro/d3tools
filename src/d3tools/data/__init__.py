@@ -1,3 +1,11 @@
+"""Public dataset API for d3tools data access and format handling.
+
+This package exposes the dataset abstractions used across the project,
+including storage backends, filesystem utilities, and the catalog query layer.
+It also provides compatibility aliases for the legacy module layout used by
+older imports.
+"""
+
 from .datasets import (
     Dataset,
     LocalDataset,

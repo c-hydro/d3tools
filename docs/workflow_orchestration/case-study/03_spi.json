@@ -1,0 +1,56 @@
+{
+  "workflow_name": "chirps_spi",
+  "tags": {
+    "output_root": "/tmp/d3tools-case-study",
+    "parameter_root": "{ENV.SPI_PARAMETER_ROOT, default='/tmp/d3tools-case-study/parameters/chirps-spi-parameters-v1'}",
+    "history_start": "1990-01-01",
+    "history_end": "2020-12-31"
+  },
+  "datasets": {
+    "chirps_aggregated": {
+      "type": "local",
+      "key_pattern": "{output_root}/aggregate/{agg_window}/%Y/CHIRPS-PREC{agg_window}_CASE_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    },
+    "spi_parameters": {
+      "type": "local",
+      "key_pattern": "{parameter_root}/{agg_window}m/{par_name}/{par_name}_CHIRPS-PREC{agg_window}m_CASE_%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    },
+    "spi_output": {
+      "type": "local",
+      "key_pattern": "{output_root}/spi/{agg_window}m/%Y/CHIRPS-SPI{agg_window}_CASE_%Y%m%d.tif",
+      "format": "geotiff",
+      "timestep": "dekadly",
+      "time_signature": "end"
+    }
+  },
+  "dryes_index": {
+    "index_options": {
+      "index": "SPI",
+      "agg_window": {
+        "1": "1m",
+        "3": "3m"
+      },
+      "min_reference": 10,
+      "zero_threshold": 0.01
+    },
+    "io_options": {
+      "data": "{datasets.chirps_aggregated}",
+      "gamma.a": "{datasets.spi_parameters, par_name='gamma.a'}",
+      "gamma.loc": "{datasets.spi_parameters, par_name='gamma.loc'}",
+      "gamma.scale": "{datasets.spi_parameters, par_name='gamma.scale'}",
+      "prob0": "{datasets.spi_parameters, par_name='prob0'}",
+      "index": "{datasets.spi_output}"
+    },
+    "run_options": {
+      "timesteps_per_year": 36,
+      "history_start": "{history_start:%Y-%m-%d}",
+      "history_end": "{history_end:%Y-%m-%d}"
+    }
+  }
+}

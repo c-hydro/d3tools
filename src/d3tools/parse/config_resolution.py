@@ -17,7 +17,10 @@ def set_env(structure: Any):
     - ``{ENV.VAR_NAME}``
     - ``{ENV.VAR_NAME, default = 'fallback'}``
 
-    Resolution is applied to strings across nested dict/list structures.
+    The function walks nested dicts, lists, and strings in place by rebuilding
+    each container with resolved leaves. A placeholder is replaced only when the
+    environment variable exists; a supplied default of ``''`` is treated as
+    missing and raises ``ValueError``.
 
     Args:
         structure: Input structure (dict/list/string/scalar).
@@ -56,19 +59,26 @@ def set_dataset(structure: Any, obj_dict: dict[str, Any]):
 
     Supported syntax:
     - ``{dataset_key}``
-    - ``{dataset_key, tag = 'value'}`` (applies ``.update(**tags)`` on object)
+    - ``{dataset_key, tag = 'value'}`` applies ``.update(**tags)`` to the
+      matched object before returning it.
 
-    Placeholder matching is performed only when the full string matches the
-    dataset-reference pattern. Resolution is applied across nested dict/list
-    structures.
+    A placeholder resolves only when it occupies the entire string. Resolution
+    walks nested dict/list structures while preserving the input container
+    subclass when rebuilding.
 
     Args:
         structure: Input structure (dict/list/string/scalar).
         obj_dict: Mapping from dataset placeholder keys to dataset-like objects.
 
     Returns:
-        Structure of the same shape with dataset placeholders resolved where
-        possible.
+        The same structure with dataset placeholders resolved where possible. A
+        tagged placeholder resolves to the mapped object after it is mutated via
+        ``update(**tags)``; the object itself, not the return value of
+        ``update()``, is the replacement value.
+
+    Note:
+        Resolving a tagged placeholder requires the mapped object to provide an
+        ``update`` method. The object may be mutated by that method.
     """
     if isinstance(structure, dict):
         return structure.__class__({set_dataset(key, obj_dict): set_dataset(value, obj_dict) for key, value in structure.items()})
@@ -76,7 +86,7 @@ def set_dataset(structure: Any, obj_dict: dict[str, Any]):
         return structure.__class__([set_dataset(value, obj_dict) for value in structure])
     if isinstance(structure, str):
         pattern = r"{([\w#-\.]+)(?:\s*,\s*([\w#-\.]+\s*=\s*\'.*?\')+)?}"
-        match = re.match(pattern, structure)
+        match = re.fullmatch(pattern, structure)
         if match:
             key = match.group(1)
             structure = obj_dict.get(key, structure)

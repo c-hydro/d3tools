@@ -1,17 +1,4 @@
-"""
-WorkflowLogManager - Handles workflow-level logging across d3tools, door, dam, and dryes.
-
-This class configures Python's logging infrastructure to enable unified logging
-across all modules in a workflow execution. It sets up handlers, formatters, and
-provides context managers for tracking workflow execution.
-
-Key features:
-- Configures hierarchical loggers (d3tools, door, dam, dryes)
-- File + console output
-- Workflow execution tracking (start, end, sections)
-- Timing/performance metrics
-- Thread-safe for concurrent workflows
-"""
+"""Configure workflow logging and track workflow and section execution."""
 
 import datetime as dt
 import json
@@ -28,32 +15,31 @@ from ..data import Dataset
 
 DatasetLike = Union[Dataset, str, Dict[str, Any]]
 
+
 class WorkflowLogManager:
+    """Configure shared workflow loggers and track execution timings.
+
+    Construction sets up the primary logger and mirrors the same handlers onto
+    the ``door``, ``dam``, and ``dryes`` package loggers so workflow messages are
+    captured consistently by all related modules. The manager also tracks the
+    time spent in workflow and section contexts and registers a process-exit
+    cleanup hook.
+
+    Args:
+        log_file: Optional log destination accepted by ``dataset_from_config``.
+            ``None`` disables file output. Remote destinations use a temporary
+            local file that is uploaded by :meth:`close`.
+        run_state_file: Optional destination for persisted run-state data.
+        level: Logging level as an integer or standard logging level name.
+        console: Whether to attach a console handler.
+        format_file: File format name; supported values are ``detailed``,
+            ``simple``, and ``minimal``. Unknown names fall back to ``detailed``.
+        format_console: Console format name; unknown values fall back to
+            ``simple``.
+        logger_name: Name of the primary logger to configure.
+        **options: Extra options retained on the instance and otherwise unused.
     """
-    Manages workflow-level logging configuration and execution tracking.
-    
-    This class sets up Python's logging infrastructure for a workflow run,
-    enabling all modules (d3tools, door, dam, dryes) to use the same
-    configured logger via `logging.getLogger(__name__)`.
-    
-    Usage:
-        # From config
-        log_mgr = WorkflowLogManager.from_dict(config['workflow_log'])
-        
-        # Manual setup
-        log_mgr = WorkflowLogManager(
-            log_file='logs/workflow.log',
-            level='INFO',
-            console=True
-        )
-        
-        # Use as context manager
-        with log_mgr.workflow_execution('my_workflow'):
-            # All logging calls within this context are tracked
-            log = logging.getLogger(__name__)
-            log.info("This will be logged!")
-    """
-    
+
     def __init__(
         self,
         log_file: Optional[DatasetLike] = None,
@@ -65,26 +51,17 @@ class WorkflowLogManager:
         logger_name: str = 'd3tools',
         **options
     ):
-        """
-        Initialize workflow log manager.
-        
+        """Resolve destinations, configure managed loggers, and register cleanup.
+
         Args:
-            log_file: Optional workflow log destination. Supports:
-                     - Dataset instance (used as-is)
-                     - str key/path
-                     - Dataset config dict
-                     None disables file logging.
-            run_state_file: Optional workflow run-state destination. Supports:
-                     - Dataset instance (used as-is)
-                     - str key/path
-                     - Dataset config dict
-                     None disables run-state persistence.
-            level: Logging level (e.g., 'INFO', 'DEBUG', logging.INFO)
-            console: Whether to log to console
-            format_file: Format style for file output (from LOG_FORMATS)
-            format_console: Format style for console output
-            logger_name: Root logger name (default: 'd3tools')
-            **options: Additional options for future extension
+            log_file: Optional destination for the workflow log file.
+            run_state_file: Optional destination for persisted run-state data.
+            level: Logging threshold applied to managed loggers and handlers.
+            console: Whether to attach a console sink to the logger.
+            format_file: Formatter name for file output.
+            format_console: Formatter name for console output.
+            logger_name: Name of the root logger to configure.
+            **options: Extra state retained on the instance.
         """
         self.log_file = log_file
         self.run_state_file = run_state_file
@@ -101,69 +78,57 @@ class WorkflowLogManager:
         self.options = options
         self._managed_logger_names = tuple(dict.fromkeys((self.logger_name, 'door', 'dam', 'dryes')))
         self._managed_loggers = []
-        
+
         # Track workflow execution state
         self._workflow_start_time = None
         self._section_times = {}
         self._current_section = None
-        
+
         # Configure the logger
         self.logger = self._configure_logger()
 
         # set logger to close at exit to ensure all logs are flushed
         run_at_exit(self.close)
-    
+
     @classmethod
     def from_dict(cls, config: Optional[Union[Dict[str, Any], str]] = None):
-        """
-        Create WorkflowLogManager from configuration.
-        
+        """Create a manager from a path or configuration mapping.
+
+        Missing or empty configuration yields a console-only manager. Strings are
+        treated as a ``log_file`` value using constructor defaults. Mapping
+        entries are normalized by resolving ``{now}`` placeholders recursively,
+        then the ``file`` and ``run_state_file`` keys are passed to the
+        constructor. ``format`` supplies both output formats unless
+        ``format_file`` or ``format_console`` override it; any other keys are
+        retained as extra instance options.
+
         Args:
-            config: Configuration dictionary, string path, or None.
-                   If None or empty dict, returns a console-only logger.
-                   If string, treated as log file path with defaults.
-                   If dict, expects keys:
-                       - file: Log destination config (str, Dataset dict, or Dataset)
-                           with optional {now:...} formatting in strings
-                       - run_state_file: Run-state destination config
-                           (str, Dataset dict, or Dataset) with optional
-                           {now:...} formatting in strings
-                       - level: Logging level (default: 'INFO')
-                       - console: Enable console logging (default: True)
-                       - format: Format style or separate format_file/format_console
-                       - logger_name: Root logger name (default: 'd3tools')
-        
+            config: ``None``, a log-file path string, or a configuration mapping.
+                Supported keys are ``file``, ``run_state_file``, ``level``,
+                ``console``, ``format``, ``format_file``, ``format_console``,
+                and ``logger_name``.
+
         Returns:
-            WorkflowLogManager instance
-            
-        Examples:
-            # Use default console-only logging
-            log_mgr = WorkflowLogManager.from_dict(None)
-            
-            # Simple file path
-            log_mgr = WorkflowLogManager.from_dict("logs/workflow.log")
-            
-            # Full configuration
-            log_mgr = WorkflowLogManager.from_dict({
-                'file': 'logs/workflow_{now:%Y%m%d_%H%M%S}.log',
-                'level': 'DEBUG',
-                'console': True,
-                'format': 'detailed'
-            })
+            A configured :class:`WorkflowLogManager`.
+
+        Raises:
+            TypeError: If ``config`` is neither ``None``, a string, nor a dict.
+            Exceptions from placeholder resolution, destination parsing, or
+            manager initialization are propagated.
         """
 
         # Handle None or empty config with default console-only logging
         if config is None or (isinstance(config, dict) and len(config) == 0):
             return cls()
-        
+
         # Handle string path
         if isinstance(config, str):
-            return cls(log_file = config)
-        
+            return cls(log_file=config)
+
         # Handle dict configuration
         if not isinstance(config, dict):
             raise TypeError(f"Config must be dict, str, or None, got {type(config)}")
-        
+
         # resolve {now} placeholders in paths before creating Dataset objects
         from ..config.parsing_pipeline import resolve_now
         config = resolve_now(config)
@@ -173,23 +138,23 @@ class WorkflowLogManager:
 
         # Extract and process optional run state path
         run_state_file = config.get('run_state_file')
-        
+
         # Extract other settings
         level = config.get('level', 'INFO')
         console = config.get('console', True)
         logger_name = config.get('logger_name', 'd3tools')
-        
+
         # Handle format settings
         format_setting = config.get('format', 'simple')
         format_file = config.get('format_file', format_setting)
         format_console = config.get('format_console', format_setting)
-        
+
         # Pass through any additional options
-        extra_options = {k: v for k, v in config.items() 
-                        if k not in ['file', 'level', 'console', 'format', 
+        extra_options = {k: v for k, v in config.items()
+                        if k not in ['file', 'level', 'console', 'format',
                                      'format_file', 'format_console', 'logger_name',
                                      'run_state_file']}
-        
+
         return cls(
             log_file=log_file,
             run_state_file=run_state_file,
@@ -200,16 +165,16 @@ class WorkflowLogManager:
             logger_name=logger_name,
             **extra_options
         )
-    
+
     def _configure_logger(self) -> logging.Logger:
-        """
-        Configure the root logger for the workflow.
-        
-        This sets up handlers and formatters that will be inherited by
-        all child loggers (door, dam, dryes, etc.).
-        
+        """Configure the workflow logger and mirror its handlers to package loggers.
+
+        Local file destinations are written directly to the configured path; remote
+        destinations are first written to a named temporary file and later
+        uploaded by :meth:`close`.
+
         Returns:
-            Configured Logger instance
+            The configured root :class:`logging.Logger` instance.
         """
 
         file_path = None
@@ -252,35 +217,32 @@ class WorkflowLogManager:
             self._managed_loggers.append(pkg_logger)
 
         return logger
-    
+
     @contextmanager
     def workflow_execution(self, workflow_name: str = 'workflow'):
-        """
-        Context manager for tracking workflow execution.
-        
-        Logs workflow start/end events and tracks total execution time.
-        Use this to wrap the entire workflow execution.
-        
+        """Log workflow start, completion, and failures during a managed run.
+
+        The context manager emits the start banner, yields the manager itself,
+        logs elapsed time on success, and logs the failure message and exception
+        information if an exception escapes the block. A section summary is written
+        in the ``finally`` branch when timing data has been recorded.
+
         Args:
-            workflow_name: Name of the workflow for logging
-            
+            workflow_name: Workflow label used in the generated log messages.
+
         Yields:
-            self (for convenience in accessing logger)
-            
-        Example:
-            with log_mgr.workflow_execution('drought_monitoring'):
-                workflow.run(start, end)
+            This manager so callers can access the configured logger.
         """
         self._workflow_start_time = time.time()
-        
+
         self.logger.info(f"{'='*70}")
         self.logger.info(f"Workflow '{workflow_name}' starting")
         self.logger.info(f"Start time: {dt.datetime.now().strftime(DATE_FORMAT)}")
         self.logger.info(f"{'='*70}")
-        
+
         try:
             yield self
-            
+
             # Successful completion
             elapsed = time.time() - self._workflow_start_time
             self.logger.info(f"{'='*70}")
@@ -288,7 +250,7 @@ class WorkflowLogManager:
             self.logger.info(f"End time: {dt.datetime.now().strftime(DATE_FORMAT)}")
             self.logger.info(f"Total execution time: {self._format_duration(elapsed)}")
             self.logger.info(f"{'='*70}")
-            
+
         except Exception as e:
             # Log failure
             elapsed = time.time() - self._workflow_start_time
@@ -299,46 +261,43 @@ class WorkflowLogManager:
             self.logger.error(f"Error: {type(e).__name__}: {e}")
             self.logger.error(f"{'='*70}")
             raise
-        
+
         finally:
             # Log section summary if sections were tracked
             if self._section_times:
                 self._log_section_summary()
-    
+
     @contextmanager
     def section_execution(self, section_name: str, engine: str = None):
-        """
-        Context manager for tracking individual workflow section execution.
-        
-        Logs section start/end and tracks execution time for each section.
-        
+        """Log and time a named workflow section.
+
+        The section name is used as the timing key, so repeated sections with the
+        same name overwrite earlier elapsed times. Exceptions are logged and then
+        re-raised after recording the elapsed time.
+
         Args:
-            section_name: Name of the section
-            engine: Optional engine name (door, dam, dryes)
-            
+            section_name: Label used in start, completion, and failure messages.
+            engine: Optional engine name appended to the start log message.
+
         Yields:
-            self
-            
-        Example:
-            with log_mgr.section_execution('ERA5_download', engine='door'):
-                downloader.get_data(time_range)
+            This manager while the section body runs.
         """
         self._current_section = section_name
         section_start = time.time()
-        
+
         engine_label = f" [{engine}]" if engine else ""
         self.logger.info(f"Section '{section_name}'{engine_label} starting...")
-        
+
         try:
             yield self
-            
+
             # Successful completion
             section_elapsed = time.time() - section_start
             self._section_times[section_name] = section_elapsed
             self.logger.info(
                 f"Section '{section_name}' completed in {self._format_duration(section_elapsed)}"
             )
-            
+
         except Exception as e:
             # Log section failure
             section_elapsed = time.time() - section_start
@@ -348,67 +307,62 @@ class WorkflowLogManager:
             )
             self.logger.error(f"Error: {type(e).__name__}: {e}")
             raise
-        
+
         finally:
             self._current_section = None
-    
+
     def _log_section_summary(self):
-        """Log a summary of all section execution times."""
+        """Log a summary of section execution times."""
         self.logger.info(f"{'-'*70}")
         self.logger.info("Workflow Section Summary:")
-        
+
         for section_name, duration in self._section_times.items():
             self.logger.info(f"  {section_name}: {self._format_duration(duration)}")
-        
+
         total_section_time = sum(self._section_times.values())
         self.logger.info(f"  Total section time: {self._format_duration(total_section_time)}")
         self.logger.info(f"{'-'*70}")
-    
+
     @staticmethod
     def _format_duration(seconds: float) -> str:
-        """
-        Format duration in human-readable format.
-        
+        """Represent elapsed seconds as a compact human-readable duration.
+
         Args:
-            seconds: Duration in seconds
-            
+            seconds: Number of seconds elapsed.
+
         Returns:
-            Formatted string (e.g., "2h 34m 12s" or "45.3s")
+            A formatted string such as ``"45.3s"`` or ``"2h 34m 12s"``.
         """
         if seconds < 60:
             return f"{seconds:.1f}s"
-        
+
         minutes, seconds = divmod(int(seconds), 60)
         if minutes < 60:
             return f"{minutes}m {seconds}s"
-        
+
         hours, minutes = divmod(minutes, 60)
         return f"{hours}h {minutes}m {seconds}s"
-    
+
     def get_logger(self, name: Optional[str] = None) -> logging.Logger:
-        """
-        Get a logger instance for a specific module.
-        
+        """Return the configured logger or retrieve a named logger.
+
         Args:
-            name: Logger name (uses __name__ convention if not provided)
-            
+            name: Optional logger name. When omitted, return the primary managed
+                logger.
+
         Returns:
-            Logger instance configured with workflow settings
-            
-        Example:
-            log = log_mgr.get_logger(__name__)
-            log.info("Message from module")
+            The primary logger when ``name`` is ``None``; otherwise the result of
+            ``logging.getLogger(name)``.
         """
         if name is None:
             return self.logger
         return logging.getLogger(name)
-    
+
     def set_level(self, level: Union[int, str]):
-        """
-        Dynamically change the logging level.
-        
+        """Update the level on every managed logger and attached handler.
+
         Args:
-            level: New logging level (e.g., 'DEBUG', logging.DEBUG)
+            level: New logging threshold as an integer or standard level name.
         """
         self.level = level
         for managed_logger in self._managed_loggers:
@@ -416,50 +370,39 @@ class WorkflowLogManager:
 
         for handler in self.logger.handlers:
             handler.setLevel(level)
-    
+
     def write_run_state(self, run_state: Dict[str, Any]):
-        """
-        Persist structured workflow run state to configured Dataset destination.
-        
-        Writes a single JSON file containing workflow metadata and section
-        execution results. This enables downstream runs to reference prior
-        execution windows for automated scheduling.
-        
+        """Persist structured run-state data to the configured dataset destination.
+
+        The mapping is written with ``as_is=True`` and is not validated or
+        serialized by this method. The call is ignored when no run-state
+        destination has been configured.
+
         Args:
-            run_state: Structured state dict with keys:
-                - version: Schema version (int)
-                - run_id: Workflow execution identifier (ISO timestamp)
-                - workflow: Workflow-level metadata (name, status, start, end)
-                - sections: List of section results (name, engine, executed, times, reason)
-        
-        No-op if run_state_file is not configured.
-        
-        Example:
-            run_state = {
-                "version": 1,
-                "run_id": "2024-05-07T14:30:00",
-                "workflow": {"name": "drought", "status": "success"},
-                "sections": [{"name": "download", "executed": true}]
-            }
-            logger.write_run_state(run_state)
+            run_state: Mapping to persist as workflow state.
+
+        Returns:
+            ``None``.
         """
         if not self.run_state_file:
             return  # No-op if not configured
 
-        self.run_state_file.write_data(run_state, as_is = True)
-    
+        self.run_state_file.write_data(run_state, as_is=True)
+
     def close(self):
-        """
-        Close all handlers and clean up.
-        
-        Call this when workflow execution is complete to ensure
-        all log messages are flushed and files are closed. For non-local
-        file logging targets, this also uploads the temporary log file to the
-        configured Dataset destination and removes the temporary file.
+        """Detach handlers, flush temporary log files, and mark the manager closed.
+
+        For non-local log destinations, the temporary file is uploaded to the
+        final destination before the temporary file is removed. Repeated close
+        calls are ignored after the first successful shutdown. If temporary-file
+        removal fails, a warning is printed instead of raising an exception.
+
+        Returns:
+            ``None``.
         """
         if not hasattr(self, '_closed'):
             self._closed = False
-        
+
         if self._closed:
             return  # Already closed
 
@@ -476,13 +419,13 @@ class WorkflowLogManager:
 
         for handler in handlers_to_close:
             handler.close()
-        
+
         if hasattr(self, '_temp_log_file'):
-            
+
             # copy temp log file to final destination if using remote logging,
             # then remove temp file
             with open(self._temp_log_file, 'r') as f:
-                self.log_file.write_data(f, as_is = True)
+                self.log_file.write_data(f, as_is=True)
 
             try:
                 os.remove(self._temp_log_file)

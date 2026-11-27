@@ -1,3 +1,5 @@
+"""Dataset base class and shared data access behavior."""
+
 from typing import Optional, Generator, Callable
 import datetime as dt
 import xarray as xr
@@ -22,6 +24,13 @@ class DatasetMeta(ABCMeta):
             cls.subclasses[attrs['type']] = cls
 
 class Dataset(metaclass=DatasetMeta):
+    """Base abstraction for keyed datasets across storage and file formats.
+
+    Instances select a storage subclass and format mixin from their options,
+    expose data and catalogue operations, and may derive data from parent
+    datasets or use a fallback dataset.
+    """
+
     _defaults = {'type': 'local',
                  'time_signature' : 'end'}
 
@@ -223,6 +232,18 @@ class Dataset(metaclass=DatasetMeta):
 
     @classmethod
     def get_subclass(cls, type: str):
+        """Return the registered Dataset subclass for a storage type.
+
+        Args:
+            type: Storage type name. If ``None``, the class's registered type
+                or the base default is used.
+
+        Returns:
+            The Dataset subclass registered for the resolved type.
+
+        Raises:
+            ValueError: If no subclass is registered for the resolved type.
+        """
         type = cls.get_type(type)
         Subclass: 'Dataset'|None = cls.subclasses.get(type.lower())
         if Subclass is None:
@@ -231,6 +252,14 @@ class Dataset(metaclass=DatasetMeta):
     
     @classmethod
     def get_type(cls, type: Optional[str] = None):
+        """Resolve an explicit type or this class's registered/default type.
+
+        Args:
+            type: Optional type name to return unchanged.
+
+        Returns:
+            The explicit type, class-level ``type``, or base default.
+        """
         if type is not None:
             return type
         elif hasattr(cls, 'type'):
@@ -513,6 +542,25 @@ class Dataset(metaclass=DatasetMeta):
 
     # These are the main methods for getting and writing data, which handle the logic of checking availability,
     def get_data(self, time: Optional[dt.datetime|TimeStep] = None, as_is = False, **kwargs):
+        """Read data from this dataset, its parents, or its fallback.
+
+        Versioned datasets default to the latest available version. Data read
+        from storage is format-processed unless ``as_is`` is true; memory
+        datasets and fallback reads bypass that processing. Parent-derived data
+        is computed and written back for non-memory datasets.
+
+        Args:
+            time: Optional datetime or timestep used to render the data key.
+            as_is: Return the stored representation without post-processing.
+            **kwargs: Tag values and additional context for key resolution.
+
+        Returns:
+            The requested data, processed unless ``as_is`` is true.
+
+        Raises:
+            FileNotFoundError: If the item is absent from this dataset, its
+                parents, and its fallback.
+        """
         
         # if this is a versioned file, and the version is not specified, get the latest version
         if self.has_version and 'file_version' not in kwargs:
@@ -549,6 +597,23 @@ class Dataset(metaclass=DatasetMeta):
                    metadata = None,
                    as_is = False,
                    **kwargs):
+        """Validate, format, annotate, and write data under its resolved key.
+
+        Versioned datasets assign the next version when none is supplied.
+        Configured thumbnail and log managers are invoked as side effects.
+
+        Args:
+            data: Object to write; its type must match the dataset format.
+            time: Optional datetime or timestep used to render the output key.
+            metadata: Optional metadata mapping, updated in place with the
+                dataset name.
+            as_is: Skip format-specific pre-write transformation.
+            **kwargs: Tag values and storage/format options, including
+                ``append`` where supported.
+
+        Raises:
+            TypeError: If ``data`` is incompatible with the configured format.
+        """
 
         if metadata is None: metadata = {}
 
@@ -602,6 +667,17 @@ class Dataset(metaclass=DatasetMeta):
         self._make_log(output, output_file, thumbnail_file, time, **kwargs)
 
     def copy_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        """Read one item and write it under a separately rendered key.
+
+        Args:
+            new_key_pattern: Destination pattern; tag substitutions are
+                applied, and the resolved time is formatted when present.
+            time: Optional datetime or timestep identifying the source item.
+            **kwargs: Tag substitutions used to render both keys.
+
+        Side effects:
+            Writes the retrieved data directly through the storage layer.
+        """
         data = self.get_data(time, **kwargs)
         timestamp = self.get_time_signature(time)
         if timestamp is None:
@@ -611,10 +687,26 @@ class Dataset(metaclass=DatasetMeta):
         self._write_data(data, new_key)
 
     def rm_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        """Remove the item identified by the rendered key from storage.
+
+        Args:
+            time: Optional datetime or timestep identifying the item.
+            **kwargs: Tag substitutions used to render the key.
+        """
         key = self.get_key(time, **kwargs)
         self._rm_data(key)
 
     def move_data(self, new_key_pattern, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        """Copy an item to a new key, then remove its original key.
+
+        Args:
+            new_key_pattern: Destination key pattern.
+            time: Optional datetime or timestep identifying the source item.
+            **kwargs: Tag substitutions for source and destination keys.
+
+        Side effects:
+            Writes the destination item before removing the source item.
+        """
         self.copy_data(new_key_pattern, time, **kwargs)
         self.rm_data(time, **kwargs)
     # endregion
@@ -741,10 +833,34 @@ class Dataset(metaclass=DatasetMeta):
 
     # region: METHODS TO MAKE DATA FROM PARENTS
     def set_parents(self, parents:dict[str:'Dataset'], fn:Callable):
+        """Configure source datasets and the function used to derive data.
+
+        Args:
+            parents: Mapping from argument names to input Dataset instances.
+            fn: Callable invoked with parent data as keyword arguments.
+
+        Side effects:
+            Replaces this dataset's ``parents`` and ``fn`` attributes.
+        """
         self.parents = parents
         self.fn = fn
 
     def make_data(self, time: Optional[dt.datetime|TimeStep] = None, **kwargs):
+        """Compute data by reading each configured parent and calling ``fn``.
+
+        For non-memory datasets, the computed value is also written to this
+        dataset. Memory datasets return the result without persisting it.
+
+        Args:
+            time: Optional datetime or timestep passed to each parent read.
+            **kwargs: Tag values passed to parent reads and the write.
+
+        Returns:
+            The value returned by the configured parent function.
+
+        Raises:
+            ValueError: If no parent datasets have been configured.
+        """
         if not hasattr(self, 'parents') or self.parents is None:
             raise ValueError(f'No parents for {self.name}')
         

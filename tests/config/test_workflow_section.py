@@ -561,16 +561,17 @@ class TestWorkflowSection:
         assert isinstance(result, WorkflowSectionRunResult)
         assert result.executed is True
 
-    def test_run_calls_dryes_compute(self):
+    def test_run_calls_dryes_compute(self, monkeypatch):
         """run() should call compute() for dryes engine."""
         from d3tools.timestepping import TimeRange
 
         calls = []
 
         class MockProcess:
-            def compute(self, time_range):
-                calls.append(("compute", time_range))
+            def compute(self, time_range, *, make_parameters):
+                calls.append(("compute", time_range, make_parameters))
 
+        monkeypatch.delenv("SETUP", raising=False)
         time_range = TimeRange("2024-01-01", "2024-01-31")
         section = WorkflowSection("Calculate", "dryes", {}, MockProcess())
 
@@ -579,7 +580,27 @@ class TestWorkflowSection:
         assert len(calls) == 1
         assert calls[0][0] == "compute"
         assert calls[0][1] == time_range
+        assert calls[0][2] is False
         assert isinstance(result, WorkflowSectionRunResult)
+        assert result.executed is True
+
+    def test_run_calls_dryes_compute_in_setup_mode(self, monkeypatch):
+        """run() should request DRYES parameter generation when SETUP is true."""
+        from d3tools.timestepping import TimeRange
+
+        calls = []
+
+        class MockProcess:
+            def compute(self, time_range, *, make_parameters):
+                calls.append((time_range, make_parameters))
+
+        monkeypatch.setenv("SETUP", "true")
+        time_range = TimeRange("2024-01-01", "2024-01-31")
+        section = WorkflowSection("Calculate", "dryes", {}, MockProcess())
+
+        result = section.run(time_range)
+
+        assert calls == [(time_range, True)]
         assert result.executed is True
 
     def test_run_split_executes_month_subranges_when_enabled(self, monkeypatch):

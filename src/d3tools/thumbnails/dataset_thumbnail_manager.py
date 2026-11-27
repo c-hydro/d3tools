@@ -1,11 +1,10 @@
-"""
-DatasetThumbnailManager - Handles thumbnail generation for individual datasets.
+"""Dataset-level thumbnail management.
 
-This class encapsulates thumbnail creation logic that was previously embedded
-in the Dataset class, separating concerns and making Dataset simpler.
-
-Note: This is dataset-specific. Future workflow-level thumbnail management
-will use a separate ThumbnailManager class.
+This module keeps the configuration needed to render a single dataset's
+thumbnail output: the color definitions, output destination, and optional
+overlay or annotation settings. It wraps the lower-level ``Thumbnail``
+renderer and exposes a small, dataset-oriented API for callers that already
+resolve output file names through ``Dataset`` objects.
 """
 
 import os
@@ -15,22 +14,24 @@ from typing import Optional, Union
 
 
 class DatasetThumbnailManager:
-    """
-    Manages thumbnail generation for dataset outputs.
-    
-    Holds configuration for colors, destination, overlays, etc. and provides
-    a simple interface for generating thumbnails from data.
+    """Manage thumbnail generation for one dataset output.
+
+    The manager stores the dataset references that define the color map,
+    destination path, and optional overlay, then turns a data object into a
+    saved thumbnail through the shared ``Thumbnail`` renderer.
     """
     
     def __init__(self, colors, destination, overlay=None, **options):
         """
-        Initialize thumbnail manager.
+        Initialize a manager with dataset references and rendering options.
         
         Args:
-            colors: Dataset or dict of Datasets pointing to color definition files
-            destination: Dataset defining where thumbnails should be saved
-            overlay: Optional Dataset for overlay data
-            **options: Additional thumbnail options (field, annotation, etc.)
+            colors: Dataset or mapping of Datasets used to resolve color files.
+            destination: Dataset used to resolve output paths.
+            overlay: Optional Dataset used as an overlay for generated images.
+            **options: Thumbnail rendering options, such as ``field``,
+                ``annotation``, and ``dpi``. ``field`` is consumed when the
+                input is a GeoDataFrame; other options are passed to save.
         """
         self.colors = colors
         self.destination = destination
@@ -40,15 +41,18 @@ class DatasetThumbnailManager:
     @classmethod
     def from_dict(cls, config: dict, dataset_factory=None):
         """
-        Create DatasetThumbnailManager from a configuration dictionary.
+        Build a manager from a mapping with ``colors`` and ``destination``.
         
         Args:
-            config: Dictionary with 'colors', 'destination', and optional 'overlay' keys
-            dataset_factory: Function to parse string paths into Dataset objects.
-                           Should have signature: func(path_str, **defaults) -> Dataset
+            config: Mapping containing ``colors`` and ``destination``, with
+                optional ``overlay`` and thumbnail options.
+            dataset_factory (Callable | None): Optional callable applied to ``colors`` and to
+                ``destination`` or ``overlay`` only when those latter values
+                are strings or dictionaries.
         
         Returns:
-            ThumbnailManager instance or None if config is invalid
+            DatasetThumbnailManager | None: A manager with remaining config entries stored as options, or
+            ``None`` if either required key is absent.
         """
         if 'colors' not in config or 'destination' not in config:
             return None
@@ -75,14 +79,24 @@ class DatasetThumbnailManager:
     
     def make_thumbnail(self, data: Union[xr.DataArray, dict, gpd.GeoDataFrame], **kwargs):
         """
-        Generate a thumbnail from data.
+        Generate, save, and return a thumbnail for dataset output.
+
+        ``kwargs`` are used to resolve the color and destination datasets and
+        are also passed to ``colors.update`` and ``destination.get_key``.
+        Dictionary input selects its
+        empty-string entry. GeoDataFrame input selects the configured
+        ``field`` (default ``value``), keeps geometry, and renames that field
+        to ``value`` before constructing the thumbnail. A configured overlay
+        is added unless the ``overlay`` option already exists.
         
         Args:
-            data: Data to visualize (DataArray, dict of DataArrays, or GeoDataFrame)
-            **kwargs: Additional context (time, tags, etc.) for substitution
+            data: Raster DataArray, mapping whose ``''`` entry is a DataArray,
+                or GeoDataFrame containing geometry and the selected value field.
+            **kwargs (Any): Context values used when resolving dataset paths.
         
         Returns:
-            Thumbnail object with saved thumbnail file path
+            Thumbnail: The ``Thumbnail`` instance after its ``save`` method has written
+            the resolved destination.
         """
         from .thumbnail import Thumbnail
         

@@ -1,3 +1,10 @@
+"""Public configuration API for d3tools workflows.
+
+This package exposes workflow-definition objects, parsing helpers, and the
+configuration pipeline used to resolve environment variables, tags, datasets,
+and section metadata before execution.
+"""
+
 from .workflow_definition import WorkflowDefinition
 from .options import Options
 from .parsers import dataset_from_config, workflow_from_config

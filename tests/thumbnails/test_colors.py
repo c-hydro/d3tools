@@ -17,6 +17,14 @@ def test_parse_line_accepts_valid_qgis_color_line():
     assert label == "high risk"
 
 
+def test_parse_line_preserves_commas_in_label():
+    position, color, label = parse_line("1,0,128,255,200,high,risk")
+
+    assert position == "1"
+    assert color == ["0", "128", "255", "200"]
+    assert label == "high,risk"
+
+
 @pytest.mark.parametrize(
     "line, message",
     [

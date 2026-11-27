@@ -3,7 +3,10 @@ import stat
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
+import paramiko
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from d3tools.data.datasets.remote_dataset import (
     RemoteDataset,
@@ -254,6 +257,43 @@ class TestS3DatasetAdapter:
 
 
 class TestSFTPDatasetAdapter:
+    @pytest.mark.parametrize("key_type", ["rsa", "ed25519"])
+    def test_explicit_private_key_does_not_depend_on_filename(self, key_type, tmp_path, monkeypatch):
+        key_path = tmp_path / "deployment_key"
+        if key_type == "rsa":
+            paramiko.RSAKey.generate(1024).write_private_key_file(str(key_path))
+        else:
+            key = ed25519.Ed25519PrivateKey.generate()
+            key_path.write_bytes(key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            ))
+        transport = Mock()
+        client = Mock()
+        make_transport = Mock(return_value=transport)
+        make_client = Mock(return_value=client)
+        monkeypatch.setattr(SFTPDataset, "sftp_clients", {})
+        monkeypatch.setattr("d3tools.data.datasets.remote_dataset.paramiko.Transport", make_transport)
+        monkeypatch.setattr("d3tools.data.datasets.remote_dataset.paramiko.SFTPClient.from_transport", make_client)
+
+        dataset = SFTPDataset(
+            key_pattern="data/output.txt",
+            host="sftp.example.com",
+            username="test-user",
+            private_key=str(key_path),
+            tmp_dir=str(tmp_path),
+        )
+
+        assert dataset.sftp_client is client
+        make_transport.assert_called_once_with(("sftp.example.com", 22))
+        assert transport.connect.call_args.kwargs["username"] == "test-user"
+        assert isinstance(
+            transport.connect.call_args.kwargs["pkey"],
+            paramiko.RSAKey if key_type == "rsa" else paramiko.Ed25519Key,
+        )
+        make_client.assert_called_once_with(transport)
+
     def test_download_and_delete_delegate_to_sftp_client(self, sftp_dataset, tmp_path):
         dataset, client = sftp_dataset
         local_key = str(tmp_path / "output.txt")

@@ -1,3 +1,5 @@
+"""Local filesystem storage implementation for :class:`Dataset`."""
+
 import os
 import rioxarray
 import xarray as xr
@@ -10,9 +12,24 @@ from ..io_utils import rm_file
 from typing import Any, Optional
 
 class LocalDataset(Dataset):
+    """Dataset whose keys resolve to paths on the local filesystem.
+
+    Args:
+        path: Directory containing dataset files. ``dir`` or ``key_pattern``
+            may be supplied through ``kwargs`` instead.
+        filename: Filename pattern within ``path``. ``file`` or
+            ``key_pattern`` may be supplied through ``kwargs`` instead.
+        **kwargs: Shared Dataset configuration and remaining options.
+    """
+
     type = 'local'
 
     def __init__(self, path: Optional[str] = None, filename: Optional[str] = None, **kwargs):
+        """Initialize the local directory and filename pattern.
+
+        Explicit ``path`` and ``filename`` take precedence over ``dir``,
+        ``file``, and ``key_pattern`` values in ``kwargs``.
+        """
         if path is not None:
             self.dir = path
         elif 'dir' in kwargs:
@@ -39,6 +56,15 @@ class LocalDataset(Dataset):
         self.file = os.path.basename(path)
 
     def path(self, time: Optional[TimeStep] = None, **kwargs):
+        """Render the local path for a time and tag combination.
+
+        Args:
+            time: Optional timestep used to resolve time placeholders.
+            **kwargs: Tag substitutions for the key pattern.
+
+        Returns:
+            The resolved local path.
+        """
         return self.get_key(time, **kwargs)
 
     ## INPUT/OUTPUT METHODS
