@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,13 +9,13 @@ description = "A package of common tools for the door, dam and dryes packages of
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" }
 ]
-license = { file = "LICENSE" }
+license = "EUPL-1.2"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
     "Operating System :: OS Independent",
 ]
 
