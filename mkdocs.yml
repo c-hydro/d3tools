@@ -68,6 +68,11 @@ plugins:
           paths: [src]
           options:
             docstring_style: google
+            docstring_options:
+              # Much of the legacy public API is intentionally unannotated. Keep
+              # structural parser warnings enabled, but do not treat the absence of
+              # source-level type annotations as a documentation-build warning.
+              warn_missing_types: false
             show_source: false
             show_root_heading: true
             members_order: source
