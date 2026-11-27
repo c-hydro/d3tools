@@ -160,9 +160,9 @@ def _build_dam_workflow(section_options: Any) -> Any:
     return DAMWorkflow.from_options(section_options)
 
 def _build_dryes_index(section_options: Any) -> Any:
-    from dryes import DRYESIndex
     if not isinstance(section_options, dict):
         raise TypeError("DRYES section options must be a mapping")
+    from dryes import DRYESIndex
     return DRYESIndex.from_options(**section_options)
 
 _WORKFLOW_ENGINE_BUILDERS = {

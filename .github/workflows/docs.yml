@@ -33,7 +33,7 @@ jobs:
           cache: pip
 
       - name: Install package and documentation dependencies
-        run: python -m pip install --editable ".[docs]"
+        run: python -m pip install --editable ".[docs,thumbnails]"
 
       - name: Check base package imports without remote extras
         run: python -c "import d3tools; from d3tools.data import LocalDataset"
