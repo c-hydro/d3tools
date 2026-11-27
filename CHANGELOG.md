@@ -3,7 +3,7 @@
 Notable changes to D3tools are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
-## [3.0.0] - Unreleased
+## [3.0.0] - 2026-11-27
 
 ### Breaking changes
 
