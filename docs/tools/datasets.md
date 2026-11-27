@@ -500,6 +500,44 @@ value if one is not already available; later values are aligned to it. On
 write, an xarray object can establish the template. A bare NumPy array needs an
 existing template because it carries no coordinates or CRS.
 
+For a time-dependent raster, template discovery searches backward from the
+operation's time. A historical write therefore looks near its historical
+target instead of searching backward from the current date. The catalogue's
+default search covers five years. Set `template_search_start` on a Dataset when
+its possible template sources extend further back:
+
+```python
+from datetime import datetime
+
+import numpy as np
+
+from d3tools.data import LocalDataset
+
+historical = LocalDataset(
+    path="/data/archive",
+    file="rain_%Y%m%d.tif",
+    template_search_start="2010-01-01",
+)
+historical.write_data(
+    np.ones((1, 100, 100)),
+    time=datetime(2021, 1, 15),
+)
+```
+
+The option accepts a date string, `date`, `datetime`, or `TimeStep`. For a
+one-off lookup, pass the lower bound directly without changing the Dataset:
+
+```python
+template = historical.get_template_dict(
+    reference_time=datetime(2021, 1, 15),
+    template_search_start=datetime(2000, 1, 1),
+)
+```
+
+If a NumPy write cannot find an accessible source raster in the search
+interval, D3tools reports the interval and suggests either extending
+`template_search_start` or supplying an xarray object with spatial coordinates.
+
 `TemplateManager` can also be used directly:
 
 ```python

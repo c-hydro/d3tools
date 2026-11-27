@@ -81,6 +81,7 @@ convenient alternative. Patterns can combine time directives (`%Y`, `%m`,
       "timestep": "daily",
       "time_signature": "end",
       "tile_names": ["north", "south"],
+      "template_search_start": "2010-01-01",
       "nan_value": -9999
     }
   }
@@ -108,6 +109,13 @@ For patterns containing `{tile}`, `tile_names` may be a list or a text-file
 path (one tile per line). If omitted, tile names may be discovered from
 available keys. File versions use `{file_version}` in the pattern; see
 [composition and versions](#configure-composition-and-versions).
+
+For a time-dependent GeoTIFF or NetCDF dataset, a historical raster write
+anchors automatic template discovery to the write time. By default, discovery
+searches five years backward from that time. Set `template_search_start` to a
+date string when valid template sources may be older. See
+[spatial templates](../tools/datasets.md#spatial-templates) for the Python API,
+accepted value types, and failure behaviour.
 
 ## Configure composition and versions
 
