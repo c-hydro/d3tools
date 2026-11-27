@@ -14,6 +14,7 @@ import rasterio
 
 from .base import FormatMixin
 from ...spatial import TemplateManager
+from ...timestepping import TimeStep, get_date_from_str
 
 class RasterMixin(FormatMixin):
     """
@@ -133,7 +134,13 @@ class RasterMixin(FormatMixin):
         
         return data
 
-    def _format_before_write(self, data, time=None, **kwargs):
+    def _format_before_write(
+        self,
+        data,
+        time=None,
+        template_search_start=None,
+        **kwargs,
+    ):
         """
         Prepare raster data for writing with format-specific logic.
         
@@ -143,6 +150,7 @@ class RasterMixin(FormatMixin):
         Args:
             data: Raster data to prepare (xarray or numpy array)
             time: Optional time used to anchor template discovery.
+            template_search_start: Optional lower bound for template discovery.
             **kwargs: Additional arguments
             
         Returns:
@@ -152,7 +160,11 @@ class RasterMixin(FormatMixin):
         
         # Ensure there is a template available
         try:
-            template_dict = self.get_template_dict(reference_time=time, **kwargs)
+            template_dict = self.get_template_dict(
+                reference_time=time,
+                template_search_start=template_search_start,
+                **kwargs,
+            )
         except PermissionError:
             template_dict = None
 
@@ -161,11 +173,35 @@ class RasterMixin(FormatMixin):
                 self.set_template(data, **kwargs)
                 template_dict = self.get_template_dict(
                     reference_time=time,
+                    template_search_start=template_search_start,
                     make_it=False,
                     **kwargs,
                 )
             else:
-                raise ValueError('Cannot write numpy array without a template.')
+                reference_time = self._resolve_template_date(time)
+                configured_start = (
+                    template_search_start
+                    if template_search_start is not None
+                    else self.options.get('template_search_start')
+                )
+                if configured_start is None:
+                    search_description = (
+                        f"the default five-year interval preceding {reference_time:%Y-%m-%d}"
+                        if reference_time is not None
+                        else "the default five-year interval preceding the current date"
+                    )
+                else:
+                    configured_start = self._resolve_template_date(configured_start)
+                    search_description = (
+                        f"the interval starting {configured_start:%Y-%m-%d}"
+                    )
+                raise ValueError(
+                    "Cannot write a NumPy raster without a template: "
+                    f"dataset {self.name!r} has no accessible source raster in "
+                    f"{search_description}. Configure template_search_start "
+                    "to search further back or provide an xarray object with "
+                    "spatial coordinates."
+                )
         
         # Apply template to data
         if isinstance(data, (xr.DataArray, xr.Dataset)):
@@ -215,7 +251,29 @@ class RasterMixin(FormatMixin):
         """Backward compatibility property for setting templates."""
         self.template_manager._templates = value
     
-    def get_template_dict(self, make_it: bool = True, reference_time=None, **kwargs):
+    def _resolve_template_date(self, value):
+        """Normalize a template search boundary to a datetime."""
+        if value is None:
+            return None
+        if isinstance(value, TimeStep):
+            return self.get_time_signature(value)
+        if isinstance(value, dt.datetime):
+            return value
+        if isinstance(value, dt.date):
+            return dt.datetime.combine(value, dt.time.min)
+        if isinstance(value, str):
+            return get_date_from_str(value)
+        raise TypeError(
+            "Template search dates must be datetime, date, TimeStep, or string values."
+        )
+
+    def get_template_dict(
+        self,
+        make_it: bool = True,
+        reference_time=None,
+        template_search_start=None,
+        **kwargs,
+    ):
         """
         Get template dictionary for raster data.
         
@@ -227,6 +285,11 @@ class RasterMixin(FormatMixin):
             reference_time: Optional upper bound for finding a source raster.
                 Historical writes pass their target time so discovery does not
                 depend on the current date.
+            template_search_start: Optional lower bound for source-raster
+                discovery. Accepts a datetime, date, ``TimeStep``, or supported
+                date string. When omitted, the Dataset's
+                ``template_search_start`` option is used before falling back to
+                the catalogue's default five-year lookback.
             **kwargs: Additional options (tile, etc.)
             
         Returns:
@@ -243,6 +306,7 @@ class RasterMixin(FormatMixin):
                     template_dict[tile] = self.get_template_dict(
                         make_it=make_it,
                         reference_time=reference_time,
+                        template_search_start=template_search_start,
                         tile=tile,
                         **kwargs,
                     )
@@ -258,7 +322,16 @@ class RasterMixin(FormatMixin):
 
             else:
                 # Use get_any_date instead of get_last_date - we don't care which file
-                any_date = self.get_any_date(now=reference_time, tile=tile, **kwargs)
+                reference_time = self._resolve_template_date(reference_time)
+                if template_search_start is None:
+                    template_search_start = self.options.get('template_search_start')
+                template_search_start = self._resolve_template_date(template_search_start)
+                any_date = self.get_any_date(
+                    now=reference_time,
+                    lim=template_search_start,
+                    tile=tile,
+                    **kwargs,
+                )
                 if any_date is not None:
                     data = self.get_data(time=any_date, tile=tile, as_is=True, **kwargs)
                 else:
