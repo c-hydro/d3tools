@@ -68,7 +68,7 @@ jobs:
 
       - name: Smoke-test the base installation
         run: |
-          /tmp/d3tools-smoke/bin/python -c "from importlib.metadata import version; from d3tools.data import LocalDataset, MemoryDataset; assert version('d3tools') == '3.0.0'; LocalDataset(key_pattern='/tmp/example.txt'); MemoryDataset(key_pattern='example.txt')"
+          /tmp/d3tools-smoke/bin/python -c "import tomllib; from importlib.metadata import version; from d3tools.data import LocalDataset, MemoryDataset; expected = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']; assert version('d3tools') == expected; LocalDataset(key_pattern='/tmp/example.txt'); MemoryDataset(key_pattern='example.txt')"
           /tmp/d3tools-smoke/bin/d3run --help
 
       - name: Upload checked distributions
