@@ -42,10 +42,17 @@ Zenodo DOI in the case study together with the URL, size, and SHA-256 checksum i
 
 ## Validate changes
 
+Install the pinned documentation toolchain together with D3tools from the repository
+root:
+
+```bash
+python -m pip install -e '.[docs]'
+```
+
 From the repository root, run:
 
 ```bash
-/home/luca/Documents/CIMA_code/workspace_env/.venv/bin/python tools/check_docs.py
+python tools/check_docs.py
 git diff --check
 ```
 
@@ -58,3 +65,9 @@ Also inspect `mkdocs.yml` when adding, moving, or removing a navigation target. 
 is the production documentation generator; the `classic` theme variant preserves the
 site's Material-compatible layout. The maintainer performs the rendered-site check; do
 not run Zensical or MkDocs build and preview commands unless explicitly asked.
+
+When a rendered-site check is requested, treat warnings as build failures:
+
+```bash
+zensical build --strict
+```
