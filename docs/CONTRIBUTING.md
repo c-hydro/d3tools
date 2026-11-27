@@ -54,6 +54,7 @@ anchors. Put `<!-- check-docs: skip -->` immediately before a deliberately parti
 fence or snippet-include fence, and validate any included source file separately. Avoid
 using the marker merely to silence a correctable error.
 
-Also inspect `mkdocs.yml` when adding, moving, or removing a navigation target. The
-maintainer performs the rendered-site check; do not run `mkdocs build`, `mkdocs serve`,
-or `mkdocs gh-deploy` unless explicitly asked.
+Also inspect `mkdocs.yml` when adding, moving, or removing a navigation target. Zensical
+is the production documentation generator; the `classic` theme variant preserves the
+site's Material-compatible layout. The maintainer performs the rendered-site check; do
+not run Zensical or MkDocs build and preview commands unless explicitly asked.

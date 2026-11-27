@@ -44,6 +44,8 @@ nav:
 
 theme:
   name: material
+  # Preserve the existing Material layout when building the site with Zensical.
+  variant: classic
   logo: assets/branding/d3tools.svg
   favicon: assets/branding/d3tools.svg
   palette:
